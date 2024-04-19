@@ -88,11 +88,11 @@ pub async fn start_video_streaming(
                     // TODO: remove startx=0
                     match Command::new("sh")
                         .args(["-c", &format!("{} ! videoconvert ! queue ! x264enc tune=zerolatency speed-preset=superfast bitrate=3000 key-int-max=60 ! video/x-h264, profile=baseline ! rtph264pay pt=96 mtu=1200 ! udpsink host=127.0.0.1 port={}", {
-                            if cfg!(linux) {
+                            if cfg!(target_os = "linux") {
                                 "gst-launch-1.0 ximagesrc use-damage=0 ! video/x-raw,width=1366,height=768,framerate=60/1"
-                            } else if cfg!(macos) {
+                            } else if cfg!(target_os = "macos") {
                                 "/Library/Frameworks/GStreamer.framework/Commands/gst-launch-1.0 avfvideosrc capture-screen=true ! video/x-raw,width=1280,height=800"
-                            } else if cfg!(windows) {
+                            } else if cfg!(target_os = "windows") {
                                 "gst-launch-1.0 gdiscreencapsrc ! video/x-raw,width=1366,height=768,framerate=60/1"
                             } else {
                                 unimplemented!()
