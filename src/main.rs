@@ -1,15 +1,23 @@
-use std::sync::Arc;
 use anyhow::Result;
 use axum::{
-    body::Body, extract::State, http::StatusCode, response::{Html, IntoResponse, Response}, routing::{get, post}, Json, Router
+    body::Body,
+    extract::State,
+    http::StatusCode,
+    response::{Html, IntoResponse, Response},
+    routing::{get, post},
+    Json, Router,
 };
-use serde::{Deserialize, Serialize};
-use streaming::InputCommand;
-use tokio::{spawn, sync::mpsc::{Sender, UnboundedSender}};
 use enigo::{
     Button, Coordinate,
     Direction::{Click, Press, Release},
     Enigo, Key, Keyboard, Mouse, Settings,
+};
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use streaming::InputCommand;
+use tokio::{
+    spawn,
+    sync::mpsc::{Sender, UnboundedSender},
 };
 
 mod streaming;
@@ -63,7 +71,11 @@ async fn offer(
         ));
     }
     let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(1);
-    let task = tokio::spawn(streaming::start_video_streaming(payload.offer, tx, input_tx));
+    let task = tokio::spawn(streaming::start_video_streaming(
+        payload.offer,
+        tx,
+        input_tx,
+    ));
     tokio::select! {
         val = rx.recv() => {
             Ok((StatusCode::OK, Json(ResponseOffer::Offer(val.unwrap()))))
@@ -95,33 +107,56 @@ async fn main() -> Result<()> {
     let mut enigo = Enigo::new(&Settings {
         linux_delay: 1,
         ..Default::default()
-    }).unwrap();
+    })
+    .unwrap();
 
     while let Some(msg) = rx.recv().await {
         match msg {
-            InputCommand { r#type, x: Some(x), y: Some(y), .. } => {
-                match r#type.as_str() {
-                    "mousemove" => enigo.move_mouse(x as i32, y as i32, Coordinate::Rel).unwrap(),
-                    "wheel" => {
-                        enigo.scroll((x / 120.0) as i32, enigo::Axis::Horizontal).unwrap();
-                        enigo.scroll((y / 120.0) as i32, enigo::Axis::Vertical).unwrap();
-                    },
-                    _ => {},
+            InputCommand {
+                r#type,
+                x: Some(x),
+                y: Some(y),
+                ..
+            } => match r#type.as_str() {
+                "mousemove" => enigo
+                    .move_mouse(x as i32, y as i32, Coordinate::Rel)
+                    .unwrap(),
+                "wheel" => {
+                    enigo
+                        .scroll((x / 120.0) as i32, enigo::Axis::Horizontal)
+                        .unwrap();
+                    enigo
+                        .scroll((y / 120.0) as i32, enigo::Axis::Vertical)
+                        .unwrap();
                 }
+                _ => {}
             },
-            InputCommand { r#type, button: Some(button), .. } => {
-                enigo.button(match button {
-                    0 => Button::Left,
-                    1 => Button::Middle,
-                    2 => Button::Right,
-                    _ => continue,
-                }, match r#type.as_str() {
-                    "mousedown" => Press,
-                    "mouseup" => Release,
-                    _ => continue,
-                }).unwrap();
+            InputCommand {
+                r#type,
+                button: Some(button),
+                ..
+            } => {
+                enigo
+                    .button(
+                        match button {
+                            0 => Button::Left,
+                            1 => Button::Middle,
+                            2 => Button::Right,
+                            _ => continue,
+                        },
+                        match r#type.as_str() {
+                            "mousedown" => Press,
+                            "mouseup" => Release,
+                            _ => continue,
+                        },
+                    )
+                    .unwrap();
             }
-            InputCommand { r#type, key: Some(key), .. } => {
+            InputCommand {
+                r#type,
+                key: Some(key),
+                ..
+            } => {
                 let key = match key.as_str() {
                     "Escape" => Key::Escape,
                     "Digit1" => Key::Unicode('1'),
@@ -191,7 +226,9 @@ async fn main() -> Result<()> {
                     "F8" => Key::F8,
                     "F9" => Key::F9,
                     "F10" => Key::F10,
+                    #[cfg(not(target_os = "macos"))]
                     "NumLock" => Key::Numlock,
+                    #[cfg(not(target_os = "macos"))]
                     "ScrollLock" => Key::ScrollLock,
                     "Numpad7" => Key::Unicode('7'),
                     "Numpad8" => Key::Unicode('8'),
@@ -214,6 +251,7 @@ async fn main() -> Result<()> {
                     "NumpadEnter" => Key::Return,
                     "ControlRight" => Key::Control,
                     "NumpadDivide" => Key::Unicode('/'),
+                    #[cfg(not(target_os = "macos"))]
                     "PrintScreen" => Key::Print,
                     "AltRight" => Key::Alt,
                     "Home" => Key::Home,
@@ -224,23 +262,29 @@ async fn main() -> Result<()> {
                     "End" => Key::End,
                     "ArrowDown" => Key::DownArrow,
                     "PageDown" => Key::PageDown,
+                    #[cfg(not(target_os = "macos"))]
                     "Insert" => Key::Insert,
                     "Delete" => Key::Delete,
                     "VolumeMute" => Key::VolumeMute, // VolumeMute on Firefox, AudioVolumeMute on Chromium
                     "VolumeDown" => Key::VolumeDown, // VolumeDown on Firefox, AudioVolumeDown on Chromium
                     "VolumeUp" => Key::VolumeUp, // VolumeUp on Firefox, AudioVolumeUp on Chromium
                     "NumpadEqual" => Key::Unicode('='),
+                    #[cfg(not(target_os = "macos"))]
                     "Pause" => Key::Pause,
                     "NumpadComma" => Key::Unicode(','),
                     "MetaLeft" => Key::Meta, // MetaLeft on Firefox and Chromium
                     "MetaRight" => Key::Meta, // MetaRight on Firefox and Chromium
+                    #[cfg(not(target_os = "macos"))]
                     "Undo" => Key::Undo,
+                    #[cfg(not(target_os = "macos"))]
                     "Select" => Key::Select,
+                    #[cfg(not(target_os = "macos"))]
                     "Find" => Key::Find,
                     "Help" => Key::Help,
                     "MediaTrackNext" => Key::MediaNextTrack,
                     "MediaPlayPause" => Key::MediaPlayPause,
                     "MediaTrackPrevious" => Key::MediaPrevTrack,
+                    #[cfg(not(target_os = "macos"))]
                     "MediaStop" => Key::MediaStop,
                     "F13" => Key::F13,
                     "F14" => Key::F14,
@@ -250,9 +294,13 @@ async fn main() -> Result<()> {
                     "F18" => Key::F18,
                     "F19" => Key::F19,
                     "F20" => Key::F20,
+                    #[cfg(not(target_os = "macos"))]
                     "F21" => Key::F21,
+                    #[cfg(not(target_os = "macos"))]
                     "F22" => Key::F22,
+                    #[cfg(not(target_os = "macos"))]
                     "F23" => Key::F23,
+                    #[cfg(not(target_os = "macos"))]
                     "F24" => Key::F24,
                     _ => {
                         // Handle any unrecognized keys here
@@ -260,13 +308,18 @@ async fn main() -> Result<()> {
                         continue;
                     }
                 };
-                enigo.key(key, match r#type.as_str() {
-                    "keydown" => Press,
-                    "keyup" => Release,
-                    _ => continue,
-                }).unwrap();
+                enigo
+                    .key(
+                        key,
+                        match r#type.as_str() {
+                            "keydown" => Press,
+                            "keyup" => Release,
+                            _ => continue,
+                        },
+                    )
+                    .unwrap();
             }
-            _ => {},
+            _ => {}
         }
     }
 
