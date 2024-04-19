@@ -1,0 +1,155 @@
+use anyhow::{bail, Result};
+use base64::prelude::*;
+use tokio::sync::Mutex;
+use webrtc::ice_transport::ice_server::RTCIceServer;
+use webrtc::peer_connection::configuration::RTCConfiguration;
+use webrtc::peer_connection::RTCPeerConnection;
+use std::sync::{Arc};
+use tokio::net::UdpSocket;
+use tokio::process::Command;
+use webrtc::api::media_engine::{MediaEngine, MIME_TYPE_VP8};
+use webrtc::ice_transport::ice_connection_state::RTCIceConnectionState;
+use webrtc::api::interceptor_registry::register_default_interceptors;
+use webrtc::api::APIBuilder;
+use webrtc::interceptor::registry::Registry;
+use webrtc::api::API;
+use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
+use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
+use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
+use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
+use webrtc::track::track_local::{TrackLocal, TrackLocalWriter};
+use webrtc::Error;
+use lazy_static::*;
+
+use std::cell::RefCell;
+thread_local! {
+    static PORT: RefCell<usize> = RefCell::new(6000);
+}
+
+lazy_static! {
+    static ref PEER_CONNECTION_MUTEX: Arc<Mutex<Option<Arc<RTCPeerConnection>>>> =
+        Arc::new(Mutex::new(None));
+}
+
+pub async fn start_video_streaming(
+    offer: String,
+) -> Result<String, anyhow::Error> {
+    let mut _gst_handle = None;
+    let peer_connection = {
+        let mut peer_connection = PEER_CONNECTION_MUTEX.lock().await;
+        if let Some(pc) = &*peer_connection {
+            Arc::clone(pc)
+        } else {
+            let mut m = MediaEngine::default();
+            m.register_default_codecs()?;
+            let mut registry = Registry::new();
+            registry = register_default_interceptors(registry, &mut m)?;
+            let api = APIBuilder::new()
+                .with_media_engine(m)
+                .with_interceptor_registry(registry)
+                .build();
+            let config = RTCConfiguration {
+                ice_servers: vec![RTCIceServer {
+                    urls: vec!["stun:stun.l.google.com:19302".to_owned()],
+                    ..Default::default()
+                }],
+                ..Default::default()
+            };
+            let pc = Arc::new(api.new_peer_connection(config).await?);
+            let video_track = Arc::new(TrackLocalStaticRTP::new(
+                RTCRtpCodecCapability {
+                    mime_type: MIME_TYPE_VP8.to_owned(),
+                    ..Default::default()
+                },
+                "video".to_owned(),
+                "webrtc-rs".to_owned(),
+            ));
+            let rtp_sender = pc
+                .add_track(Arc::clone(&video_track) as Arc<dyn TrackLocal + Send + Sync>)
+                .await?;
+            tokio::spawn(async move {
+                let mut rtcp_buf = vec![0u8; 1500];
+                while let Ok((_, _)) = rtp_sender.read(&mut rtcp_buf).await {}
+                Result::<()>::Ok(())
+            });
+            let port = PORT.with_borrow_mut(|port| {
+                *port += 1;
+                *port
+            });
+            dbg!(port);
+            pc.on_ice_connection_state_change(Box::new(
+                move |connection_state: RTCIceConnectionState| {
+                    println!("Connection State has changed {connection_state}");
+                    if connection_state == RTCIceConnectionState::Failed {
+                    } else if connection_state == RTCIceConnectionState::Connected {
+                            // TODO: remove startx=0
+                            match Command::new("sh")
+                                .args(["-c", &format!("gst-launch-1.0 ximagesrc startx=0 use-damage=0 ! video/x-raw,width=1366,height=768,framerate=60/1 ! videoconvert ! vp8enc error-resilient=partitions keyframe-max-dist=30 auto-alt-ref=true cpu-used=4 deadline=1 ! rtpvp8pay ! queue ! udpsink host=127.0.0.1 port={}", port)])
+                                .kill_on_drop(true)
+                                .spawn() {
+                                    Ok(child) => {
+                                        _gst_handle = Some(child);
+                                    },
+                                    Err(_) => {
+                                        //let _ = done_tx1.try_send(());
+                                    }
+                                }
+                    } else if connection_state == RTCIceConnectionState::Disconnected {
+                        _gst_handle.as_mut().unwrap().start_kill().ok();
+                        //let _ = done_tx1.try_send(());
+                    }
+                    Box::pin(async {})
+                },
+            ));
+            //let done_tx2 = done_tx.clone();
+            pc.on_peer_connection_state_change(Box::new(move |s: RTCPeerConnectionState| {
+                println!("Peer Connection State has changed: {s}");
+                if s == RTCPeerConnectionState::Failed {
+                    // Wait until PeerConnection has had no network activity for 30 seconds or another failure. It may be reconnected using an ICE Restart.
+                    // Use webrtc.PeerConnectionStateDisconnected if you are interested in detecting faster timeout.
+                    // Note that the PeerConnection may come back from PeerConnectionStateDisconnected.
+                    println!("Peer Connection has gone to failed exiting: Done forwarding");
+                    //let _ = done_tx2.try_send(());
+                }
+                Box::pin(async {})
+            }));
+            let listener = UdpSocket::bind(format!("127.0.0.1:{}", port)).await?;
+            //let done_tx3 = done_tx.clone();
+            tokio::spawn(async move {
+                let mut inbound_rtp_packet = vec![0u8; 1600]; // UDP MTU
+                while let Ok((n, _)) = listener.recv_from(&mut inbound_rtp_packet).await {
+                    if let Err(err) = video_track.write(&inbound_rtp_packet[..n]).await {
+                        if Error::ErrClosedPipe == err {
+                            // The peerConnection has been closed.
+                        } else {
+                            println!("video_track write err: {err}");
+                        }
+                        //let _ = done_tx3.try_send(());
+                        return;
+                    }
+                }
+            });
+            *peer_connection = Some(Arc::clone(&pc));
+            pc        
+        }
+    };
+    let desc_data = BASE64_STANDARD.decode(offer)?;
+    let desc_data = std::str::from_utf8(&desc_data)?;
+    let offer = serde_json::from_str::<RTCSessionDescription>(&desc_data)?;
+    peer_connection.set_remote_description(offer).await?;
+    let mut gather_complete = peer_connection.gathering_complete_promise().await;
+    let answer = peer_connection.create_answer(None).await?;
+    peer_connection.set_local_description(answer).await?;
+    let _ = gather_complete.recv().await;
+    if let Some(local_desc) = peer_connection.local_description().await {
+        let json_str = serde_json::to_string(&local_desc)?;
+        let b64 = BASE64_STANDARD.encode(&json_str);
+        Ok(b64)
+    } else {
+        println!("generate local_description failed!");
+        bail!("Failed to encode offer");
+    }
+    
+    //done_rx.recv().await;
+    //peer_connection.close().await?;
+}
