@@ -91,7 +91,7 @@ pub async fn start_video_streaming(
                             if cfg!(target_os = "linux") {
                                 "gst-launch-1.0 ximagesrc use-damage=0 ! video/x-raw,width=1366,height=768,framerate=60/1"
                             } else if cfg!(target_os = "macos") {
-                                "/Library/Frameworks/GStreamer.framework/Commands/gst-launch-1.0 avfvideosrc capture-screen=true capture-screen-cursor=true ! video/x-raw,width=1280,height=800"
+                                "/Library/Frameworks/GStreamer.framework/Commands/gst-launch-1.0 avfvideosrc capture-screen=true capture-screen-cursor=true ! video/x-raw,width=1280,height=800,framerate=60/1"
                             } else if cfg!(target_os = "windows") {
                                 "gst-launch-1.0 gdiscreencapsrc ! video/x-raw,width=1366,height=768,framerate=60/1"
                             } else {
