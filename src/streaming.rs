@@ -87,13 +87,13 @@ pub async fn start_video_streaming(
             } else if connection_state == RTCIceConnectionState::Connected {
                     // TODO: remove startx=0
                     match Command::new("sh")
-                        .args(["-c", &format!("{} ! video/x-raw,width=1366,height=768,framerate=60/1 ! videoconvert ! queue ! x264enc tune=zerolatency speed-preset=superfast bitrate=3000 key-int-max=60 ! video/x-h264, profile=baseline ! rtph264pay pt=96 mtu=1200 ! udpsink host=127.0.0.1 port={}", {
+                        .args(["-c", &format!("{} ! videoconvert ! queue ! x264enc tune=zerolatency speed-preset=superfast bitrate=3000 key-int-max=60 ! video/x-h264, profile=baseline ! rtph264pay pt=96 mtu=1200 ! udpsink host=127.0.0.1 port={}", {
                             if cfg!(linux) {
-                                "gst-launch-1.0 ximagesrc use-damage=0"
+                                "gst-launch-1.0 ximagesrc use-damage=0 ! video/x-raw,width=1366,height=768,framerate=60/1"
                             } else if cfg!(macos) {
-                                "/Library/Frameworks/GStreamer.framework/Commands/gst-launch-1.0 avfvideosrc capture-screen=true"
+                                "/Library/Frameworks/GStreamer.framework/Commands/gst-launch-1.0 avfvideosrc capture-screen=true ! video/x-raw,width=1280,height=800"
                             } else if cfg!(windows) {
-                                "gst-launch-1.0 gdiscreencapsrc"
+                                "gst-launch-1.0 gdiscreencapsrc ! video/x-raw,width=1366,height=768,framerate=60/1"
                             } else {
                                 unimplemented!()
                             }
