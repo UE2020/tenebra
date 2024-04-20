@@ -1,12 +1,11 @@
 use anyhow::Result;
 use base64::prelude::*;
 use lazy_static::lazy_static;
-use nix::sys::signal::Signal::SIGTERM;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use std::sync::Mutex;
 use tokio::net::UdpSocket;
 use tokio::process::Command;
-use std::sync::Mutex;
 use webrtc::api::interceptor_registry::register_default_interceptors;
 use webrtc::api::media_engine::{MediaEngine, MIME_TYPE_H264};
 use webrtc::api::APIBuilder;
@@ -90,18 +89,27 @@ pub async fn start_video_streaming(
                 let _ = done_tx1.try_send(());
             } else if connection_state == RTCIceConnectionState::Connected {
                     // TODO: remove startx=0
-                    match Command::new("sh")
-                        .args(["-c", &format!("{} ! videoconvert ! queue ! x264enc tune=zerolatency speed-preset=superfast bitrate=3000 key-int-max=60 ! video/x-h264, profile=baseline ! rtph264pay pt=96 mtu=1200 ! udpsink host=127.0.0.1 port={}", {
-                            if cfg!(target_os = "linux") {
-                                "gst-launch-1.0 ximagesrc use-damage=0 ! video/x-raw,width=1366,height=768,framerate=60/1"
-                            } else if cfg!(target_os = "macos") {
-                                "/Library/Frameworks/GStreamer.framework/Commands/gst-launch-1.0 avfvideosrc capture-screen=true capture-screen-cursor=true ! video/x-raw,width=1280,height=800,framerate=60/1"
-                            } else if cfg!(target_os = "windows") {
-                                "gst-launch-1.0 gdiscreencapsrc ! video/x-raw,width=1366,height=768,framerate=60/1"
-                            } else {
-                                unimplemented!()
-                            }
-                        }, port)])
+                    let command = if cfg!(target_os = "linux") {
+                        "gst-launch-1.0"
+                    } else if cfg!(target_os = "macos") {
+                        "/Library/Frameworks/GStreamer.framework/Commands/gst-launch-1.0"
+                    } else {
+                        unimplemented!()
+                    };
+                    let args = &format!("{} ! videoconvert ! queue ! x264enc tune=zerolatency speed-preset=superfast bitrate=3000 key-int-max=60 ! video/x-h264, profile=baseline ! rtph264pay pt=96 mtu=1200 ! udpsink host=127.0.0.1 port={}", {
+                        if cfg!(target_os = "linux") {
+                            "ximagesrc use-damage=0 ! video/x-raw,width=1366,height=768,framerate=60/1"
+                        } else if cfg!(target_os = "macos") {
+                            "avfvideosrc capture-screen=true capture-screen-cursor=true ! video/x-raw,width=1280,height=800,framerate=60/1"
+                        } else if cfg!(target_os = "windows") {
+                            "gdiscreencapsrc ! video/x-raw,width=1366,height=768,framerate=60/1"
+                        } else {
+                            unimplemented!()
+                        }
+                    }, port);
+                    let args = shell_words::split(args).unwrap();
+                    match Command::new(command)
+                        .args(args)
                         .kill_on_drop(true)
                         .spawn() {
                             Ok(child) => {
@@ -214,14 +222,5 @@ pub async fn start_video_streaming(
     println!("Task close finished.");
     peer_connection.close().await?;
     println!("Function returning, process will be dropped shortly.");
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    {
-        let mut gst_handle = gst_handle.lock().unwrap();
-        if let Some(child) = gst_handle.as_mut() {
-            if let Some(id) = child.id() {
-                nix::sys::signal::kill(nix::unistd::Pid::from_raw(0), SIGTERM).ok();
-            }
-        }
-    }
     Ok(())
 }
