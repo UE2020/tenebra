@@ -1,6 +1,7 @@
 use anyhow::Result;
 use base64::prelude::*;
 use lazy_static::lazy_static;
+use nix::sys::signal::Signal::SIGTERM;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::net::UdpSocket;
@@ -213,10 +214,13 @@ pub async fn start_video_streaming(
     println!("Task close finished.");
     peer_connection.close().await?;
     println!("Function returning, process will be dropped shortly.");
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
         let mut gst_handle = gst_handle.lock().unwrap();
         if let Some(child) = gst_handle.as_mut() {
-            child.start_kill().ok();
+            if let Some(id) = child.id() {
+                nix::sys::signal::killpg(nix::unistd::Pid::from_raw(id as i32), SIGTERM).ok();
+            }
         }
     }
     Ok(())
