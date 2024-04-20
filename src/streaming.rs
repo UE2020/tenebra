@@ -205,6 +205,8 @@ pub async fn start_video_streaming(
         }
     });
     done_rx.recv().await;
+    println!("Task close finished.");
     peer_connection.close().await?;
+    println!("Function returning, process will be dropped shortly.");
     Ok(())
 }
