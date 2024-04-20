@@ -55,7 +55,7 @@ pub async fn start_video_streaming(
         }],
         ..Default::default()
     };
-    let peer_connection = Arc::new(api.new_peer_connection(config).await?);
+    let peer_connection = api.new_peer_connection(config).await?;
     let video_track = Arc::new(TrackLocalStaticRTP::new(
         RTCRtpCodecCapability {
             mime_type: MIME_TYPE_H264.to_owned(),
@@ -74,7 +74,7 @@ pub async fn start_video_streaming(
     });
     let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<()>(1);
     let done_tx1 = done_tx.clone();
-    let mut _gst_handle = None;
+    let mut gst_handle = None;
     let mut port = PORT.lock().await;
     *port += 1;
     let port = *port;
@@ -101,7 +101,7 @@ pub async fn start_video_streaming(
                         .kill_on_drop(true)
                         .spawn() {
                             Ok(child) => {
-                                _gst_handle = Some(child);
+                                gst_handle = Some(child);
                             },
                             Err(_) => {
                                 let _ = done_tx1.try_send(());
