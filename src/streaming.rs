@@ -110,6 +110,7 @@ pub async fn start_video_streaming(
             } else if connection_state == RTCIceConnectionState::Disconnected {
                 let _ = done_tx1.try_send(());
             } else if connection_state == RTCIceConnectionState::Closed {
+                println!("Closing task, connection closed.");
                 let _ = done_tx1.try_send(());
             }
             Box::pin(async {})
