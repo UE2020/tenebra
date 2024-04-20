@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::net::UdpSocket;
 use tokio::process::Command;
-use tokio::sync::Mutex;
+use std::sync::Mutex;
 use webrtc::api::interceptor_registry::register_default_interceptors;
 use webrtc::api::media_engine::{MediaEngine, MIME_TYPE_H264};
 use webrtc::api::APIBuilder;
@@ -74,11 +74,14 @@ pub async fn start_video_streaming(
     });
     let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<()>(1);
     let done_tx1 = done_tx.clone();
-    let mut gst_handle = None;
-    let mut port = PORT.lock().await;
-    *port += 1;
-    let port = *port;
+    let gst_handle = Arc::new(Mutex::new(None));
+    let port = {
+        let mut port = PORT.lock().unwrap();
+        *port += 1;
+        *port
+    };
     dbg!(port);
+    let gst_handle_clone = gst_handle.clone();
     peer_connection.on_ice_connection_state_change(Box::new(
         move |connection_state: RTCIceConnectionState| {
             println!("Connection State has changed {connection_state}");
@@ -101,7 +104,9 @@ pub async fn start_video_streaming(
                         .kill_on_drop(true)
                         .spawn() {
                             Ok(child) => {
-                                gst_handle = Some(child);
+                                {
+                                    *gst_handle_clone.lock().unwrap() = Some(child);
+                                }
                             },
                             Err(_) => {
                                 let _ = done_tx1.try_send(());
@@ -208,5 +213,11 @@ pub async fn start_video_streaming(
     println!("Task close finished.");
     peer_connection.close().await?;
     println!("Function returning, process will be dropped shortly.");
+    {
+        let mut gst_handle = gst_handle.lock().unwrap();
+        if let Some(child) = gst_handle.as_mut() {
+            child.start_kill().ok();
+        }
+    }
     Ok(())
 }
