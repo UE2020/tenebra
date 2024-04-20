@@ -219,7 +219,7 @@ pub async fn start_video_streaming(
         let mut gst_handle = gst_handle.lock().unwrap();
         if let Some(child) = gst_handle.as_mut() {
             if let Some(id) = child.id() {
-                nix::sys::signal::kill(nix::unistd::Pid::from_raw(-(id as i32)), SIGTERM).ok();
+                nix::sys::signal::kill(nix::unistd::Pid::from_raw(0), SIGTERM).ok();
             }
         }
     }
