@@ -1,6 +1,5 @@
 use anyhow::Result;
 use axum::{
-    body::Body,
     extract::State,
     http::StatusCode,
     response::{Html, IntoResponse, Response},
@@ -9,15 +8,14 @@ use axum::{
 };
 use enigo::{
     Button, Coordinate,
-    Direction::{Click, Press, Release},
+    Direction::{Press, Release},
     Enigo, Key, Keyboard, Mouse, Settings,
 };
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use streaming::InputCommand;
 use tokio::{
     spawn,
-    sync::mpsc::{Sender, UnboundedSender},
+    sync::mpsc::UnboundedSender,
 };
 
 mod streaming;
@@ -80,7 +78,7 @@ async fn offer(
         val = rx.recv() => {
             Ok((StatusCode::OK, Json(ResponseOffer::Offer(val.unwrap()))))
         }
-        val = task => {
+        _ = task => {
             Ok((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ResponseOffer::Error("Internal error".to_string())),
@@ -329,10 +327,9 @@ async fn main() -> Result<()> {
                     enigo.key(Key::Return, Release).unwrap();
                     enigo.key(Key::Shift, Release).unwrap();
                     enigo.key(Key::Space, Release).unwrap();
-                    enigo.key(Key::Unicode('d'), Release).unwrap();
-                    enigo.key(Key::Unicode('r'), Release).unwrap();
-                    enigo.key(Key::Unicode('z'), Release).unwrap();
-                    enigo.key(Key::Unicode('t'), Release).unwrap();
+                    for i in 'a'..'z' {
+                        enigo.key(Key::Unicode(i), Release).unwrap();
+                    }
                 }
             }
             _ => {}
