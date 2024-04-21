@@ -98,11 +98,11 @@ pub async fn start_video_streaming(
                     };
                     let args = &format!("{} ! videoconvert ! queue ! x264enc tune=zerolatency speed-preset=superfast bitrate=3000 key-int-max=60 ! video/x-h264, profile=baseline ! rtph264pay pt=96 mtu=1200 ! udpsink host=127.0.0.1 port={}", {
                         if cfg!(target_os = "linux") {
-                            "ximagesrc use-damage=0 ! video/x-raw,width=1366,height=768,framerate=60/1"
+                            "ximagesrc use-damage=0 ! video/x-raw,framerate=60/1"
                         } else if cfg!(target_os = "macos") {
-                            "avfvideosrc capture-screen=true capture-screen-cursor=true ! video/x-raw,width=1280,height=800,framerate=60/1"
+                            "avfvideosrc capture-screen=true capture-screen-cursor=true ! video/x-raw,framerate=60/1"
                         } else if cfg!(target_os = "windows") {
-                            "gdiscreencapsrc ! video/x-raw,width=1366,height=768,framerate=60/1"
+                            "gdiscreencapsrc ! video/x-raw,width=1620,height=2160,framerate=60/1"
                         } else {
                             unimplemented!()
                         }
