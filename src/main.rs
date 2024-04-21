@@ -318,6 +318,22 @@ async fn main() -> Result<()> {
                         },
                     )
                     .unwrap();
+                // A bug in Safari means that that any keys that are pressed while Meta is held are never released.
+                // We work around this by specifically ensuring that all numbers, etc. are released when Meta is released.
+                if key == Key::Meta && r#type == "keyup" {
+                    for i in 0..9 {
+                        enigo
+                            .key(Key::Unicode(i.to_string().chars().nth(0).unwrap()), Release)
+                            .unwrap();
+                    }
+                    enigo.key(Key::Return, Release).unwrap();
+                    enigo.key(Key::Shift, Release).unwrap();
+                    enigo.key(Key::Space, Release).unwrap();
+                    enigo.key(Key::Unicode('d'), Release).unwrap();
+                    enigo.key(Key::Unicode('r'), Release).unwrap();
+                    enigo.key(Key::Unicode('z'), Release).unwrap();
+                    enigo.key(Key::Unicode('t'), Release).unwrap();
+                }
             }
             _ => {}
         }
