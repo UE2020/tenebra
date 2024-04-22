@@ -1,3 +1,5 @@
+use std::sync::{Arc, Mutex};
+
 use anyhow::Result;
 use axum::{
     extract::State,
@@ -15,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use streaming::InputCommand;
 use tokio::{
     spawn,
-    sync::mpsc::UnboundedSender,
+    sync::mpsc::{Sender, UnboundedSender},
 };
 
 mod streaming;
@@ -58,7 +60,7 @@ where
 
 #[axum_macros::debug_handler]
 async fn offer(
-    State(input_tx): State<UnboundedSender<InputCommand>>,
+    State(state): State<AppState>,
     Json(payload): Json<CreateOffer>,
 ) -> Result<(StatusCode, Json<ResponseOffer>), AppError> {
     println!("Received offer");
@@ -68,11 +70,15 @@ async fn offer(
             Json(ResponseOffer::Error("Password incorrect.".to_string())),
         ));
     }
+    // kill last session
+    if let Some(sender) = state.kill_switch.lock().unwrap().as_mut() {
+        sender.try_send(())?;
+    }
     let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(1);
     let task = tokio::spawn(streaming::start_video_streaming(
         payload.offer,
         tx,
-        input_tx,
+        state,
     ));
     tokio::select! {
         val = rx.recv() => {
@@ -91,6 +97,12 @@ async fn home() -> Html<&'static str> {
     Html(include_str!("home.html"))
 }
 
+#[derive(Debug, Clone)]
+pub struct AppState {
+    input_tx: UnboundedSender<InputCommand>,
+    kill_switch: Arc<Mutex<Option<Sender<()>>>>,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<InputCommand>();
@@ -98,7 +110,10 @@ async fn main() -> Result<()> {
         .route("/", get(home))
         .route("/offer", post(offer))
         .layer(tower_http::cors::CorsLayer::very_permissive())
-        .with_state(tx);
+        .with_state(AppState {
+            input_tx: tx,
+            kill_switch: Arc::new(Mutex::new(None)),
+        });
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await.unwrap();
     spawn(async { axum::serve(listener, app).await });
 

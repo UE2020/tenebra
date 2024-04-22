@@ -22,6 +22,8 @@ use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
 use webrtc::track::track_local::{TrackLocal, TrackLocalWriter};
 use webrtc::Error;
 
+use crate::AppState;
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct InputCommand {
     pub r#type: String,
@@ -38,7 +40,7 @@ lazy_static! {
 pub async fn start_video_streaming(
     offer: String,
     offer_tx: tokio::sync::mpsc::Sender<String>,
-    input_tx: tokio::sync::mpsc::UnboundedSender<InputCommand>,
+    state: AppState,
 ) -> Result<(), anyhow::Error> {
     let mut m = MediaEngine::default();
     m.register_default_codecs()?;
@@ -73,6 +75,9 @@ pub async fn start_video_streaming(
         Result::<()>::Ok(())
     });
     let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<()>(1);
+    {
+        *state.kill_switch.lock().unwrap() = Some(done_tx.clone());    
+    }
     let done_tx1 = done_tx.clone();
     let gst_handle = Arc::new(Mutex::new(None));
     let port = {
@@ -96,9 +101,9 @@ pub async fn start_video_streaming(
                     } else {
                         unimplemented!()
                     };
-                    let args = &format!("{} ! videoconvert ! queue ! x264enc tune=zerolatency speed-preset=superfast bitrate=3000 key-int-max=60 ! video/x-h264, profile=baseline ! rtph264pay pt=96 mtu=1200 ! udpsink host=127.0.0.1 port={}", {
+                    let args = &format!("{} ! videoconvert ! x264enc key-int-max=60 tune=zerolatency preset=veryfast bitrate=3000  ! video/x-h264 ! rtph264pay pt=96 mtu=1200 ! udpsink host=127.0.0.1 port={}", {
                         if cfg!(target_os = "linux") {
-                            "ximagesrc use-damage=0 ! video/x-raw,width=1366,height=768,framerate=60/1"
+                            "ximagesrc use-damage=0 startx=0 ! video/x-raw,width=1366,height=768,framerate=60/1"
                         } else if cfg!(target_os = "macos") {
                             "avfvideosrc capture-screen=true capture-screen-cursor=true ! video/x-raw,width=1280,height=800,framerate=60/1"
                         } else if cfg!(target_os = "windows") {
@@ -143,7 +148,7 @@ pub async fn start_video_streaming(
         Box::pin(async {})
     }));
     let done_tx3 = done_tx.clone();
-    let input_tx1 = input_tx.clone();
+    let input_tx1 = state.input_tx.clone();
     peer_connection.on_data_channel(Box::new(move |d: Arc<RTCDataChannel>| {
         let d_label = d.label().to_owned();
         let d_id = d.id();
