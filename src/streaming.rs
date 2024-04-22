@@ -101,7 +101,7 @@ pub async fn start_video_streaming(
                     } else {
                         unimplemented!()
                     };
-                    let args = &format!("{} ! videoconvert ! x264enc key-int-max=60 tune=zerolatency speed-preset=veryfast bitrate=3000  ! video/x-h264 ! rtph264pay pt=96 mtu=1200 ! udpsink host=127.0.0.1 port={}", {
+                    let args = &format!("{} ! videoconvert ! x264enc key-int-max=60 tune=zerolatency speed-preset=veryfast bitrate=3000  ! video/x-h264,profile=baseline ! rtph264pay pt=96 mtu=1200 ! udpsink host=127.0.0.1 port={}", {
                         if cfg!(target_os = "linux") {
                             "ximagesrc use-damage=0 startx=0 ! video/x-raw,width=1366,height=768,framerate=60/1"
                         } else if cfg!(target_os = "macos") {
