@@ -101,9 +101,9 @@ pub async fn start_video_streaming(
                     } else {
                         unimplemented!()
                     };
-                    let args = &format!("{} ! videoconvert ! x264enc key-int-max=60 tune=zerolatency speed-preset=veryfast bitrate=3000  ! video/x-h264,profile=baseline ! rtph264pay pt=96 mtu=1200 ! udpsink host=127.0.0.1 port={}", {
+                    let args = &format!("{} ! videoconvert ! queue ! x264enc threads=4 aud=true b-adapt=false bframes=0 insert-vui=true key-int-max=180 rc-lookahead=0 vbv-buf-capacity=120 sliced-threads=true byte-stream=true pass=cbr speed-preset=veryfast tune=zerolatency qos=true bitrate=3000  ! video/x-h264,profile=baseline ! rtph264pay pt=96 mtu=1200 ! udpsink host=127.0.0.1 port={}", {
                         if cfg!(target_os = "linux") {
-                            "ximagesrc use-damage=0 startx=0 ! video/x-raw,width=1366,height=768,framerate=60/1"
+                            "ximagesrc use-damage=0 startx=0 blocksize=16384 ! video/x-raw,width=1366,height=768,framerate=60/1"
                         } else if cfg!(target_os = "macos") {
                             "avfvideosrc capture-screen=true capture-screen-cursor=true ! video/x-raw,width=1280,height=800,framerate=60/1"
                         } else if cfg!(target_os = "windows") {
