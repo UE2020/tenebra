@@ -228,5 +228,8 @@ pub async fn start_video_streaming(
     println!("Task close finished.");
     peer_connection.close().await?;
     println!("Function returning, process will be dropped shortly.");
+    if let Some(process) = gst_handle.lock().unwrap().as_mut() {
+        process.start_kill();
+    }
     Ok(())
 }

@@ -70,14 +70,16 @@ async fn offer(
             Json(ResponseOffer::Error("Password incorrect.".to_string())),
         ));
     }
+    println!("Killing last session");
     // kill last session
     {
         let mut sender = state.kill_switch.lock().unwrap();
         if let Some(sender) = sender.as_mut()  {
-            sender.try_send(())?;
+            sender.try_send(()).ok();
         };
-        *sender = None;    
+        *sender = None;
     }
+    println!("Spawning!");
     let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(1);
     let task = tokio::spawn(streaming::start_video_streaming(
         payload.offer,
