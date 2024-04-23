@@ -71,8 +71,12 @@ async fn offer(
         ));
     }
     // kill last session
-    if let Some(sender) = state.kill_switch.lock().unwrap().as_mut() {
-        sender.try_send(())?;
+    {
+        let mut sender = state.kill_switch.lock().unwrap();
+        if let Some(sender) = sender.as_mut()  {
+            sender.try_send(())?;
+        };
+        *sender = None;    
     }
     let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(1);
     let task = tokio::spawn(streaming::start_video_streaming(
