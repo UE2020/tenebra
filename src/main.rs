@@ -107,10 +107,17 @@ async fn home() -> Html<&'static str> {
 pub struct AppState {
     input_tx: UnboundedSender<InputCommand>,
     kill_switch: Arc<Mutex<Option<Sender<()>>>>,
+    width: u32,
+    height: u32,
+    bitrate: u32,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let args = std::env::args().collect::<Vec<_>>();
+    let width = args[1].parse::<u32>().expect("width should be passed as a numerical argument");
+    let height = args[2].parse::<u32>().expect("height should be passed as a numerical argument");
+    let bitrate = args.get(3).unwrap_or(&"4000".to_owned()).parse::<u32>().expect("bitrate should be passed as a numerical argument");
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<InputCommand>();
     let app = Router::new()
         .route("/", get(home))
@@ -119,6 +126,9 @@ async fn main() -> Result<()> {
         .with_state(AppState {
             input_tx: tx,
             kill_switch: Arc::new(Mutex::new(None)),
+            width,
+            height,
+            bitrate,
         });
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await.unwrap();
     spawn(async { axum::serve(listener, app).await });
@@ -340,16 +350,9 @@ async fn main() -> Result<()> {
                 // A bug in Safari means that that any keys that are pressed while Meta is held are never released.
                 // We work around this by specifically ensuring that all numbers, etc. are released when Meta is released.
                 if key == Key::Meta && r#type == "keyup" {
-                    for i in 0..9 {
-                        enigo
-                            .key(Key::Unicode(i.to_string().chars().nth(0).unwrap()), Release)
-                            .unwrap();
-                    }
-                    enigo.key(Key::Return, Release).unwrap();
-                    enigo.key(Key::Shift, Release).unwrap();
-                    enigo.key(Key::Space, Release).unwrap();
-                    for i in 'a'..'z' {
-                        enigo.key(Key::Unicode(i), Release).unwrap();
+                    let (held, _) = enigo.held();
+                    for key in held {
+                        enigo.key(key, Release).unwrap();
                     }
                 }
             }

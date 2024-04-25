@@ -102,17 +102,18 @@ pub async fn start_video_streaming(
                     } else {
                         unimplemented!()
                     };
-                    let args = &format!("{} ! videoconvert n-threads=4 ! video/x-raw,format=NV12 ! queue ! x264enc threads=4 aud=true b-adapt=false bframes=0 insert-vui=true key-int-max=180 rc-lookahead=0 vbv-buf-capacity=120 sliced-threads=true byte-stream=true pass=cbr speed-preset=veryfast tune=zerolatency qos=true bitrate=3000  ! video/x-h264,profile=baseline,stream-format=byte-stream ! rtph264pay pt=96 mtu=1200 aggregate-mode=zero-latency config-interval=-1 ! application/x-rtp,media=video,clock-rate=90000,encoding-name=H264,payload=97,rtcp-fb-nack-pli=true,rtcp-fb-ccm-fir=true,rtcp-fb-x-gstreamer-fir-as-repair=true ! udpsink host=127.0.0.1 port={}", {
+                    let args = &format!("{} ! videoconvert n-threads=4 ! video/x-raw,format=NV12 ! queue ! x264enc threads=4 aud=true b-adapt=false bframes=0 insert-vui=true key-int-max=180 rc-lookahead=0 vbv-buf-capacity=120 sliced-threads=true byte-stream=true pass=cbr speed-preset=veryfast tune=zerolatency qos=true bitrate={} ! video/x-h264,profile=baseline,stream-format=byte-stream ! rtph264pay pt=96 mtu=1200 aggregate-mode=zero-latency config-interval=-1 ! application/x-rtp,media=video,clock-rate=90000,encoding-name=H264,payload=97,rtcp-fb-nack-pli=true,rtcp-fb-ccm-fir=true,rtcp-fb-x-gstreamer-fir-as-repair=true ! udpsink host=127.0.0.1 port={}", {
                         if cfg!(target_os = "linux") {
-                            "ximagesrc use-damage=0 startx=0 blocksize=16384 remote=true ! video/x-raw,width=1366,height=768,framerate=60/1"
+                            format!("ximagesrc use-damage=0 startx=0 blocksize=16384 remote=true ! video/x-raw,width={},height={},framerate=60/1", state.width, state.height)
                         } else if cfg!(target_os = "macos") {
-                            "avfvideosrc capture-screen=true capture-screen-cursor=true ! video/x-raw,width=1280,height=800,framerate=60/1"
+                            format!("avfvideosrc capture-screen=true capture-screen-cursor=true ! video/x-raw,width={},height={},framerate=60/1", state.width, state.height)
                         } else if cfg!(target_os = "windows") {
-                            "gdiscreencapsrc ! video/x-raw,width=1366,height=768,framerate=60/1"
+                            format!("gdiscreencapsrc ! video/x-raw,width={},height={},framerate=60/1", state.width, state.height)
                         } else {
                             unimplemented!()
                         }
-                    }, port);
+                    }, state.bitrate, port);
+                    println!("Using command: {}", args);
                     let args = shell_words::split(args).unwrap();
                     match Command::new(command)
                         .args(args)
@@ -229,7 +230,7 @@ pub async fn start_video_streaming(
     peer_connection.close().await?;
     println!("Function returning, process will be dropped shortly.");
     if let Some(process) = gst_handle.lock().unwrap().as_mut() {
-        process.start_kill();
+        process.start_kill().ok();
     }
     Ok(())
 }
