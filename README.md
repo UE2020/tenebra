@@ -1,8 +1,8 @@
 # Tenebra
 
-Tenebra is a video-streaming server. Connect to Tenebra with a compatible client to view and control this machine's screen.
+Tenebra is a video-streaming server. Connect to Tenebra with a compatible client to view and control another machine's screen.
 
-Tenebra mercator videonis-fluentis est. Iunge ad Tenebram cliente compatibile ut spectes iubeasque hanc machinam.
+Tenebra mercator videonis-fluentis est. Iunge ad Tenebram cliente compatibile ut spectes iubeasque machinam aliam.
 
 ## Usage
 
