@@ -150,6 +150,9 @@ async fn main() -> Result<()> {
                 "mousemove" => enigo
                     .move_mouse(x as i32, y as i32, Coordinate::Rel)
                     .unwrap(),
+                "mousemoveabs" => enigo
+                    .move_mouse(x as i32, y as i32, Coordinate::Abs)
+                    .unwrap(),
                 "wheel" => {
                     enigo
                         .scroll((x / 120.0) as i32, enigo::Axis::Horizontal)
