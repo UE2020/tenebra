@@ -102,7 +102,7 @@ pub async fn start_video_streaming(
                     } else {
                         unimplemented!()
                     };
-                    let args = &format!("{} ! videoconvert n-threads=4 ! video/x-raw,format=NV12 ! queue ! x264enc threads=4 aud=true b-adapt=false bframes=0 insert-vui=true key-int-max=180 rc-lookahead=0 vbv-buf-capacity=120 sliced-threads=true byte-stream=true pass=cbr speed-preset=veryfast tune=zerolatency qos=true bitrate={} ! video/x-h264,profile=baseline,stream-format=byte-stream ! rtph264pay pt=96 mtu=1200 aggregate-mode=zero-latency config-interval=-1 ! application/x-rtp,media=video,clock-rate=90000,encoding-name=H264,payload=97,rtcp-fb-nack-pli=true,rtcp-fb-ccm-fir=true,rtcp-fb-x-gstreamer-fir-as-repair=true ! udpsink host=127.0.0.1 port={}", {
+                    let args = &format!("{} ! videoconvert n-threads=4 ! video/x-raw,format=NV12 ! queue ! x264enc threads=4 aud=true b-adapt=false bframes=0 insert-vui=true key-int-max=180 rc-lookahead=0 vbv-buf-capacity=120 sliced-threads=true byte-stream=true pass=cbr speed-preset=veryfast tune=zerolatency qos=true bitrate={} ! video/x-h264,profile=baseline,stream-format=byte-stream ! rtph264pay mtu=1200 aggregate-mode=zero-latency config-interval=-1 ! application/x-rtp,media=video,clock-rate=90000,encoding-name=H264,payload=97,rtcp-fb-nack-pli=true,rtcp-fb-ccm-fir=true,rtcp-fb-x-gstreamer-fir-as-repair=true ! udpsink host=127.0.0.1 port={}", {
                         if cfg!(target_os = "linux") {
                             format!("ximagesrc use-damage=0 startx={} blocksize=16384 remote=true ! video/x-raw,width={},height={},framerate=60/1", state.startx, state.width, state.height)
                         } else if cfg!(target_os = "macos") {
