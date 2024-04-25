@@ -110,6 +110,7 @@ pub struct AppState {
     width: u32,
     height: u32,
     bitrate: u32,
+    startx: u32,
 }
 
 #[tokio::main]
@@ -118,6 +119,7 @@ async fn main() -> Result<()> {
     let width = args[1].parse::<u32>().expect("width should be passed as a numerical argument");
     let height = args[2].parse::<u32>().expect("height should be passed as a numerical argument");
     let bitrate = args.get(3).unwrap_or(&"4000".to_owned()).parse::<u32>().expect("bitrate should be passed as a numerical argument");
+    let startx = args.get(3).unwrap_or(&"0".to_owned()).parse::<u32>().expect("startx should be passed as a numerical argument");
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<InputCommand>();
     let app = Router::new()
         .route("/", get(home))
@@ -129,6 +131,7 @@ async fn main() -> Result<()> {
             width,
             height,
             bitrate,
+            startx
         });
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await.unwrap();
     spawn(async { axum::serve(listener, app).await });
