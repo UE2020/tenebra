@@ -263,7 +263,7 @@ async fn main() -> Result<()> {
                     "F10" => Key::F10,
                     #[cfg(not(target_os = "macos"))]
                     "NumLock" => Key::Numlock,
-                    #[cfg(not(target_os = "macos"))]
+                    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
                     "ScrollLock" => Key::ScrollLock,
                     "Numpad7" => Key::Unicode('7'),
                     "Numpad8" => Key::Unicode('8'),
@@ -309,11 +309,11 @@ async fn main() -> Result<()> {
                     "NumpadComma" => Key::Unicode(','),
                     "MetaLeft" => Key::Meta, // MetaLeft on Firefox and Chromium
                     "MetaRight" => Key::Meta, // MetaRight on Firefox and Chromium
-                    #[cfg(not(target_os = "macos"))]
+                    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
                     "Undo" => Key::Undo,
                     #[cfg(not(target_os = "macos"))]
                     "Select" => Key::Select,
-                    #[cfg(not(target_os = "macos"))]
+                    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
                     "Find" => Key::Find,
                     "Help" => Key::Help,
                     "MediaTrackNext" => Key::MediaNextTrack,
