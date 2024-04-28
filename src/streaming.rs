@@ -79,7 +79,7 @@ pub async fn start_video_streaming(
     {
         *state.kill_switch.lock().unwrap() = Some(done_tx.clone());    
     }
-    let done_tx1 = done_tx.clone();
+    let done_tx1: tokio::sync::mpsc::Sender<()> = done_tx.clone();
     let gst_handle = Arc::new(Mutex::new(None));
     let port = {
         let mut port = PORT.lock().unwrap();
@@ -108,7 +108,7 @@ pub async fn start_video_streaming(
                         } else if cfg!(target_os = "macos") {
                             format!("avfvideosrc capture-screen=true capture-screen-cursor=true ! video/x-raw,width={},height={},framerate=60/1", state.width, state.height)
                         } else if cfg!(target_os = "windows") {
-                            format!("d3d11screencapturesrc show-cursor=true ! video/x-raw,width={},height={},framerate=60/1", state.width, state.height)
+                            format!("d3d11screencapturesrc show-cursor=true capture-api=wgc ! video/x-raw,width={},height={},framerate=60/1", state.width, state.height)
                         } else {
                             unimplemented!()
                         }
