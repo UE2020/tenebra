@@ -116,10 +116,11 @@ pub struct AppState {
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = std::env::args().collect::<Vec<_>>();
-    let width = args[1].parse::<u32>().expect("width should be passed as a numerical argument");
-    let height = args[2].parse::<u32>().expect("height should be passed as a numerical argument");
-    let bitrate = args.get(3).unwrap_or(&"4000".to_owned()).parse::<u32>().expect("bitrate should be passed as a numerical argument");
-    let startx = args.get(3).unwrap_or(&"0".to_owned()).parse::<u32>().expect("startx should be passed as a numerical argument");
+    let port = args[1].parse::<u32>().expect("port should be passed as a numerical argument");
+    let width = args[2].parse::<u32>().expect("width should be passed as a numerical argument");
+    let height = args[3].parse::<u32>().expect("height should be passed as a numerical argument");
+    let bitrate = args.get(4).unwrap_or(&"4000".to_owned()).parse::<u32>().expect("bitrate should be passed as a numerical argument");
+    let startx = args.get(5).unwrap_or(&"0".to_owned()).parse::<u32>().expect("startx should be passed as a numerical argument");
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<InputCommand>();
     let app = Router::new()
         .route("/", get(home))
@@ -133,7 +134,7 @@ async fn main() -> Result<()> {
             bitrate,
             startx
         });
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await.unwrap();
+    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await.unwrap();
     spawn(async { axum::serve(listener, app).await });
 
     let mut enigo = Enigo::new(&Settings {

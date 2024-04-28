@@ -108,7 +108,7 @@ pub async fn start_video_streaming(
                         } else if cfg!(target_os = "macos") {
                             format!("avfvideosrc capture-screen=true capture-screen-cursor=true ! video/x-raw,width={},height={},framerate=60/1", state.width, state.height)
                         } else if cfg!(target_os = "windows") {
-                            format!("gdiscreencapsrc cursor=TRUE ! video/x-raw,width={},height={},framerate=60/1", state.width, state.height)
+                            format!("d3d11screencapturesrc show-cursor=true ! video/x-raw,width={},height={},framerate=60/1", state.width, state.height)
                         } else {
                             unimplemented!()
                         }
