@@ -8,7 +8,7 @@ Tenebra mercator videonis-fluentis est. Iunge ad Tenebram cliente compatibile ut
 
 Tenebra uses GStreamer to encode an RTP H.264 stream, so GStreamer's runtime utilities must be installed on your system for Tenebra to work.
 
-Tenebra GStreamer utitur ut faciat RTP H.264 flumen, itaque instrumenta GStreameris installandi sunt, ut Tenebra operet.
+Tenebra GStreamer utitur ut faciat RTP H.264 flumen, itaque instrumenta GStreameris installanda sunt, ut Tenebra operet.
 
 [GStreamer Installs](https://gstreamer.freedesktop.org/download/) <- install the RUNTIME version
 
