@@ -10,7 +10,7 @@ use axum::{
 };
 use enigo::{
     Button, Coordinate,
-    Direction::{Press, Release},
+    Direction::{Press, Release, Click},
     Enigo, Key, Keyboard, Mouse, Settings,
 };
 use serde::{Deserialize, Serialize};
@@ -345,6 +345,18 @@ async fn main() -> Result<()> {
                         continue;
                     }
                 };
+                // fix capslock on iPad client
+                if key == Key::CapsLock {
+                    if r#type == "keydown" {
+                        enigo
+                        .key(
+                            key,
+                            Click,
+                        )
+                        .unwrap();
+                    }
+                    continue;
+                }
                 enigo
                     .key(
                         key,
