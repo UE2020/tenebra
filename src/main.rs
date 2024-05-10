@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::{sync::{Arc, Mutex}, time::{Duration, Instant}};
 
 use anyhow::Result;
 use axum::{
@@ -143,6 +143,8 @@ async fn main() -> Result<()> {
         ..Default::default()
     })
     .unwrap();
+
+    let mut last_capslock = Instant::now();
 
     while let Some(msg) = rx.recv().await {
         match msg {
@@ -346,15 +348,14 @@ async fn main() -> Result<()> {
                     }
                 };
                 // fix capslock on iPad client
-                if key == Key::CapsLock {
-                    if r#type == "keydown" {
-                        enigo
+                if key == Key::CapsLock && last_capslock.elapsed() > Duration::from_millis(100) {
+                    enigo
                         .key(
                             key,
                             Click,
                         )
                         .unwrap();
-                    }
+                    last_capslock = Instant::now();
                     continue;
                 }
                 enigo
