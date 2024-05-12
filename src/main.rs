@@ -158,7 +158,7 @@ async fn main() -> Result<()> {
                     .move_mouse(x as i32, y as i32, Coordinate::Rel)
                     .unwrap(),
                 "mousemoveabs" => enigo
-                    .move_mouse(x as i32, y as i32, Coordinate::Abs)
+                    .move_mouse(x as i32 + startx as i32, y as i32, Coordinate::Abs)
                     .unwrap(),
                 "wheel" => {
                     enigo
