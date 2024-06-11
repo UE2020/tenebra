@@ -229,7 +229,7 @@ pub async fn start_video_streaming(
             // |  ID   | len=2 |       MIN delay       |       MAX delay       |
             // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
             // we want all zeros, so a zeroed payload is fine.
-            packet.header.set_extension(0, Bytes::copy_from_slice(&[0u8; 2])).unwrap();
+            packet.header.set_extension(5, Bytes::copy_from_slice(&[0u8; 2])).unwrap();
             let packet = packet.marshal().unwrap();
             if let Err(err) = video_track.write(&packet).await {
                 if Error::ErrClosedPipe == err {
