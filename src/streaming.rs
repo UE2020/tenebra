@@ -206,7 +206,7 @@ pub async fn start_video_streaming(
     let _ = gather_complete.recv().await;
     if let Some(mut local_desc) = peer_connection.local_description().await {
         // add playout delay since we support it
-        local_desc.sdp = local_desc.sdp.replace("a=extmap:4 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01\r\n", "a=extmap:4 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01\r\na=extmap:5 http://www.webrtc.org/experiments/rtp-hdrext/playout-delay\r\n");
+        local_desc.sdp = local_desc.sdp.replace("a=extmap:4 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01\r\n", "a=extmap:5 http://www.webrtc.org/experiments/rtp-hdrext/playout-delay\r\n");
         // a=extmap:5 http://www.webrtc.org/experiments/rtp-hdrext/playout-delay
         let json_str = serde_json::to_string(&local_desc)?;
         let b64 = BASE64_STANDARD.encode(&json_str);
@@ -229,7 +229,7 @@ pub async fn start_video_streaming(
             // |  ID   | len=2 |       MIN delay       |       MAX delay       |
             // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
             // we want all zeros, so a zeroed payload is fine.
-            packet.header.set_extension(5, Bytes::copy_from_slice(&[0u8; 2])).unwrap();
+            packet.header.set_extension(1, Bytes::copy_from_slice(&[0u8; 2])).unwrap();
             let packet = packet.marshal().unwrap();
             if let Err(err) = video_track.write(&packet).await {
                 if Error::ErrClosedPipe == err {
