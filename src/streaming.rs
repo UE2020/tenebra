@@ -1,7 +1,10 @@
 use anyhow::Result;
 use base64::prelude::*;
+use bytes::Bytes;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
+use webrtc::rtp::packet::Packet;
+use webrtc::util::{Unmarshal, Marshal};
 use std::sync::Arc;
 use std::sync::Mutex;
 use tokio::net::UdpSocket;
@@ -201,7 +204,10 @@ pub async fn start_video_streaming(
     let mut gather_complete = peer_connection.gathering_complete_promise().await;
     peer_connection.set_local_description(answer).await?;
     let _ = gather_complete.recv().await;
-    if let Some(local_desc) = peer_connection.local_description().await {
+    if let Some(mut local_desc) = peer_connection.local_description().await {
+        // add playout delay since we support it
+        local_desc.sdp = local_desc.sdp.replace("a=extmap:4 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01\r\n", "a=extmap:4 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01\r\na=extmap:5 http://www.webrtc.org/experiments/rtp-hdrext/playout-delay\r\n");
+        // a=extmap:5 http://www.webrtc.org/experiments/rtp-hdrext/playout-delay
         let json_str = serde_json::to_string(&local_desc)?;
         let b64 = BASE64_STANDARD.encode(&json_str);
         offer_tx.send(b64).await?;
@@ -214,7 +220,18 @@ pub async fn start_video_streaming(
     tokio::spawn(async move {
         let mut inbound_rtp_packet = vec![0u8; 1200]; // UDP MTU
         while let Ok((n, _)) = listener.recv_from(&mut inbound_rtp_packet).await {
-            if let Err(err) = video_track.write(&inbound_rtp_packet[..n]).await {
+            let mut data = &inbound_rtp_packet[..n];
+            let mut packet = Packet::unmarshal(&mut data).unwrap();
+            // http://www.webrtc.org/experiments/rtp-hdrext/playout-delay
+            // 0                   1                   2                   3
+            // 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            // |  ID   | len=2 |       MIN delay       |       MAX delay       |
+            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            // we want all zeros, so a zeroed payload is fine.
+            packet.header.set_extension(0, Bytes::copy_from_slice(&[0u8; 2])).unwrap();
+            let packet = packet.marshal().unwrap();
+            if let Err(err) = video_track.write(&packet).await {
                 if Error::ErrClosedPipe == err {
                     // The peerConnection has been closed.
                 } else {

@@ -1873,6 +1873,7 @@ dependencies = [
  "axum",
  "axum-macros",
  "base64 0.22.0",
+ "bytes",
  "enigo",
  "lazy_static",
  "serde",
