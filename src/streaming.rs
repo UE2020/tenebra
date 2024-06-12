@@ -219,6 +219,7 @@ pub async fn start_video_streaming(
     let done_tx4 = done_tx.clone();
     tokio::spawn(async move {
         let mut inbound_rtp_packet = vec![0u8; 1200]; // UDP MTU
+        let mut counter = 0u16;
         while let Ok((n, _)) = listener.recv_from(&mut inbound_rtp_packet).await {
             let mut data = &inbound_rtp_packet[..n];
             let mut packet = Packet::unmarshal(&mut data).unwrap();
@@ -229,7 +230,17 @@ pub async fn start_video_streaming(
             // |  ID   | len=2 |       MIN delay       |       MAX delay       |
             // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
             // we want all zeros, so a zeroed payload is fine.
-            packet.header.set_extension(1, Bytes::copy_from_slice(&[0u8; 2])).unwrap();
+            // (???) from wireshark with Xbox Cloud
+            // RFC 5285 Header Extension (One-Byte Header)
+            // Identifier: 2
+            // Length: 3
+            // Extension Data: 49072b
+            packet.header.set_extension(1, Bytes::copy_from_slice(&[0xff])).unwrap();
+            packet.header.set_extension(2, Bytes::copy_from_slice(&[0x49, 0x07, 0x2b])).unwrap();
+            packet.header.set_extension(3, Bytes::copy_from_slice(&counter.to_be_bytes())).unwrap();
+            packet.header.set_extension(4, Bytes::copy_from_slice(&[0x31])).unwrap();
+            packet.header.set_extension(5, Bytes::copy_from_slice(&[0x00, 0x00, 0x0c])).unwrap();
+            counter += 1;
             let packet = packet.marshal().unwrap();
             if let Err(err) = video_track.write(&packet).await {
                 if Error::ErrClosedPipe == err {
