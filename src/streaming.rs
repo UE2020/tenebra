@@ -105,7 +105,7 @@ pub async fn start_video_streaming(
                     } else {
                         r"C:\gstreamer\1.0\msvc_x86_64\bin\gst-launch-1.0.exe"
                     };
-                    let args = &format!("{} ! queue ! vaapipostproc scale-method=fast qos=true ! \"video/x-raw(memory:VASurface)\",format=NV12 ! queue ! vaapih264enc aud=false dct8x8=false cpb-length=50 keyframe-period=1024 num-slices=4 refs=1 bitrate={} ! video/x-h264,profile=main,stream-format=byte-stream ! queue ! rtph264pay mtu=1200 config-interval=-1 ! application/x-rtp,media=video,clock-rate=90000,encoding-name=H264,payload=97,rtcp-fb-nack-pli=true,rtcp-fb-ccm-fir=true,rtcp-fb-x-gstreamer-fir-as-repair=true ! queue ! udpsink host=127.0.0.1 port={}", {
+                    let args = &format!("{} ! queue ! vaapipostproc scale-method=fast qos=true ! \"video/x-raw(memory:VASurface)\",format=NV12 ! queue ! vaapih264enc aud=false dct8x8=false cpb-length=50 keyframe-period=1024 num-slices=4 refs=1 bitrate={} ! video/x-h264,profile=main,stream-format=byte-stream ! queue ! rtph264pay mtu=1000 aggregate-mode=zero-latency config-interval=-1 ! application/x-rtp,media=video,clock-rate=90000,encoding-name=H264,payload=97,rtcp-fb-nack-pli=true,rtcp-fb-ccm-fir=true,rtcp-fb-x-gstreamer-fir-as-repair=true ! queue ! udpsink host=127.0.0.1 port={}", {
                         if cfg!(target_os = "linux") {
                             format!("ximagesrc use-damage=0 startx={} blocksize=16384 remote=true ! video/x-raw,width={},height={},framerate=60/1", state.startx, state.width, state.height)
                         } else if cfg!(target_os = "macos") {
@@ -218,7 +218,7 @@ pub async fn start_video_streaming(
     let listener = UdpSocket::bind(format!("127.0.0.1:{}", port)).await?;
     let done_tx4 = done_tx.clone();
     tokio::spawn(async move {
-        let mut inbound_rtp_packet = vec![0u8; 1200]; // UDP MTU
+        let mut inbound_rtp_packet = vec![0u8; 1000]; // UDP MTU
         let mut counter = 0u16;
         while let Ok((n, _)) = listener.recv_from(&mut inbound_rtp_packet).await {
             let mut data = &inbound_rtp_packet[..n];
