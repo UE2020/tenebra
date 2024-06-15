@@ -1,12 +1,16 @@
 use anyhow::Result;
 use base64::prelude::*;
-use bytes::Bytes;
+use bytes::{BufMut, Bytes};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
+use tokio::time::sleep;
+use webrtc::rtp::extension::HeaderExtension;
 use webrtc::rtp::packet::Packet;
-use webrtc::util::{Unmarshal, Marshal};
+use webrtc::util::{Marshal, MarshalSize, Unmarshal};
+use std::borrow::Cow;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::time::Duration;
 use tokio::net::UdpSocket;
 use tokio::process::Command;
 use webrtc::api::interceptor_registry::register_default_interceptors;
@@ -105,7 +109,7 @@ pub async fn start_video_streaming(
                     } else {
                         r"C:\gstreamer\1.0\msvc_x86_64\bin\gst-launch-1.0.exe"
                     };
-                    let args = &format!("{} ! queue ! videoconvert n-threads=4 ! video/x-raw,format=NV12 ! queue ! x264enc threads=4 aud=true b-adapt=false bframes=0 insert-vui=true key-int-max=180 rc-lookahead=0 vbv-buf-capacity=120 sliced-threads=true byte-stream=true pass=cbr speed-preset=veryfast tune=zerolatency qos=true bitrate={} ! video/x-h264,profile=baseline,stream-format=byte-stream ! queue ! rtph264pay mtu=1000 aggregate-mode=zero-latency config-interval=-1 ! application/x-rtp,media=video,clock-rate=90000,encoding-name=H264,payload=97,rtcp-fb-nack-pli=true,rtcp-fb-ccm-fir=true,rtcp-fb-x-gstreamer-fir-as-repair=true ! queue ! udpsink host=127.0.0.1 port={}", {
+                    let args = &format!("{} ! queue ! videoconvert n-threads=4 ! video/x-raw,format=NV12 ! queue ! x264enc threads=4 aud=true b-adapt=false bframes=0 insert-vui=true rc-lookahead=0 vbv-buf-capacity=120 sliced-threads=true byte-stream=true pass=qual speed-preset=veryfast tune=zerolatency qos=true bitrate={} ! video/x-h264,profile=baseline,stream-format=byte-stream ! queue ! rtph264pay mtu=1000 aggregate-mode=zero-latency config-interval=-1 ! application/x-rtp,media=video,clock-rate=90000,encoding-name=H264,payload=97,rtcp-fb-nack-pli=true,rtcp-fb-ccm-fir=true,rtcp-fb-x-gstreamer-fir-as-repair=true ! queue ! udpsink host=127.0.0.1 port={}", {
                         if cfg!(target_os = "linux") {
                             format!("ximagesrc use-damage=0 startx={} blocksize=16384 remote=true ! video/x-raw,width={},height={},framerate=60/1", state.startx, state.width, state.height)
                         } else if cfg!(target_os = "macos") {
@@ -219,7 +223,6 @@ pub async fn start_video_streaming(
     let done_tx4 = done_tx.clone();
     tokio::spawn(async move {
         let mut inbound_rtp_packet = vec![0u8; 1000]; // UDP MTU
-        let mut counter = 0u16;
         while let Ok((n, _)) = listener.recv_from(&mut inbound_rtp_packet).await {
             let mut data = &inbound_rtp_packet[..n];
             let mut packet = Packet::unmarshal(&mut data).unwrap();
@@ -235,12 +238,11 @@ pub async fn start_video_streaming(
             // Identifier: 2
             // Length: 3
             // Extension Data: 49072b
-            packet.header.set_extension(1, Bytes::copy_from_slice(&[0xff])).unwrap();
-            packet.header.set_extension(2, Bytes::copy_from_slice(&[0x49, 0x07, 0x2b])).unwrap();
-            packet.header.set_extension(3, Bytes::copy_from_slice(&counter.to_be_bytes())).unwrap();
-            packet.header.set_extension(4, Bytes::copy_from_slice(&[0x31])).unwrap();
-            packet.header.set_extension(5, Bytes::copy_from_slice(&[0x00, 0x00, 0x0c])).unwrap();
-            counter += 1;
+            //packet.header.set_extension(1, Bytes::copy_from_slice(&[0xff])).unwrap(); X
+            //packet.header.set_extension(2, Bytes::copy_from_slice(&[0x49, 0x07, 0x2b])).unwrap();
+            //packet.header.set_extension(3, Bytes::copy_from_slice(&counter.to_be_bytes())).unwrap();
+            //packet.header.set_extension(4, Bytes::copy_from_slice(&[0x31])).unwrap();
+            packet.header.set_extension(5, Bytes::copy_from_slice(&[0x00, 0x00, 0x00])).unwrap();
             if let Err(err) = video_track.write_rtp(&packet).await {
                 if Error::ErrClosedPipe == err {
                     // The peerConnection has been closed.
@@ -260,4 +262,25 @@ pub async fn start_video_streaming(
         process.start_kill().ok();
     }
     Ok(())
+}
+
+pub struct PlayoutDelay {
+    pub min: u8,
+    pub max: u8
+}
+
+impl MarshalSize for PlayoutDelay {
+    fn marshal_size(&self) -> usize {
+        3
+    }
+}
+
+impl Marshal for PlayoutDelay {
+    fn marshal_to(&self, mut buf: &mut [u8]) -> webrtc::util::Result<usize> {
+        if buf.remaining_mut() < 3 {
+            return Err(webrtc::rtp::Error::ErrBufferTooSmall.into());
+        }
+
+        Ok(3)
+    }
 }
