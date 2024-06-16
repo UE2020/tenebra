@@ -4,9 +4,11 @@ use bytes::{BufMut, Bytes};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use tokio::time::sleep;
+use webrtc::rtcp::receiver_report::ReceiverReport;
 use webrtc::rtp::extension::HeaderExtension;
 use webrtc::rtp::packet::Packet;
 use webrtc::util::{Marshal, MarshalSize, Unmarshal};
+use std::any::Any;
 use std::borrow::Cow;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -44,6 +46,18 @@ lazy_static! {
     static ref PORT: Arc<Mutex<usize>> = Arc::new(Mutex::new(6000));
 }
 
+struct RateControlMessage;
+
+trait PacketAny {
+    fn as_any(&self) -> &dyn Any;
+}
+
+impl PacketAny for Box<dyn webrtc::rtcp::packet::Packet + Send + Sync> {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
 pub async fn start_video_streaming(
     offer: String,
     offer_tx: tokio::sync::mpsc::Sender<String>,
@@ -77,9 +91,23 @@ pub async fn start_video_streaming(
     let rtp_sender = peer_connection
         .add_track(Arc::clone(&video_track) as Arc<dyn TrackLocal + Send + Sync>)
         .await?;
+    let (control_tx, mut control_rx) = tokio::sync::mpsc::channel(1);
     tokio::spawn(async move {
         let mut rtcp_buf = vec![0u8; 1500];
-        while let Ok((_, _)) = rtp_sender.read(&mut rtcp_buf).await {}
+        while let Ok((packet, _)) = rtp_sender.read(&mut rtcp_buf).await {
+            if !packet.is_empty() {
+                let value_any = (*packet[0]).as_any();
+                if let Some(packet) = value_any.downcast_ref::<ReceiverReport>() {
+                    if !packet.reports.is_empty() {
+                        if packet.reports[0].jitter > 500 {
+                            // if it fails, we're already waiting so it doesn't matter
+                            println!("Sending rate control warning because jitter={}", packet.reports[0].jitter);
+                            control_tx.try_send(RateControlMessage).ok();
+                        }    
+                    }
+                }
+            }
+        }
         Result::<()>::Ok(())
     });
     let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<()>(1);
@@ -210,7 +238,7 @@ pub async fn start_video_streaming(
     let _ = gather_complete.recv().await;
     if let Some(mut local_desc) = peer_connection.local_description().await {
         // add playout delay since we support it
-        local_desc.sdp = local_desc.sdp.replace("a=extmap:4 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01\r\n", "a=extmap:5 http://www.webrtc.org/experiments/rtp-hdrext/playout-delay\r\n");
+        local_desc.sdp = local_desc.sdp.replace("a=extmap:4 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01\r\n", "a=extmap:4 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01\r\na=extmap:5 http://www.webrtc.org/experiments/rtp-hdrext/playout-delay\r\n");
         // a=extmap:5 http://www.webrtc.org/experiments/rtp-hdrext/playout-delay
         let json_str = serde_json::to_string(&local_desc)?;
         let b64 = BASE64_STANDARD.encode(&json_str);
@@ -223,6 +251,7 @@ pub async fn start_video_streaming(
     let done_tx4 = done_tx.clone();
     tokio::spawn(async move {
         let mut inbound_rtp_packet = vec![0u8; 1000]; // UDP MTU
+        let mut counter = 0u16;
         while let Ok((n, _)) = listener.recv_from(&mut inbound_rtp_packet).await {
             let mut data = &inbound_rtp_packet[..n];
             let mut packet = Packet::unmarshal(&mut data).unwrap();
@@ -240,9 +269,14 @@ pub async fn start_video_streaming(
             // Extension Data: 49072b
             //packet.header.set_extension(1, Bytes::copy_from_slice(&[0xff])).unwrap(); X
             //packet.header.set_extension(2, Bytes::copy_from_slice(&[0x49, 0x07, 0x2b])).unwrap();
-            //packet.header.set_extension(3, Bytes::copy_from_slice(&counter.to_be_bytes())).unwrap();
+            packet.header.set_extension(3, Bytes::copy_from_slice(&counter.to_be_bytes())).unwrap();
+            counter += 1;
             //packet.header.set_extension(4, Bytes::copy_from_slice(&[0x31])).unwrap();
             packet.header.set_extension(5, Bytes::copy_from_slice(&[0x00, 0x00, 0x00])).unwrap();
+            if let Ok(_) = control_rx.try_recv() {
+                println!("RECEIVER IS LAGGING, RATE CONTROL MESSAGE RECEIVED.");
+                sleep(Duration::from_millis(16)).await;
+            }
             if let Err(err) = video_track.write_rtp(&packet).await {
                 if Error::ErrClosedPipe == err {
                     // The peerConnection has been closed.
@@ -262,25 +296,4 @@ pub async fn start_video_streaming(
         process.start_kill().ok();
     }
     Ok(())
-}
-
-pub struct PlayoutDelay {
-    pub min: u8,
-    pub max: u8
-}
-
-impl MarshalSize for PlayoutDelay {
-    fn marshal_size(&self) -> usize {
-        3
-    }
-}
-
-impl Marshal for PlayoutDelay {
-    fn marshal_to(&self, mut buf: &mut [u8]) -> webrtc::util::Result<usize> {
-        if buf.remaining_mut() < 3 {
-            return Err(webrtc::rtp::Error::ErrBufferTooSmall.into());
-        }
-
-        Ok(3)
-    }
 }
