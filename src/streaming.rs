@@ -1,21 +1,16 @@
 use anyhow::Result;
 use base64::prelude::*;
-use bytes::{BufMut, Bytes};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use tokio::time::sleep;
 use webrtc::rtcp::receiver_report::ReceiverReport;
-use webrtc::rtp::extension::HeaderExtension;
-use webrtc::rtp::packet::Packet;
-use webrtc::util::{Marshal, MarshalSize, Unmarshal};
 use std::any::Any;
-use std::borrow::Cow;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 use tokio::net::UdpSocket;
 use tokio::process::Command;
-use webrtc::api::interceptor_registry::register_default_interceptors;
+use webrtc::api::interceptor_registry::{configure_twcc, register_default_interceptors};
 use webrtc::api::media_engine::{MediaEngine, MIME_TYPE_H264};
 use webrtc::api::APIBuilder;
 use webrtc::data_channel::data_channel_message::DataChannelMessage;
@@ -26,12 +21,14 @@ use webrtc::interceptor::registry::Registry;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
-use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
+use webrtc::rtp_transceiver::rtp_codec::{RTCRtpCodecCapability, RTCRtpHeaderExtensionCapability};
 use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
 use webrtc::track::track_local::{TrackLocal, TrackLocalWriter};
 use webrtc::Error;
 
 use crate::AppState;
+
+mod playout_delay;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct InputCommand {
@@ -48,6 +45,7 @@ lazy_static! {
 
 struct RateControlMessage;
 
+#[allow(unused)]
 trait PacketAny {
     fn as_any(&self) -> &dyn Any;
 }
@@ -56,6 +54,15 @@ impl PacketAny for Box<dyn webrtc::rtcp::packet::Packet + Send + Sync> {
     fn as_any(&self) -> &dyn Any {
         self
     }
+}
+
+fn configure_playout_delay(mut registry: Registry, media_engine: &mut MediaEngine) -> Result<Registry> {
+    media_engine.register_header_extension(RTCRtpHeaderExtensionCapability {
+        uri: String::from("http://www.webrtc.org/experiments/rtp-hdrext/playout-delay")
+    }, webrtc::rtp_transceiver::rtp_codec::RTPCodecType::Video, None)?;
+    let sender = Box::new(playout_delay::Sender::builder());
+    registry.add(sender);
+    Ok(registry)
 }
 
 pub async fn start_video_streaming(
@@ -67,6 +74,9 @@ pub async fn start_video_streaming(
     m.register_default_codecs()?;
     let mut registry = Registry::new();
     registry = register_default_interceptors(registry, &mut m)?;
+    // we only need twcc to get the client's jitter value
+    registry = configure_twcc(registry, &mut m)?;
+    registry = configure_playout_delay(registry, &mut m)?;
     let api = APIBuilder::new()
         .with_media_engine(m)
         .with_interceptor_registry(registry)
@@ -236,10 +246,7 @@ pub async fn start_video_streaming(
     let mut gather_complete = peer_connection.gathering_complete_promise().await;
     peer_connection.set_local_description(answer).await?;
     let _ = gather_complete.recv().await;
-    if let Some(mut local_desc) = peer_connection.local_description().await {
-        // add playout delay since we support it
-        local_desc.sdp = local_desc.sdp.replace("a=extmap:4 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01\r\n", "a=extmap:4 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01\r\na=extmap:5 http://www.webrtc.org/experiments/rtp-hdrext/playout-delay\r\n");
-        // a=extmap:5 http://www.webrtc.org/experiments/rtp-hdrext/playout-delay
+    if let Some(local_desc) = peer_connection.local_description().await {
         let json_str = serde_json::to_string(&local_desc)?;
         let b64 = BASE64_STANDARD.encode(&json_str);
         offer_tx.send(b64).await?;
@@ -251,33 +258,13 @@ pub async fn start_video_streaming(
     let done_tx4 = done_tx.clone();
     tokio::spawn(async move {
         let mut inbound_rtp_packet = vec![0u8; 1000]; // UDP MTU
-        let mut counter = 0u16;
         while let Ok((n, _)) = listener.recv_from(&mut inbound_rtp_packet).await {
-            let mut data = &inbound_rtp_packet[..n];
-            let mut packet = Packet::unmarshal(&mut data).unwrap();
-            // http://www.webrtc.org/experiments/rtp-hdrext/playout-delay
-            // 0                   1                   2                   3
-            // 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            // |  ID   | len=2 |       MIN delay       |       MAX delay       |
-            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            // we want all zeros, so a zeroed payload is fine.
-            // (???) from wireshark with Xbox Cloud
-            // RFC 5285 Header Extension (One-Byte Header)
-            // Identifier: 2
-            // Length: 3
-            // Extension Data: 49072b
-            //packet.header.set_extension(1, Bytes::copy_from_slice(&[0xff])).unwrap(); X
-            //packet.header.set_extension(2, Bytes::copy_from_slice(&[0x49, 0x07, 0x2b])).unwrap();
-            packet.header.set_extension(3, Bytes::copy_from_slice(&counter.to_be_bytes())).unwrap();
-            counter += 1;
-            //packet.header.set_extension(4, Bytes::copy_from_slice(&[0x31])).unwrap();
-            packet.header.set_extension(5, Bytes::copy_from_slice(&[0x00, 0x00, 0x00])).unwrap();
+            let data = &inbound_rtp_packet[..n];
             if let Ok(_) = control_rx.try_recv() {
                 println!("RECEIVER IS LAGGING, RATE CONTROL MESSAGE RECEIVED.");
                 sleep(Duration::from_millis(16)).await;
             }
-            if let Err(err) = video_track.write_rtp(&packet).await {
+            if let Err(err) = video_track.write(&data).await {
                 if Error::ErrClosedPipe == err {
                     // The peerConnection has been closed.
                 } else {
