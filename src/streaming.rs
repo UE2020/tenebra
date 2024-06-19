@@ -110,8 +110,8 @@ pub async fn start_video_streaming(
     }
     let done_tx1: tokio::sync::mpsc::Sender<()> = done_tx.clone();
     let gst_handle = Arc::new(Mutex::new(None));
-    let port = users::get_current_uid();
-    println!("USING PORT: {}", port + 1000);
+    let port = users::get_current_uid() + 1000;
+    println!("USING PORT: {}", port);
     let gst_handle_clone = gst_handle.clone();
     peer_connection.on_ice_connection_state_change(Box::new(
         move |connection_state: RTCIceConnectionState| {
