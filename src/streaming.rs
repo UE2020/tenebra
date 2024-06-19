@@ -3,6 +3,8 @@ use base64::prelude::*;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use tokio::time::sleep;
+use webrtc::api::interceptor_registry::configure_nack;
+use webrtc::api::interceptor_registry::configure_rtcp_reports;
 use webrtc::rtcp::receiver_report::ReceiverReport;
 use std::any::Any;
 use std::sync::Arc;
@@ -27,6 +29,7 @@ use webrtc::track::track_local::{TrackLocal, TrackLocalWriter};
 use webrtc::Error;
 
 use crate::AppState;
+use crate::CreateOffer;
 
 mod playout_delay;
 
@@ -43,18 +46,18 @@ lazy_static! {
     static ref PORT: Arc<Mutex<usize>> = Arc::new(Mutex::new(6000));
 }
 
-struct RateControlMessage;
+// struct RateControlMessage;
 
-#[allow(unused)]
-trait PacketAny {
-    fn as_any(&self) -> &dyn Any;
-}
+// #[allow(unused)]
+// trait PacketAny {
+//     fn as_any(&self) -> &dyn Any;
+// }
 
-impl PacketAny for Box<dyn webrtc::rtcp::packet::Packet + Send + Sync> {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
+// impl PacketAny for Box<dyn webrtc::rtcp::packet::Packet + Send + Sync> {
+//     fn as_any(&self) -> &dyn Any {
+//         self
+//     }
+// }
 
 fn configure_playout_delay(mut registry: Registry, media_engine: &mut MediaEngine) -> Result<Registry> {
     media_engine.register_header_extension(RTCRtpHeaderExtensionCapability {
@@ -66,14 +69,15 @@ fn configure_playout_delay(mut registry: Registry, media_engine: &mut MediaEngin
 }
 
 pub async fn start_video_streaming(
-    offer: String,
+    offer: CreateOffer,
     offer_tx: tokio::sync::mpsc::Sender<String>,
     state: AppState,
 ) -> Result<(), anyhow::Error> {
     let mut m = MediaEngine::default();
     m.register_default_codecs()?;
     let mut registry = Registry::new();
-    registry = register_default_interceptors(registry, &mut m)?;
+    registry = configure_nack(registry, &mut m);
+    registry = configure_rtcp_reports(registry);
     // we only need twcc to get the client's jitter value
     registry = configure_twcc(registry, &mut m)?;
     registry = configure_playout_delay(registry, &mut m)?;
@@ -101,23 +105,9 @@ pub async fn start_video_streaming(
     let rtp_sender = peer_connection
         .add_track(Arc::clone(&video_track) as Arc<dyn TrackLocal + Send + Sync>)
         .await?;
-    let (control_tx, mut control_rx) = tokio::sync::mpsc::channel(1);
     tokio::spawn(async move {
         let mut rtcp_buf = vec![0u8; 1500];
-        while let Ok((packet, _)) = rtp_sender.read(&mut rtcp_buf).await {
-            if !packet.is_empty() {
-                let value_any = (*packet[0]).as_any();
-                if let Some(packet) = value_any.downcast_ref::<ReceiverReport>() {
-                    if !packet.reports.is_empty() {
-                        if packet.reports[0].jitter > 500 {
-                            // if it fails, we're already waiting so it doesn't matter
-                            println!("Sending rate control warning because jitter={}", packet.reports[0].jitter);
-                            control_tx.try_send(RateControlMessage).ok();
-                        }    
-                    }
-                }
-            }
-        }
+        while let Ok((_, _)) = rtp_sender.read(&mut rtcp_buf).await {}
         Result::<()>::Ok(())
     });
     let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<()>(1);
@@ -149,11 +139,11 @@ pub async fn start_video_streaming(
                     };
                     let args = &format!("{} ! queue ! videoconvert n-threads=4 ! video/x-raw,format=NV12 ! queue ! x264enc qos=true threads=4 aud=true b-adapt=false bframes=0 insert-vui=true rc-lookahead=0 vbv-buf-capacity=120 sliced-threads=true byte-stream=true pass=cbr speed-preset=veryfast tune=zerolatency bitrate={} ! video/x-h264,profile=baseline,stream-format=byte-stream ! queue ! rtph264pay mtu=1000 aggregate-mode=zero-latency config-interval=-1 ! application/x-rtp,media=video,clock-rate=90000,encoding-name=H264,payload=97,rtcp-fb-nack-pli=true,rtcp-fb-ccm-fir=true,rtcp-fb-x-gstreamer-fir-as-repair=true ! queue ! udpsink host=127.0.0.1 port={}", {
                         if cfg!(target_os = "linux") {
-                            format!("ximagesrc use-damage=0 startx={} blocksize=16384 remote=true ! video/x-raw,width={},height={},framerate=60/1", state.startx, state.width, state.height)
+                            format!("ximagesrc use-damage=0 startx={} show-pointer={} blocksize=16384 remote=true ! video/x-raw,width={},height={},framerate=60/1", state.startx, offer.show_mouse, state.width, state.height)
                         } else if cfg!(target_os = "macos") {
-                            format!("avfvideosrc capture-screen=true capture-screen-cursor=true ! video/x-raw,width={},height={},framerate=60/1", state.width, state.height)
+                            format!("avfvideosrc capture-screen=true capture-screen-cursor={} ! video/x-raw,width={},height={},framerate=60/1", offer.show_mouse, state.width, state.height)
                         } else if cfg!(target_os = "windows") {
-                            format!("d3d11screencapturesrc show-cursor=true capture-api=wgc ! video/x-raw,width={},height={},framerate=60/1", state.width, state.height)
+                            format!("d3d11screencapturesrc show-cursor={} capture-api=wgc ! video/x-raw,width={},height={},framerate=60/1", offer.show_mouse, state.width, state.height)
                         } else {
                             unimplemented!()
                         }
@@ -238,7 +228,7 @@ pub async fn start_video_streaming(
             }));
         })
     }));
-    let desc_data = BASE64_STANDARD.decode(offer)?;
+    let desc_data = BASE64_STANDARD.decode(offer.offer)?;
     let desc_data = std::str::from_utf8(&desc_data)?;
     let offer = serde_json::from_str::<RTCSessionDescription>(&desc_data)?;
     peer_connection.set_remote_description(offer).await?;
@@ -260,10 +250,6 @@ pub async fn start_video_streaming(
         let mut inbound_rtp_packet = vec![0u8; 1000]; // UDP MTU
         while let Ok((n, _)) = listener.recv_from(&mut inbound_rtp_packet).await {
             let data = &inbound_rtp_packet[..n];
-            if let Ok(_) = control_rx.try_recv() {
-                println!("RECEIVER IS LAGGING, RATE CONTROL MESSAGE RECEIVED.");
-                sleep(Duration::from_millis(16)).await;
-            }
             if let Err(err) = video_track.write(&data).await {
                 if Error::ErrClosedPipe == err {
                     // The peerConnection has been closed.

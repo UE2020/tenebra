@@ -26,6 +26,7 @@ mod streaming;
 struct CreateOffer {
     password: String,
     offer: String,
+    show_mouse: bool,
 }
 
 #[derive(Serialize)]
@@ -80,7 +81,7 @@ async fn offer(
     println!("Spawning!");
     let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(1);
     let task = tokio::spawn(streaming::start_video_streaming(
-        payload.offer,
+        payload,
         tx,
         state,
     ));
