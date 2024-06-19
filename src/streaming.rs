@@ -1,18 +1,16 @@
 use anyhow::Result;
 use base64::prelude::*;
-use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
-use tokio::time::sleep;
+use socket2::Protocol;
 use webrtc::api::interceptor_registry::configure_nack;
 use webrtc::api::interceptor_registry::configure_rtcp_reports;
-use webrtc::rtcp::receiver_report::ReceiverReport;
-use std::any::Any;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::time::Duration;
+use socket2::{Socket, Domain, Type};
 use tokio::net::UdpSocket;
 use tokio::process::Command;
-use webrtc::api::interceptor_registry::{configure_twcc, register_default_interceptors};
+use webrtc::api::interceptor_registry::configure_twcc;
 use webrtc::api::media_engine::{MediaEngine, MIME_TYPE_H264};
 use webrtc::api::APIBuilder;
 use webrtc::data_channel::data_channel_message::DataChannelMessage;
@@ -40,10 +38,6 @@ pub struct InputCommand {
     pub y: Option<f32>,
     pub button: Option<u8>,
     pub key: Option<String>,
-}
-
-lazy_static! {
-    static ref PORT: Arc<Mutex<usize>> = Arc::new(Mutex::new(6000));
 }
 
 // struct RateControlMessage;
@@ -116,12 +110,8 @@ pub async fn start_video_streaming(
     }
     let done_tx1: tokio::sync::mpsc::Sender<()> = done_tx.clone();
     let gst_handle = Arc::new(Mutex::new(None));
-    let port = {
-        let mut port = PORT.lock().unwrap();
-        *port += 1;
-        *port
-    };
-    dbg!(port);
+    let port = users::get_current_uid();
+    println!("USING PORT: {}", port + 1000);
     let gst_handle_clone = gst_handle.clone();
     peer_connection.on_ice_connection_state_change(Box::new(
         move |connection_state: RTCIceConnectionState| {
@@ -244,7 +234,11 @@ pub async fn start_video_streaming(
     } else {
         println!("generate local_description failed!");
     }
-    let listener = UdpSocket::bind(format!("127.0.0.1:{}", port)).await?;
+    let listener = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
+    listener.set_reuse_address(true)?;
+    listener.set_nonblocking(true)?;
+    listener.bind(&format!("127.0.0.1:{}", port).as_str().parse::<SocketAddr>()?.into())?;
+    let listener = UdpSocket::from_std(listener.into())?;
     let done_tx4 = done_tx.clone();
     tokio::spawn(async move {
         let mut inbound_rtp_packet = vec![0u8; 1000]; // UDP MTU
