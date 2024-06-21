@@ -349,7 +349,7 @@ async fn main() -> Result<()> {
                     }
                 };
                 // fix capslock on iPad client
-                if key == Key::CapsLock && last_capslock.elapsed() > Duration::from_millis(100) {
+                if key == Key::CapsLock && last_capslock.elapsed() > Duration::from_millis(250) {
                     enigo
                         .key(
                             key,
