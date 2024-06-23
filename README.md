@@ -14,8 +14,8 @@ Tenebra GStreamer utitur ut faciat RTP H.264 flumen, itaque instrumenta GStreame
 
 After the server is built with `cargo build --release`, you may run it:
 ```
-./target/release/tenebra "password" 1366 768 4000
-                           ^         ^    ^    ^
-                           |         |    |    ------.
-                     <password>  <width> <height>  <bitrate>
+./target/release/tenebra "password" 8080 1366     768 4000
+                           ^         ^     ^       ^    ^
+                           |         |     |       |    --------.
+                     <password>   <port> <width> <height>  <bitrate>
 ```
