@@ -634,9 +634,9 @@ dependencies = [
 
 [[package]]
 name = "enigo"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a4655cdcad61e57cf28922aaa3221b06ce29e644422bba506851a03b8817468"
+checksum = "0087a01fc8591217447d28005379fb5a183683cc83f0a4707af28cc6603f70fb"
 dependencies = [
  "core-graphics",
  "foreign-types-shared",

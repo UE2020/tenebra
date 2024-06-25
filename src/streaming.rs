@@ -110,7 +110,12 @@ pub async fn start_video_streaming(
     }
     let done_tx1: tokio::sync::mpsc::Sender<()> = done_tx.clone();
     let gst_handle = Arc::new(Mutex::new(None));
-    let port = users::get_current_uid() + 1000;
+    #[cfg(target_os = "linux")]
+    let port = {
+        users::get_current_uid() + 1000;
+    };
+    #[cfg(not(target_os = "linux"))]
+    let port = 5032;
     println!("USING PORT: {}", port);
     let gst_handle_clone = gst_handle.clone();
     peer_connection.on_ice_connection_state_change(Box::new(
@@ -119,7 +124,6 @@ pub async fn start_video_streaming(
             if connection_state == RTCIceConnectionState::Failed {
                 let _ = done_tx1.try_send(());
             } else if connection_state == RTCIceConnectionState::Connected {
-                    // TODO: remove startx=0
                     let command = if cfg!(target_os = "linux") {
                         "gst-launch-1.0"
                     } else if cfg!(target_os = "macos") {
