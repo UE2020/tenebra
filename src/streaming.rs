@@ -111,9 +111,7 @@ pub async fn start_video_streaming(
     let done_tx1: tokio::sync::mpsc::Sender<()> = done_tx.clone();
     let gst_handle = Arc::new(Mutex::new(None));
     #[cfg(target_os = "linux")]
-    let port = {
-        users::get_current_uid() + 1000;
-    };
+    let port = users::get_current_uid() + 1000;
     #[cfg(not(target_os = "linux"))]
     let port = 5032;
     println!("USING PORT: {}", port);
