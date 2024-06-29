@@ -129,13 +129,13 @@ pub async fn start_video_streaming(
                     } else {
                         r"C:\gstreamer\1.0\msvc_x86_64\bin\gst-launch-1.0.exe"
                     };
-                    let args = &format!("{} ! queue ! videoconvert n-threads=4 ! video/x-raw,format=NV12 ! queue ! x264enc qos=true threads=4 aud=true b-adapt=false bframes=0 insert-vui=true rc-lookahead=0 vbv-buf-capacity=120 sliced-threads=true byte-stream=true pass=cbr speed-preset=veryfast tune=zerolatency bitrate={} ! video/x-h264,profile=baseline,stream-format=byte-stream ! queue ! rtph264pay mtu=1000 aggregate-mode=zero-latency config-interval=-1 ! application/x-rtp,media=video,clock-rate=90000,encoding-name=H264,payload=97,rtcp-fb-nack-pli=true,rtcp-fb-ccm-fir=true,rtcp-fb-x-gstreamer-fir-as-repair=true ! queue ! udpsink host=127.0.0.1 port={}", {
+                    let args = &format!("{} ! video/x-raw,format=NV12 ! queue ! x264enc qos=true threads=4 aud=true b-adapt=false bframes=0 insert-vui=true rc-lookahead=0 vbv-buf-capacity=120 sliced-threads=true byte-stream=true pass=cbr speed-preset=veryfast tune=zerolatency bitrate={} ! video/x-h264,profile=baseline,stream-format=byte-stream ! queue ! rtph264pay mtu=1000 aggregate-mode=zero-latency config-interval=-1 ! application/x-rtp,media=video,clock-rate=90000,encoding-name=H264,payload=97,rtcp-fb-nack-pli=true,rtcp-fb-ccm-fir=true,rtcp-fb-x-gstreamer-fir-as-repair=true ! queue ! udpsink host=127.0.0.1 port={}", {
                         if cfg!(target_os = "linux") {
-                            format!("ximagesrc use-damage=0 startx={} show-pointer={} blocksize=16384 remote=true ! video/x-raw,width={},height={},framerate=60/1", state.startx, offer.show_mouse, state.width, state.height)
+                            format!("ximagesrc use-damage=0 startx={} show-pointer={} blocksize=16384 remote=true ! video/x-raw,width={},height={},framerate=60/1 ! queue ! videoconvert n-threads=4", state.startx, offer.show_mouse, state.width, state.height)
                         } else if cfg!(target_os = "macos") {
-                            format!("avfvideosrc capture-screen=true capture-screen-cursor={} ! video/x-raw,width={},height={},framerate=60/1", offer.show_mouse, state.width, state.height)
+                            format!("avfvideosrc capture-screen=true capture-screen-cursor={} ! video/x-raw,width={},height={},framerate=60/1 ! queue ! videoconvert n-threads=4", offer.show_mouse, state.width, state.height)
                         } else if cfg!(target_os = "windows") {
-                            format!("d3d12screencapturesrc show-cursor={} ! video/x-raw,width={},height={},framerate=60/1", offer.show_mouse, state.width, state.height)
+                            format!("d3d11screencapturesrc show-cursor={} ! video/x-raw,width={},height={},framerate=60/1 ! queue ! d3d11convert", offer.show_mouse, state.width, state.height)
                         } else {
                             unimplemented!()
                         }
