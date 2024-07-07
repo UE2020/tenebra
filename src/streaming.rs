@@ -1,15 +1,9 @@
 use anyhow::Result;
 use base64::prelude::*;
 use serde::{Deserialize, Serialize};
-use socket2::Protocol;
+use std::sync::Arc;
 use webrtc::api::interceptor_registry::configure_nack;
 use webrtc::api::interceptor_registry::configure_rtcp_reports;
-use std::net::SocketAddr;
-use std::sync::Arc;
-use std::sync::Mutex;
-use socket2::{Socket, Domain, Type};
-use tokio::net::UdpSocket;
-use tokio::process::Command;
 use webrtc::api::interceptor_registry::configure_twcc;
 use webrtc::api::media_engine::{MediaEngine, MIME_TYPE_H264};
 use webrtc::api::APIBuilder;
@@ -29,6 +23,7 @@ use webrtc::Error;
 use crate::AppState;
 use crate::CreateOffer;
 
+mod pipeline;
 mod playout_delay;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -40,23 +35,17 @@ pub struct InputCommand {
     pub key: Option<String>,
 }
 
-// struct RateControlMessage;
-
-// #[allow(unused)]
-// trait PacketAny {
-//     fn as_any(&self) -> &dyn Any;
-// }
-
-// impl PacketAny for Box<dyn webrtc::rtcp::packet::Packet + Send + Sync> {
-//     fn as_any(&self) -> &dyn Any {
-//         self
-//     }
-// }
-
-fn configure_playout_delay(mut registry: Registry, media_engine: &mut MediaEngine) -> Result<Registry> {
-    media_engine.register_header_extension(RTCRtpHeaderExtensionCapability {
-        uri: String::from("http://www.webrtc.org/experiments/rtp-hdrext/playout-delay")
-    }, webrtc::rtp_transceiver::rtp_codec::RTPCodecType::Video, None)?;
+fn configure_playout_delay(
+    mut registry: Registry,
+    media_engine: &mut MediaEngine,
+) -> Result<Registry> {
+    media_engine.register_header_extension(
+        RTCRtpHeaderExtensionCapability {
+            uri: String::from("http://www.webrtc.org/experiments/rtp-hdrext/playout-delay"),
+        },
+        webrtc::rtp_transceiver::rtp_codec::RTPCodecType::Video,
+        None,
+    )?;
     let sender = Box::new(playout_delay::Sender::builder());
     registry.add(sender);
     Ok(registry)
@@ -104,62 +93,30 @@ pub async fn start_video_streaming(
         while let Ok((_, _)) = rtp_sender.read(&mut rtcp_buf).await {}
         Result::<()>::Ok(())
     });
-    let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<()>(1);
+    let (done_tx, mut done_rx) = tokio::sync::broadcast::channel::<()>(1);
     {
-        *state.kill_switch.lock().unwrap() = Some(done_tx.clone());    
+        *state.kill_switch.lock().unwrap() = Some(done_tx.clone());
     }
-    let done_tx1: tokio::sync::mpsc::Sender<()> = done_tx.clone();
-    let gst_handle = Arc::new(Mutex::new(None));
-    #[cfg(target_os = "linux")]
-    let port = users::get_current_uid() + 1000;
-    #[cfg(not(target_os = "linux"))]
-    let port = 5032;
-    println!("USING PORT: {}", port);
-    let gst_handle_clone = gst_handle.clone();
+    let done_tx1 = done_tx.clone();
+    let (buffer_tx, mut buffer_rx) = tokio::sync::mpsc::unbounded_channel();
     peer_connection.on_ice_connection_state_change(Box::new(
         move |connection_state: RTCIceConnectionState| {
             println!("Connection State has changed {connection_state}");
             if connection_state == RTCIceConnectionState::Failed {
-                let _ = done_tx1.try_send(());
+                let _ = done_tx1.send(());
             } else if connection_state == RTCIceConnectionState::Connected {
-                    let command = if cfg!(target_os = "linux") {
-                        "gst-launch-1.0"
-                    } else if cfg!(target_os = "macos") {
-                        "/Library/Frameworks/GStreamer.framework/Commands/gst-launch-1.0"
-                    } else {
-                        r"C:\gstreamer\1.0\msvc_x86_64\bin\gst-launch-1.0.exe"
-                    };
-                    let args = &format!("{} ! video/x-raw,format=NV12 ! queue ! x264enc qos=true threads=4 aud=true b-adapt=false bframes=0 insert-vui=true rc-lookahead=0 vbv-buf-capacity=120 sliced-threads=true byte-stream=true pass=cbr speed-preset=veryfast tune=zerolatency bitrate={} ! video/x-h264,profile=baseline,stream-format=byte-stream ! queue ! rtph264pay mtu=1000 aggregate-mode=zero-latency config-interval=-1 ! application/x-rtp,media=video,clock-rate=90000,encoding-name=H264,payload=97,rtcp-fb-nack-pli=true,rtcp-fb-ccm-fir=true,rtcp-fb-x-gstreamer-fir-as-repair=true ! queue ! udpsink host=127.0.0.1 port={}", {
-                        if cfg!(target_os = "linux") {
-                            format!("ximagesrc use-damage=0 startx={} show-pointer={} blocksize=16384 remote=true ! video/x-raw,width={},height={},framerate=60/1 ! queue ! videoconvert n-threads=4", state.startx, offer.show_mouse, state.width, state.height)
-                        } else if cfg!(target_os = "macos") {
-                            format!("avfvideosrc capture-screen=true capture-screen-cursor={} ! video/x-raw,width={},height={},framerate=60/1 ! queue ! videoconvert n-threads=4", offer.show_mouse, state.width, state.height)
-                        } else if cfg!(target_os = "windows") {
-                            format!("d3d11screencapturesrc show-cursor={} ! video/x-raw,width={},height={},framerate=60/1 ! d3d11convert", offer.show_mouse, state.width, state.height)
-                        } else {
-                            unimplemented!()
-                        }
-                    }, state.bitrate, port);
-                    println!("Using command: {}", args);
-                    let args = shell_words::split(args).unwrap();
-                    match Command::new(command)
-                        .args(args)
-                        .kill_on_drop(true)
-                        .spawn() {
-                            Ok(child) => {
-                                {
-                                    *gst_handle_clone.lock().unwrap() = Some(child);
-                                }
-                            },
-                            Err(_) => {
-                                let _ = done_tx1.try_send(());
-                            }
-                        }
+                pipeline::start_pipeline(
+                    state.bitrate,
+                    state.startx,
+                    offer.show_mouse,
+                    done_tx1.subscribe(),
+                    buffer_tx.clone(),
+                );
             } else if connection_state == RTCIceConnectionState::Disconnected {
-                let _ = done_tx1.try_send(());
+                let _ = done_tx1.send(());
             } else if connection_state == RTCIceConnectionState::Closed {
                 println!("Closing task, connection closed.");
-                let _ = done_tx1.try_send(());
+                let _ = done_tx1.send(());
             }
             Box::pin(async {})
         },
@@ -172,7 +129,7 @@ pub async fn start_video_streaming(
             // Use webrtc.PeerConnectionStateDisconnected if you are interested in detecting faster timeout.
             // Note that the PeerConnection may come back from PeerConnectionStateDisconnected.
             println!("Peer Connection has gone to failed exiting: Done forwarding");
-            let _ = done_tx2.try_send(());
+            let _ = done_tx2.send(());
         }
         Box::pin(async {})
     }));
@@ -192,7 +149,7 @@ pub async fn start_video_streaming(
             let d_id2 = d_id;
             d.on_close(Box::new(move || {
                 println!("Data channel closed");
-                let _ = done_tx4.try_send(());
+                let _ = done_tx4.send(());
                 Box::pin(async {})
             }));
 
@@ -209,7 +166,7 @@ pub async fn start_video_streaming(
                     Ok(cmd) => cmd,
                     Err(e) => {
                         dbg!(e);
-                        let _ = done_tx5.try_send(());
+                        let _ = done_tx5.send(());
                         return Box::pin(async {});
                     }
                 };
@@ -236,33 +193,22 @@ pub async fn start_video_streaming(
     } else {
         println!("generate local_description failed!");
     }
-    let listener = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
-    listener.set_reuse_address(true)?;
-    listener.set_nonblocking(true)?;
-    listener.bind(&format!("127.0.0.1:{}", port).as_str().parse::<SocketAddr>()?.into())?;
-    let listener = UdpSocket::from_std(listener.into())?;
     let done_tx4 = done_tx.clone();
     tokio::spawn(async move {
-        let mut inbound_rtp_packet = vec![0u8; 1000]; // UDP MTU
-        while let Ok((n, _)) = listener.recv_from(&mut inbound_rtp_packet).await {
-            let data = &inbound_rtp_packet[..n];
-            if let Err(err) = video_track.write(&data).await {
+        while let Some(packet) = buffer_rx.recv().await {
+            if let Err(err) = video_track.write(&packet).await {
                 if Error::ErrClosedPipe == err {
                     // The peerConnection has been closed.
                 } else {
                     println!("video_track write err: {err}");
                 }
-                let _ = done_tx4.try_send(());
+                let _ = done_tx4.send(());
                 return;
             }
         }
     });
-    done_rx.recv().await;
+    done_rx.recv().await.ok();
     println!("Task close finished.");
     peer_connection.close().await?;
-    println!("Function returning, process will be dropped shortly.");
-    if let Some(process) = gst_handle.lock().unwrap().as_mut() {
-        process.start_kill().ok();
-    }
     Ok(())
 }

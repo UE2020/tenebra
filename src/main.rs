@@ -1,4 +1,7 @@
-use std::{sync::{Arc, Mutex}, time::{Duration, Instant}};
+use std::{
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 
 use anyhow::Result;
 use axum::{
@@ -10,14 +13,14 @@ use axum::{
 };
 use enigo::{
     Button, Coordinate,
-    Direction::{Press, Release, Click},
+    Direction::{Click, Press, Release},
     Enigo, Key, Keyboard, Mouse, Settings,
 };
 use serde::{Deserialize, Serialize};
 use streaming::InputCommand;
 use tokio::{
     spawn,
-    sync::mpsc::{Sender, UnboundedSender},
+    sync::{broadcast::Sender, mpsc::UnboundedSender},
 };
 
 mod streaming;
@@ -73,18 +76,14 @@ async fn offer(
     // kill last session
     {
         let mut sender = state.kill_switch.lock().unwrap();
-        if let Some(sender) = sender.as_mut()  {
-            sender.try_send(()).ok();
+        if let Some(sender) = sender.as_mut() {
+            sender.send(()).ok();
         };
         *sender = None;
     }
     println!("Spawning!");
     let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(1);
-    let task = tokio::spawn(streaming::start_video_streaming(
-        payload,
-        tx,
-        state,
-    ));
+    let task = tokio::spawn(streaming::start_video_streaming(payload, tx, state));
     tokio::select! {
         val = rx.recv() => {
             Ok((StatusCode::OK, Json(ResponseOffer::Offer(val.unwrap()))))
@@ -106,8 +105,6 @@ async fn home() -> Html<&'static str> {
 pub struct AppState {
     input_tx: UnboundedSender<InputCommand>,
     kill_switch: Arc<Mutex<Option<Sender<()>>>>,
-    width: u32,
-    height: u32,
     bitrate: u32,
     startx: u32,
     password: String,
@@ -115,13 +112,24 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Initialize GStreamer
+    gstreamer::init().unwrap();
+
     let args = std::env::args().collect::<Vec<_>>();
     let password = &args[1];
-    let port = args[2].parse::<u32>().expect("port should be passed as a numerical argument");
-    let width = args[3].parse::<u32>().expect("width should be passed as a numerical argument");
-    let height = args[4].parse::<u32>().expect("height should be passed as a numerical argument");
-    let bitrate = args.get(5).unwrap_or(&"4000".to_owned()).parse::<u32>().expect("bitrate should be passed as a numerical argument");
-    let startx = args.get(6).unwrap_or(&"0".to_owned()).parse::<u32>().expect("startx should be passed as a numerical argument");
+    let port = args[2]
+        .parse::<u32>()
+        .expect("port should be passed as a numerical argument");
+    let bitrate = args
+        .get(3)
+        .unwrap_or(&"4000".to_owned())
+        .parse::<u32>()
+        .expect("bitrate should be passed as a numerical argument");
+    let startx = args
+        .get(4)
+        .unwrap_or(&"0".to_owned())
+        .parse::<u32>()
+        .expect("startx should be passed as a numerical argument");
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<InputCommand>();
     let app = Router::new()
         .route("/", get(home))
@@ -130,13 +138,13 @@ async fn main() -> Result<()> {
         .with_state(AppState {
             input_tx: tx,
             kill_switch: Arc::new(Mutex::new(None)),
-            width,
-            height,
             bitrate,
             startx,
             password: password.to_string(),
         });
-    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port))
+        .await
+        .unwrap();
     spawn(async { axum::serve(listener, app).await });
 
     let mut enigo = Enigo::new(&Settings {
@@ -350,12 +358,7 @@ async fn main() -> Result<()> {
                 };
                 // fix capslock on iPad client
                 if key == Key::CapsLock && last_capslock.elapsed() > Duration::from_millis(250) {
-                    enigo
-                        .key(
-                            key,
-                            Click,
-                        )
-                        .unwrap();
+                    enigo.key(key, Click).unwrap();
                     last_capslock = Instant::now();
                     continue;
                 }

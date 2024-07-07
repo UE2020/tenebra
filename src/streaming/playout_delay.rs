@@ -14,10 +14,7 @@ pub(super) struct SenderStream {
 }
 
 impl SenderStream {
-    pub(super) fn new(
-        next_rtp_writer: Arc<dyn RTPWriter + Send + Sync>,
-        hdr_ext_id: u8,
-    ) -> Self {
+    pub(super) fn new(next_rtp_writer: Arc<dyn RTPWriter + Send + Sync>, hdr_ext_id: u8) -> Self {
         SenderStream {
             next_rtp_writer,
             hdr_ext_id,
@@ -27,9 +24,14 @@ impl SenderStream {
 
 #[async_trait]
 impl RTPWriter for SenderStream {
-    async fn write(&self, pkt: &webrtc::rtp::packet::Packet, a: &Attributes) -> Result<usize, webrtc::interceptor::Error> {
+    async fn write(
+        &self,
+        pkt: &webrtc::rtp::packet::Packet,
+        a: &Attributes,
+    ) -> Result<usize, webrtc::interceptor::Error> {
         let mut pkt = pkt.clone();
-        pkt.header.set_extension(self.hdr_ext_id, Bytes::copy_from_slice(&[0x00, 0x00, 0x00]))?;
+        pkt.header
+            .set_extension(self.hdr_ext_id, Bytes::copy_from_slice(&[0x00, 0x00, 0x00]))?;
 
         self.next_rtp_writer.write(&pkt, a).await
     }
@@ -42,7 +44,10 @@ pub(crate) const PLAYOUT_DELAY_URI: &str =
 pub struct SenderBuilder {}
 
 impl InterceptorBuilder for SenderBuilder {
-    fn build(&self, _id: &str) -> Result<Arc<dyn Interceptor + Send + Sync>, webrtc::interceptor::Error> {
+    fn build(
+        &self,
+        _id: &str,
+    ) -> Result<Arc<dyn Interceptor + Send + Sync>, webrtc::interceptor::Error> {
         Ok(Arc::new(Sender {
             streams: Mutex::new(HashMap::new()),
         }))
@@ -92,10 +97,7 @@ impl Interceptor for Sender {
             return writer;
         }
 
-        let stream = Arc::new(SenderStream::new(
-            writer,
-            hdr_ext_id,
-        ));
+        let stream = Arc::new(SenderStream::new(writer, hdr_ext_id));
 
         {
             let mut streams = self.streams.lock().await;
