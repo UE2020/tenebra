@@ -1,6 +1,7 @@
 use anyhow::Result;
 use base64::prelude::*;
 use serde::{Deserialize, Serialize};
+use tokio::task::spawn_blocking;
 use std::sync::Arc;
 use webrtc::api::interceptor_registry::configure_nack;
 use webrtc::api::interceptor_registry::configure_rtcp_reports;
@@ -105,13 +106,17 @@ pub async fn start_video_streaming(
             if connection_state == RTCIceConnectionState::Failed {
                 let _ = done_tx1.send(());
             } else if connection_state == RTCIceConnectionState::Connected {
-                pipeline::start_pipeline(
-                    state.bitrate,
-                    state.startx,
-                    offer.show_mouse,
-                    done_tx1.subscribe(),
-                    buffer_tx.clone(),
-                );
+                let done_tx = done_tx1.clone();
+                let buffer_tx = buffer_tx.clone();
+                spawn_blocking(move || {
+                    pipeline::start_pipeline(
+                        state.bitrate,
+                        state.startx,
+                        offer.show_mouse,
+                        done_tx.subscribe(),
+                        buffer_tx,
+                    );
+                });
             } else if connection_state == RTCIceConnectionState::Disconnected {
                 let _ = done_tx1.send(());
             } else if connection_state == RTCIceConnectionState::Closed {
@@ -208,7 +213,7 @@ pub async fn start_video_streaming(
         }
     });
     done_rx.recv().await.ok();
-    println!("Task close finished.");
+    println!("Received done signal");
     peer_connection.close().await?;
     Ok(())
 }
