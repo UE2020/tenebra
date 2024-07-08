@@ -107,39 +107,6 @@ pub fn start_pipeline(
         .caps(&rtp_caps)
         .build();
 
-    // Create the pipeline
-    let pipeline = Pipeline::default();
-
-    // Add elements to the pipeline
-    pipeline
-        .add_many([
-            &src,
-            &video_capsfilter,
-            &videoconvert,
-            &format_capsfilter,
-            &x264enc,
-            &h264_capsfilter,
-            &rtph264pay,
-            &rtp_capsfilter,
-            appsink.upcast_ref(),
-        ])
-        .unwrap();
-    gstreamer::Element::link_many([
-        &src,
-        &video_capsfilter,
-        &videoconvert,
-        &format_capsfilter,
-        &x264enc,
-        &h264_capsfilter,
-        &rtph264pay,
-        &rtp_capsfilter,
-        appsink.upcast_ref(),
-    ])
-    .unwrap();
-
-    // Set the pipeline to playing state
-    pipeline.set_state(State::Playing).unwrap();
-
     // appsink callback - send rtp packets to the streaming thread
     appsink.set_callbacks(
         gstreamer_app::AppSinkCallbacks::builder()
@@ -182,6 +149,39 @@ pub fn start_pipeline(
             })
             .build(),
     );
+
+    // Create the pipeline
+    let pipeline = Pipeline::default();
+
+    // Add elements to the pipeline
+    pipeline
+        .add_many([
+            &src,
+            &video_capsfilter,
+            &videoconvert,
+            &format_capsfilter,
+            &x264enc,
+            &h264_capsfilter,
+            &rtph264pay,
+            &rtp_capsfilter,
+            appsink.upcast_ref(),
+        ])
+        .unwrap();
+    gstreamer::Element::link_many([
+        &src,
+        &video_capsfilter,
+        &videoconvert,
+        &format_capsfilter,
+        &x264enc,
+        &h264_capsfilter,
+        &rtph264pay,
+        &rtp_capsfilter,
+        appsink.upcast_ref(),
+    ])
+    .unwrap();
+
+    // Set the pipeline to playing state
+    pipeline.set_state(State::Playing).unwrap();
 
     // Wait until error or EOS
     let bus = pipeline.bus().unwrap();
