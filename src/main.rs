@@ -1,3 +1,37 @@
+/*
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ *
+ * Author: Aspect
+ * Copyright (C) 2024 Aspect
+ *
+ * All rights reserved. Unauthorized copying of this file, via any medium, is strictly prohibited.
+ * Violations will be prosecuted to the fullest extent of the law.
+ */
+
+/*
+ * WARNING: This software is licensed under the GNU General Public License (GPL).
+ * Any attempt to use, modify, or distribute this software in violation of the
+ * GPL will be met with strict enforcement. Unauthorized use, modification, or
+ * distribution of this software is strictly prohibited and will result in legal
+ * action. You are hereby notified that any breach of the GPL license terms will
+ * be pursued to the fullest extent of the law, including but not limited to
+ * claims for damages and injunctive relief. Compliance with the GPL is not only
+ * a legal obligation but a matter of principle to uphold the spirit of open source
+ * and fair use. Violations undermine the trust and integrity of the community.
+ * BE ADVISED: WE WILL DEFEND OUR RIGHTS VIGOROUSLY.
+ */
+
 use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
