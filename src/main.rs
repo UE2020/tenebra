@@ -1,35 +1,57 @@
 /*
+ * Copyright (C) 2024 Aspect
+ *
  * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
+ * it under the terms of the GNU Affero General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
+ * GNU Affero General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
- * Author: Aspect
- * Copyright (C) 2024 Aspect
- *
- * All rights reserved. Unauthorized copying of this file, via any medium, is strictly prohibited.
- * Violations will be prosecuted to the fullest extent of the law.
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
 /*
- * WARNING: This software is licensed under the GNU General Public License (GPL).
- * Any attempt to use, modify, or distribute this software in violation of the
- * GPL will be met with strict enforcement. Unauthorized use, modification, or
- * distribution of this software is strictly prohibited and will result in legal
- * action. You are hereby notified that any breach of the GPL license terms will
- * be pursued to the fullest extent of the law, including but not limited to
- * claims for damages and injunctive relief. Compliance with the GPL is not only
- * a legal obligation but a matter of principle to uphold the spirit of open source
- * and fair use. Violations undermine the trust and integrity of the community.
- * BE ADVISED: WE WILL DEFEND OUR RIGHTS VIGOROUSLY.
+ * LEGAL NOTICE: STRICT ADHERENCE TO THE GNU AFFERO GENERAL PUBLIC LICENSE TERMS REQUIRED
+ *
+ * BE IT KNOWN, that any unauthorized use, reproduction, distribution, or modification
+ * of this software, in whole or in part, is a direct violation of the GNU Affero General Public
+ * License (AGPL). Violators of this license will face the full force of applicable
+ * international, federal, and state laws, including but not limited to copyright law,
+ * intellectual property law, and contract law. Such violations will be prosecuted to
+ * the maximum extent permitted by law.
+ *
+ * ANY INDIVIDUAL OR ENTITY FOUND TO BE IN BREACH OF THE TERMS AND CONDITIONS SET FORTH
+ * IN THE GNU AFFERO GENERAL PUBLIC LICENSE WILL BE SUBJECT TO SEVERE LEGAL REPERCUSSIONS. These
+ * repercussions include, but are not limited to:
+ *
+ * - Civil litigation seeking substantial monetary damages for all infringements,
+ *   including statutory damages, actual damages, and consequential damages.
+ *
+ * - Injunctive relief to immediately halt any unauthorized use, distribution, or
+ *   modification of this software, which may include temporary restraining orders
+ *   and preliminary and permanent injunctions.
+ *
+ * - The imposition of criminal penalties under applicable law, including substantial
+ *   fines and imprisonment.
+ *
+ * - Recovery of all legal fees, court costs, and associated expenses incurred in the
+ *   enforcement of this license.
+ *
+ * YOU ARE HEREBY ADVISED to thoroughly review and comprehend the terms and conditions
+ * of the GNU Affero General Public License. Ignorance of the license terms will not be accepted
+ * as a defense in any legal proceedings. If you have any uncertainty or require clarification
+ * regarding the license, it is strongly recommended that you consult with a qualified
+ * legal professional before engaging in any activity that may be governed by the AGPL.
+ *
+ * FAILURE TO COMPLY with these terms will result in swift and uncompromising legal action.
+ * This software is protected by copyright and other intellectual property laws. All rights,
+ * including the right to seek legal remedies for any breach of this license, are expressly
+ * reserved by Aspect.
  */
 
 use std::{
@@ -38,6 +60,8 @@ use std::{
 };
 
 use anyhow::Result;
+
+use askama::Template;
 use axum::{
     extract::State,
     http::StatusCode,
@@ -45,13 +69,17 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+
 use enigo::{
     Button, Coordinate,
     Direction::{Click, Press, Release},
     Enigo, Key, Keyboard, Mouse, Settings,
 };
+
 use serde::{Deserialize, Serialize};
+
 use streaming::InputCommand;
+
 use tokio::{
     spawn,
     sync::{broadcast::Sender, mpsc::UnboundedSender},
@@ -131,8 +159,42 @@ async fn offer(
     }
 }
 
-async fn home() -> Html<&'static str> {
-    Html(include_str!("home.html"))
+#[derive(Template)]
+#[template(path = "home.html")]
+struct HomeTemplate {
+    version: String,
+    plugins: Vec<String>,
+}
+
+struct HtmlTemplate<T>(T);
+
+impl<T> IntoResponse for HtmlTemplate<T>
+where
+    T: Template,
+{
+    fn into_response(self) -> Response {
+        match self.0.render() {
+            Ok(html) => Html(html).into_response(),
+            Err(err) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to render template. Error: {err}"),
+            )
+                .into_response(),
+        }
+    }
+}
+async fn home() -> impl IntoResponse {
+    let registry = gstreamer::Registry::get();
+    let plugins = registry
+        .plugins()
+        .into_iter()
+        .map(|plugin| plugin.plugin_name().to_string())
+        .collect::<Vec<_>>();
+    let template = HomeTemplate {
+        version: gstreamer::version_string().to_string(),
+        plugins,
+    };
+    HtmlTemplate(template)
 }
 
 #[derive(Debug, Clone)]

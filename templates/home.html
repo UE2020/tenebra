@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>AGPL License Notice</title>
+        <style>
+            body {
+                margin: 20px;
+            }
+            .warning {
+                color: red;
+                font-weight: bold;
+            }
+            .gstlist {
+                columns: 4;
+                -webkit-columns: 4;
+                -moz-columns: 4;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Program Information</h1>
+        <p>Version: {{ version }}</p>
+
+        <ul class="gstlist">
+            {% for i in plugins %}
+            <li>{{ i }}</li>
+            {% endfor %}
+        </ul>
+
+        <h1>AGPL License Notice</h1>
+        <p>&copy; 2024 Aspect</p>
+        <p>
+            This program is free software: you can redistribute it and/or modify
+            it under the terms of the GNU Affero General Public License as
+            published by the Free Software Foundation, either version 3 of the
+            License, or (at your option) any later version.
+        </p>
+        <p>
+            This program is distributed in the hope that it will be useful, but
+            WITHOUT ANY WARRANTY; without even the implied warranty of
+            MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+            Affero General Public License for more details.
+        </p>
+        <p>
+            You should have received a copy of the GNU Affero General Public
+            License along with this program. If not, see
+            <a href="https://www.gnu.org/licenses/" target="_blank"
+                >https://www.gnu.org/licenses/</a
+            >.
+        </p>
+        <h2 class="warning">Legal Notice</h2>
+        <p class="warning">
+            STRICT ADHERENCE TO THE GNU AFFERO GENERAL PUBLIC LICENSE TERMS
+            REQUIRED
+        </p>
+        <p>
+            Any unauthorized use, reproduction, distribution, or modification of
+            this software, in whole or in part, is a direct violation of the GNU
+            Affero General Public License (AGPL). Violators will face the full
+            force of applicable international, federal, and state laws,
+            including but not limited to copyright law, intellectual property
+            law, and contract law. Such violations will be prosecuted to the
+            maximum extent permitted by law.
+        </p>
+        <p>
+            Any individual or entity found to be in breach of the AGPL terms and
+            conditions will be subject to severe legal repercussions. These
+            include, but are not limited to:
+        </p>
+        <ul>
+            <li>
+                Civil litigation seeking substantial monetary damages, including
+                statutory, actual, and consequential damages.
+            </li>
+            <li>
+                Injunctive relief to halt any unauthorized use, distribution, or
+                modification of this software, which may include temporary
+                restraining orders and preliminary and permanent injunctions.
+            </li>
+            <li>
+                The imposition of criminal penalties under applicable law,
+                including substantial fines and imprisonment.
+            </li>
+            <li>
+                Recovery of all legal fees, court costs, and associated expenses
+                incurred in the enforcement of this license.
+            </li>
+        </ul>
+        <p>
+            You are hereby advised to thoroughly review and comprehend the terms
+            and conditions of the AGPL. Ignorance of the license terms will not
+            be accepted as a defense in any legal proceedings. If you have any
+            uncertainty or require clarification regarding the license, consult
+            with a qualified legal professional before engaging in any activity
+            that may be governed by the AGPL.
+        </p>
+        <p>
+            Failure to comply with these terms will result in swift and
+            uncompromising legal action. This software is protected by copyright
+            and other intellectual property laws. All rights, including the
+            right to seek legal remedies for any breach of this license, are
+            expressly reserved by Aspect.
+        </p>
+    </body>
+</html>
