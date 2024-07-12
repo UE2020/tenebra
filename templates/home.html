@@ -21,7 +21,18 @@
     </head>
     <body>
         <h1>Program Information</h1>
-        <p>Version: {{ version }}</p>
+
+        <h2>Host Information</h2>
+
+        <ul>
+            {% for i in cpu_names %}
+            <li>{{ i }}</li>
+            {% endfor %}
+        </ul>
+
+        <h2>GStreamer</h2>
+
+        <p>{{ version }}</p>
 
         <ul class="gstlist">
             {% for i in plugins %}

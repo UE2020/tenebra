@@ -164,6 +164,7 @@ async fn offer(
 struct HomeTemplate {
     version: String,
     plugins: Vec<String>,
+    cpu_names: Vec<String>,
 }
 
 struct HtmlTemplate<T>(T);
@@ -190,9 +191,17 @@ async fn home() -> impl IntoResponse {
         .into_iter()
         .map(|plugin| plugin.plugin_name().to_string())
         .collect::<Vec<_>>();
+    use sysinfo::{CpuRefreshKind, RefreshKind, System};
+    let s = System::new_with_specifics(RefreshKind::new().with_cpu(CpuRefreshKind::everything()));
+    let cpu_names = s
+        .cpus()
+        .into_iter()
+        .map(|cpu| format!("{}: {}", cpu.name(), cpu.brand()))
+        .collect::<Vec<_>>();
     let template = HomeTemplate {
         version: gstreamer::version_string().to_string(),
         plugins,
+        cpu_names,
     };
     HtmlTemplate(template)
 }
@@ -409,9 +418,9 @@ async fn main() -> Result<()> {
                     #[cfg(not(target_os = "macos"))]
                     "Insert" => Key::Insert,
                     "Delete" => Key::Delete,
-                    "VolumeMute" => Key::VolumeMute, // VolumeMute on Firefox, AudioVolumeMute on Chromium
-                    "VolumeDown" => Key::VolumeDown, // VolumeDown on Firefox, AudioVolumeDown on Chromium
-                    "VolumeUp" => Key::VolumeUp, // VolumeUp on Firefox, AudioVolumeUp on Chromium
+                    "VolumeMute" | "AudioVolumeMute" => Key::VolumeMute, // VolumeMute on Firefox, AudioVolumeMute on Chromium
+                    "VolumeDown" | "AudioVolumeDown" => Key::VolumeDown, // VolumeDown on Firefox, AudioVolumeDown on Chromium
+                    "VolumeUp" | "AudioVolumeUp" => Key::VolumeUp, // VolumeUp on Firefox, AudioVolumeUp on Chromium
                     "NumpadEqual" => Key::Unicode('='),
                     #[cfg(not(target_os = "macos"))]
                     "Pause" => Key::Pause,
