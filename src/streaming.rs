@@ -251,11 +251,20 @@ pub async fn start_video_streaming(
             rtcp_feedback: vec![],
             ..Default::default()
         })?;
-        let h264_pt = parsed_desc.get_payload_type_for_codec(&Codec {
-            name: "H264".to_string(),
-            clock_rate: 90000,
-            ..Default::default()
-        })?;
+        // first try to get one with the exact same fmtp
+        let h264_pt = parsed_desc
+            .get_payload_type_for_codec(&Codec {
+                name: "H264".to_string(),
+                fmtp: "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42001f"
+                    .to_string(),
+                clock_rate: 90000,
+                ..Default::default()
+            })
+            .unwrap_or(parsed_desc.get_payload_type_for_codec(&Codec {
+                name: "H264".to_string(),
+                clock_rate: 90000,
+                ..Default::default()
+            })?);
         let json_str = serde_json::to_string(&local_desc)?;
         let b64 = BASE64_STANDARD.encode(&json_str);
         offer_tx.send(b64).await?;
