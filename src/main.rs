@@ -147,13 +147,13 @@ async fn offer(
     let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(1);
     let task = tokio::spawn(streaming::start_video_streaming(payload, tx, state));
     tokio::select! {
-        val = rx.recv() => {
-            Ok((StatusCode::OK, Json(ResponseOffer::Offer(val.unwrap()))))
+        Some(val) = rx.recv() => {
+            Ok((StatusCode::OK, Json(ResponseOffer::Offer(val))))
         }
         _ = task => {
             Ok((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ResponseOffer::Error("Internal error".to_string())),
+                Json(ResponseOffer::Error("Task quit with error, or offer was never produced".to_string())),
             ))
         }
     }

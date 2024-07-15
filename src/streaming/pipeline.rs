@@ -66,6 +66,8 @@ pub fn start_pipeline(
     show_mouse: bool,
     mut done: Receiver<()>,
     buffer_tx: UnboundedSender<Vec<u8>>,
+    ulp_pt: u8,
+    h264_pt: u8,
 ) {
     #[cfg(target_os = "linux")]
     let src = ElementFactory::make("ximagesrc")
@@ -113,6 +115,7 @@ pub fn start_pipeline(
         .property("threads", &4u32)
         .property("aud", true)
         .property("b-adapt", false)
+        .property("key-int-max", 512u32)
         .property("bframes", 0u32)
         .property("insert-vui", true)
         .property("rc-lookahead", 0)
@@ -126,42 +129,58 @@ pub fn start_pipeline(
         .build()
         .unwrap();
 
-    let h264_caps = gstreamer::Caps::builder("video/x-h264")
-        .field("profile", "baseline")
-        .field("stream-format", "byte-stream")
-        .build();
-    let h264_capsfilter = ElementFactory::make("capsfilter")
-        .property("caps", &h264_caps)
-        .build()
-        .unwrap();
+    // let h264_caps = gstreamer::Caps::builder("video/x-h264")
+    //     .field("profile", "baseline")
+    //     .field("stream-format", "byte-stream")
+    //     .build();
+    // let h264_capsfilter = ElementFactory::make("capsfilter")
+    //     .property("caps", &h264_caps)
+    //     .build()
+    //     .unwrap();
 
     let rtph264pay = ElementFactory::make("rtph264pay")
         .property("mtu", &1000u32)
+        .property("pt", h264_pt as u32)
         .property_from_str("aggregate-mode", "zero-latency")
         .property("config-interval", -1)
         .build()
         .unwrap();
 
-    let rtp_caps = gstreamer::Caps::builder("application/x-rtp")
-        .field("media", "video")
-        .field("clock-rate", 90000)
-        .field("encoding-name", "H264")
-        .field("payload", 97)
-        .field("rtcp-fb-nack-pli", true)
-        .field("rtcp-fb-ccm-fir", true)
-        .field("rtcp-fb-x-gstreamer-fir-as-repair", true)
-        .build();
-    let rtp_capsfilter = ElementFactory::make("capsfilter")
-        .property("caps", &rtp_caps)
+    let fecenc = ElementFactory::make("rtpulpfecenc")
+        .property("pt", ulp_pt as u32)
+        //.property("multipacket", true)
+        .property("percentage", 100u32)
         .build()
         .unwrap();
+
+    let redenc = ElementFactory::make("rtpredenc")
+        // this doesn't actually matter because webrtc-rs rewrites the pt and ssrc
+        .property("pt", 112i32)
+        .property("allow-no-red-blocks", true)
+        //.property("distance", 2u32)
+        .build()
+        .unwrap();
+
+    // let rtp_caps = gstreamer::Caps::builder("application/x-rtp")
+    //     .field("media", "video")
+    //     .field("clock-rate", 90000)
+    //     .field("encoding-name", "H264")
+    //     .field("payload", 102)
+    //     .field("rtcp-fb-nack-pli", true)
+    //     .field("rtcp-fb-ccm-fir", true)
+    //     .field("rtcp-fb-x-gstreamer-fir-as-repair", true)
+    //     .build();
+    // let rtp_capsfilter = ElementFactory::make("capsfilter")
+    //     .property("caps", &rtp_caps)
+    //     .build()
+    //     .unwrap();
 
     let appsink = gstreamer_app::AppSink::builder()
         // Tell the appsink what format we want. It will then be the audiotestsrc's job to
         // provide the format we request.
         // This can be set after linking the two objects, because format negotiation between
         // both elements will happen during pre-rolling of the pipeline.
-        .caps(&rtp_caps)
+        .caps(&gstreamer::Caps::builder("application/x-rtp").build())
         .build();
 
     // appsink callback - send rtp packets to the streaming thread
@@ -220,9 +239,11 @@ pub fn start_pipeline(
             &videoconvert,
             &format_capsfilter,
             &enc,
-            &h264_capsfilter,
+            //&h264_capsfilter,
             &rtph264pay,
-            &rtp_capsfilter,
+            //&rtp_capsfilter,
+            &fecenc,
+            &redenc,
             appsink.upcast_ref(),
         ])
         .unwrap();
@@ -232,9 +253,11 @@ pub fn start_pipeline(
         &videoconvert,
         &format_capsfilter,
         &enc,
-        &h264_capsfilter,
+        //&h264_capsfilter,
         &rtph264pay,
-        &rtp_capsfilter,
+        //&rtp_capsfilter,
+        &fecenc,
+        &redenc,
         appsink.upcast_ref(),
     ])
     .unwrap();

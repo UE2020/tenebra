@@ -54,11 +54,15 @@
  * reserved by Aspect.
  */
 
+use anyhow::bail;
 use anyhow::Result;
 
 use base64::prelude::*;
 
 use serde::{Deserialize, Serialize};
+use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecParameters;
+use webrtc::rtp_transceiver::rtp_codec::RTPCodecType;
+use webrtc::sdp::util::Codec;
 
 use std::sync::Arc;
 
@@ -67,7 +71,7 @@ use tokio::task::spawn_blocking;
 use webrtc::api::interceptor_registry::configure_nack;
 use webrtc::api::interceptor_registry::configure_rtcp_reports;
 use webrtc::api::interceptor_registry::configure_twcc;
-use webrtc::api::media_engine::{MediaEngine, MIME_TYPE_H264};
+use webrtc::api::media_engine::MediaEngine;
 use webrtc::api::APIBuilder;
 use webrtc::data_channel::data_channel_message::DataChannelMessage;
 use webrtc::data_channel::RTCDataChannel;
@@ -120,6 +124,21 @@ pub async fn start_video_streaming(
 ) -> Result<(), anyhow::Error> {
     let mut m = MediaEngine::default();
     m.register_default_codecs()?;
+    // need redundant fec support for ulp (chrome is stupid??)
+    m.register_codec(
+        RTCRtpCodecParameters {
+            capability: RTCRtpCodecCapability {
+                mime_type: "video/red".to_owned(),
+                clock_rate: 90000,
+                channels: 0,
+                sdp_fmtp_line: "".to_owned(),
+                rtcp_feedback: vec![],
+            },
+            payload_type: 112,
+            ..Default::default()
+        },
+        RTPCodecType::Video,
+    )?;
     let mut registry = Registry::new();
     registry = configure_nack(registry, &mut m);
     registry = configure_rtcp_reports(registry);
@@ -140,7 +159,7 @@ pub async fn start_video_streaming(
     let peer_connection = api.new_peer_connection(config).await?;
     let video_track = Arc::new(TrackLocalStaticRTP::new(
         RTCRtpCodecCapability {
-            mime_type: MIME_TYPE_H264.to_owned(),
+            mime_type: "video/red".to_owned(),
             clock_rate: 90000,
             ..Default::default()
         },
@@ -159,35 +178,8 @@ pub async fn start_video_streaming(
     {
         *state.kill_switch.lock().unwrap() = Some(done_tx.clone());
     }
-    let done_tx1 = done_tx.clone();
-    let (buffer_tx, mut buffer_rx) = tokio::sync::mpsc::unbounded_channel();
-    peer_connection.on_ice_connection_state_change(Box::new(
-        move |connection_state: RTCIceConnectionState| {
-            println!("Connection State has changed {connection_state}");
-            if connection_state == RTCIceConnectionState::Failed {
-                let _ = done_tx1.send(());
-            } else if connection_state == RTCIceConnectionState::Connected {
-                let done_tx = done_tx1.clone();
-                let buffer_tx = buffer_tx.clone();
-                spawn_blocking(move || {
-                    pipeline::start_pipeline(
-                        state.bitrate,
-                        state.startx,
-                        offer.show_mouse,
-                        done_tx.subscribe(),
-                        buffer_tx,
-                    );
-                });
-            } else if connection_state == RTCIceConnectionState::Disconnected {
-                let _ = done_tx1.send(());
-            } else if connection_state == RTCIceConnectionState::Closed {
-                println!("Closing task, connection closed.");
-                let _ = done_tx1.send(());
-            }
-            Box::pin(async {})
-        },
-    ));
-    let done_tx2 = done_tx.clone();
+
+    let done_tx_clone = done_tx.clone();
     peer_connection.on_peer_connection_state_change(Box::new(move |s: RTCPeerConnectionState| {
         println!("Peer Connection State has changed: {s}");
         if s == RTCPeerConnectionState::Failed {
@@ -195,11 +187,11 @@ pub async fn start_video_streaming(
             // Use webrtc.PeerConnectionStateDisconnected if you are interested in detecting faster timeout.
             // Note that the PeerConnection may come back from PeerConnectionStateDisconnected.
             println!("Peer Connection has gone to failed exiting: Done forwarding");
-            let _ = done_tx2.send(());
+            let _ = done_tx_clone.send(());
         }
         Box::pin(async {})
     }));
-    let done_tx3 = done_tx.clone();
+    let done_tx_clone = done_tx.clone();
     let input_tx1 = state.input_tx.clone();
     peer_connection.on_data_channel(Box::new(move |d: Arc<RTCDataChannel>| {
         let d_label = d.label().to_owned();
@@ -207,8 +199,8 @@ pub async fn start_video_streaming(
         println!("New DataChannel {d_label} {d_id}");
 
         // Register channel opening handling
-        let done_tx4 = done_tx3.clone();
-        let done_tx5 = done_tx3.clone();
+        let done_tx4 = done_tx_clone.clone();
+        let done_tx5 = done_tx_clone.clone();
         let input_tx2 = input_tx1.clone();
         Box::pin(async move {
             let d_label2 = d_label.clone();
@@ -245,20 +237,70 @@ pub async fn start_video_streaming(
     }));
     let desc_data = BASE64_STANDARD.decode(offer.offer)?;
     let desc_data = std::str::from_utf8(&desc_data)?;
-    let offer = serde_json::from_str::<RTCSessionDescription>(&desc_data)?;
-    peer_connection.set_remote_description(offer).await?;
+    let our_offer = serde_json::from_str::<RTCSessionDescription>(&desc_data)?;
+    peer_connection.set_remote_description(our_offer).await?;
     let answer = peer_connection.create_answer(None).await?;
     let mut gather_complete = peer_connection.gathering_complete_promise().await;
     peer_connection.set_local_description(answer).await?;
     let _ = gather_complete.recv().await;
-    if let Some(local_desc) = peer_connection.local_description().await {
+    let (ulp_pt, h264_pt) = if let Some(local_desc) = peer_connection.local_description().await {
+        let parsed_desc = local_desc.unmarshal()?;
+        let ulp_pt = parsed_desc.get_payload_type_for_codec(&Codec {
+            name: "ulpfec".to_string(),
+            clock_rate: 90000,
+            rtcp_feedback: vec![],
+            ..Default::default()
+        })?;
+        let h264_pt = parsed_desc.get_payload_type_for_codec(&Codec {
+            name: "H264".to_string(),
+            clock_rate: 90000,
+            ..Default::default()
+        })?;
         let json_str = serde_json::to_string(&local_desc)?;
         let b64 = BASE64_STANDARD.encode(&json_str);
         offer_tx.send(b64).await?;
         println!("Encoded base64, sending...");
+        (ulp_pt, h264_pt)
     } else {
-        println!("generate local_description failed!");
-    }
+        bail!("generate local_description failed!");
+    };
+
+    println!(
+        "Got payload types from Lux's SDP:\nH264: {}\nulpfec: {}",
+        h264_pt, ulp_pt
+    );
+
+    let done_tx_clone = done_tx.clone();
+    let (buffer_tx, mut buffer_rx) = tokio::sync::mpsc::unbounded_channel();
+    peer_connection.on_ice_connection_state_change(Box::new(
+        move |connection_state: RTCIceConnectionState| {
+            println!("Connection State has changed {connection_state}");
+            if connection_state == RTCIceConnectionState::Failed {
+                let _ = done_tx_clone.send(());
+            } else if connection_state == RTCIceConnectionState::Connected {
+                let done_tx = done_tx_clone.clone();
+                let buffer_tx = buffer_tx.clone();
+                spawn_blocking(move || {
+                    pipeline::start_pipeline(
+                        state.bitrate,
+                        state.startx,
+                        offer.show_mouse,
+                        done_tx.subscribe(),
+                        buffer_tx,
+                        ulp_pt,
+                        h264_pt,
+                    );
+                });
+            } else if connection_state == RTCIceConnectionState::Disconnected {
+                let _ = done_tx_clone.send(());
+            } else if connection_state == RTCIceConnectionState::Closed {
+                println!("Closing task, connection closed.");
+                let _ = done_tx_clone.send(());
+            }
+            Box::pin(async {})
+        },
+    ));
+
     let done_tx4 = done_tx.clone();
     tokio::spawn(async move {
         while let Some(packet) = buffer_rx.recv().await {
