@@ -54,7 +54,9 @@
  * reserved by Aspect.
  */
 
+use anyhow::anyhow;
 use anyhow::bail;
+use anyhow::Context;
 use anyhow::Result;
 
 use base64::prelude::*;
@@ -63,6 +65,7 @@ use serde::{Deserialize, Serialize};
 use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecParameters;
 use webrtc::rtp_transceiver::rtp_codec::RTPCodecType;
 use webrtc::sdp::util::Codec;
+use webrtc::sdp::MediaDescription;
 
 use std::sync::Arc;
 
@@ -238,42 +241,61 @@ pub async fn start_video_streaming(
     }));
     let desc_data = BASE64_STANDARD.decode(offer.offer)?;
     let desc_data = std::str::from_utf8(&desc_data)?;
-    let our_offer = serde_json::from_str::<RTCSessionDescription>(&desc_data)?;
-    peer_connection.set_remote_description(our_offer).await?;
+    let their_offer = serde_json::from_str::<RTCSessionDescription>(&desc_data)?;
+    //println!("--------------------\nClient's SDP:\n{}", their_offer.sdp);
+    peer_connection.set_remote_description(their_offer).await?;
     let answer = peer_connection.create_answer(None).await?;
     let mut gather_complete = peer_connection.gathering_complete_promise().await;
     peer_connection.set_local_description(answer).await?;
     let _ = gather_complete.recv().await;
-    let (ulp_pt, h264_pt) = if let Some(local_desc) = peer_connection.local_description().await {
-        let parsed_desc = local_desc.unmarshal()?;
-        let ulp_pt = parsed_desc.get_payload_type_for_codec(&Codec {
-            name: "ulpfec".to_string(),
-            clock_rate: 90000,
-            rtcp_feedback: vec![],
-            ..Default::default()
-        })?;
-        // first try to get one with the exact same fmtp
-        let h264_pt = parsed_desc
-            .get_payload_type_for_codec(&Codec {
-                name: "H264".to_string(),
-                fmtp: "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42001f"
-                    .to_string(),
+    let (ulp_pt, h264_pt, ssrc) =
+        if let Some(local_desc) = peer_connection.local_description().await {
+            let parsed_desc = local_desc.unmarshal()?;
+            let ulp_pt = parsed_desc.get_payload_type_for_codec(&Codec {
+                name: "ulpfec".to_string(),
                 clock_rate: 90000,
+                rtcp_feedback: vec![],
                 ..Default::default()
-            })
-            .unwrap_or(parsed_desc.get_payload_type_for_codec(&Codec {
-                name: "H264".to_string(),
-                clock_rate: 90000,
-                ..Default::default()
-            })?);
-        let json_str = serde_json::to_string(&local_desc)?;
-        let b64 = BASE64_STANDARD.encode(&json_str);
-        offer_tx.send(b64).await?;
-        println!("Encoded base64, sending...");
-        (ulp_pt, h264_pt)
-    } else {
-        bail!("generate local_description failed!");
-    };
+            })?;
+            // first try to get one with the exact same fmtp
+            let h264_pt = parsed_desc
+                .get_payload_type_for_codec(&Codec {
+                    name: "H264".to_string(),
+                    fmtp: "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42001f"
+                        .to_string(),
+                    clock_rate: 90000,
+                    ..Default::default()
+                })
+                .unwrap_or(parsed_desc.get_payload_type_for_codec(&Codec {
+                    name: "H264".to_string(),
+                    clock_rate: 90000,
+                    ..Default::default()
+                })?);
+
+            fn get_ssrc(descs: &[MediaDescription]) -> anyhow::Result<u32> {
+                for desc in descs {
+                    if let Some(Some(attribute)) = desc.attribute("ssrc") {
+                        return Ok(attribute
+                            .split(' ')
+                            .collect::<Vec<_>>()
+                            .get(0)
+                            .context("no ssrc number present")?
+                            .parse::<u32>()?);
+                    }
+                }
+                Err(anyhow!("Failed to find ssrc attribute"))
+            }
+
+            let ssrc = get_ssrc(&parsed_desc.media_descriptions)?;
+
+            let json_str = serde_json::to_string(&local_desc)?;
+            let b64 = BASE64_STANDARD.encode(&json_str);
+            offer_tx.send(b64).await?;
+            println!("Encoded base64, sending...");
+            (ulp_pt, h264_pt, ssrc)
+        } else {
+            bail!("generate local_description failed!");
+        };
 
     println!(
         "Got payload types from Lux's SDP:\nH264: {}\nulpfec: {}",
@@ -299,6 +321,7 @@ pub async fn start_video_streaming(
                         buffer_tx,
                         ulp_pt,
                         h264_pt,
+                        ssrc,
                     );
                 });
             } else if connection_state == RTCIceConnectionState::Disconnected {

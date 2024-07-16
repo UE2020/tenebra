@@ -68,6 +68,7 @@ pub fn start_pipeline(
     buffer_tx: UnboundedSender<Vec<u8>>,
     ulp_pt: u8,
     h264_pt: u8,
+    ssrc: u32,
 ) {
     #[cfg(target_os = "linux")]
     let src = ElementFactory::make("ximagesrc")
@@ -129,18 +130,19 @@ pub fn start_pipeline(
         .build()
         .unwrap();
 
-    // let h264_caps = gstreamer::Caps::builder("video/x-h264")
-    //     .field("profile", "baseline")
-    //     .field("stream-format", "byte-stream")
-    //     .build();
-    // let h264_capsfilter = ElementFactory::make("capsfilter")
-    //     .property("caps", &h264_caps)
-    //     .build()
-    //     .unwrap();
+    let h264_caps = gstreamer::Caps::builder("video/x-h264")
+        .field("profile", "baseline")
+        .field("stream-format", "byte-stream")
+        .build();
+    let h264_capsfilter = ElementFactory::make("capsfilter")
+        .property("caps", &h264_caps)
+        .build()
+        .unwrap();
 
     let rtph264pay = ElementFactory::make("rtph264pay")
         .property("mtu", &1000u32)
         .property("pt", h264_pt as u32)
+        .property("ssrc", ssrc)
         .property_from_str("aggregate-mode", "zero-latency")
         .property("config-interval", -1)
         .build()
@@ -148,7 +150,7 @@ pub fn start_pipeline(
 
     let fecenc = ElementFactory::make("rtpulpfecenc")
         .property("pt", ulp_pt as u32)
-        //.property("multipacket", true)
+        .property("multipacket", true)
         .property("percentage", 100u32)
         .build()
         .unwrap();
@@ -239,7 +241,7 @@ pub fn start_pipeline(
             &videoconvert,
             &format_capsfilter,
             &enc,
-            //&h264_capsfilter,
+            &h264_capsfilter,
             &rtph264pay,
             //&rtp_capsfilter,
             &fecenc,
@@ -253,7 +255,7 @@ pub fn start_pipeline(
         &videoconvert,
         &format_capsfilter,
         &enc,
-        //&h264_capsfilter,
+        &h264_capsfilter,
         &rtph264pay,
         //&rtp_capsfilter,
         &fecenc,
