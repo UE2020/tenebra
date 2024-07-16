@@ -140,7 +140,8 @@ pub async fn start_video_streaming(
         RTPCodecType::Video,
     )?;
     let mut registry = Registry::new();
-    registry = configure_nack(registry, &mut m);
+    // nack MAY break fec. more research needed
+    //registry = configure_nack(registry, &mut m);
     registry = configure_rtcp_reports(registry);
     // we only need twcc to get the client's jitter value
     registry = configure_twcc(registry, &mut m)?;
