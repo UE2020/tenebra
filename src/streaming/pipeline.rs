@@ -116,7 +116,7 @@ pub fn start_pipeline(
         .property("threads", &4u32)
         .property("aud", true)
         .property("b-adapt", false)
-        .property("key-int-max", 512u32)
+        .property("key-int-max", 30u32)
         .property("bframes", 0u32)
         .property("insert-vui", true)
         .property("rc-lookahead", 0)
@@ -152,6 +152,7 @@ pub fn start_pipeline(
         .property("pt", ulp_pt as u32)
         .property("multipacket", true)
         .property("percentage", 100u32)
+        .property("percentage-important", 100u32)
         .build()
         .unwrap();
 
