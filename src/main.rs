@@ -59,7 +59,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::Result;
+use tokio::{net::UdpSocket, sync::mpsc::unbounded_channel};
+
+use anyhow::{anyhow, Result};
 
 use askama::Template;
 use axum::{
@@ -78,16 +80,29 @@ use enigo::{
 
 use serde::{Deserialize, Serialize};
 
-use streaming::InputCommand;
-
-use tokio::{
-    spawn,
-    sync::{broadcast::Sender, mpsc::UnboundedSender},
+use str0m::{
+    bwe::Bitrate,
+    change::SdpOffer,
+    rtp::{Extension, ExtensionMap},
+    Candidate, Rtc,
 };
 
-mod streaming;
+use base64::prelude::*;
 
-#[derive(Deserialize)]
+use tokio::{spawn, sync::mpsc::UnboundedSender};
+
+mod rtc;
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct InputCommand {
+    pub r#type: String,
+    pub x: Option<f32>,
+    pub y: Option<f32>,
+    pub button: Option<u8>,
+    pub key: Option<String>,
+}
+
+#[derive(Deserialize, Clone)]
 struct CreateOffer {
     password: String,
     offer: String,
@@ -122,6 +137,26 @@ where
     }
 }
 
+use std::net::IpAddr;
+use systemstat::{Platform, System};
+
+pub fn select_host_address() -> anyhow::Result<IpAddr> {
+    let system = System::new();
+    let networks = system.networks().unwrap();
+
+    for net in networks.values() {
+        for n in &net.addrs {
+            if let systemstat::IpAddr::V4(v) = n.addr {
+                if !v.is_loopback() && !v.is_link_local() && !v.is_broadcast() {
+                    return Ok(IpAddr::V4(v));
+                }
+            }
+        }
+    }
+
+    return Err(anyhow!("No usable network interface found"));
+}
+
 #[axum_macros::debug_handler]
 async fn offer(
     State(state): State<AppState>,
@@ -134,29 +169,90 @@ async fn offer(
             Json(ResponseOffer::Error("Password incorrect.".to_string())),
         ));
     }
+
+    let mut exts = ExtensionMap::empty();
+    exts.set(1, Extension::AudioLevel);
+    exts.set(2, Extension::AbsoluteSendTime);
+    exts.set(3, Extension::TransportSequenceNumber);
+    exts.set(4, Extension::RtpMid);
+    exts.set(5, Extension::PlayoutDelay);
+    // exts.set_mapping(&ExtMap::new(8, Extension::ColorSpace));
+    exts.set(10, Extension::RtpStreamId);
+    exts.set(11, Extension::RepairedRtpStreamId);
+    exts.set(13, Extension::VideoOrientation);
+
+    // Instantiate a new Rtc instance.
+    let mut rtc = Rtc::builder()
+        .clear_codecs()
+        .enable_h264(true)
+        // needed for zero-latency streaming
+        .set_extension_map(exts)
+        .set_send_buffer_video(1000)
+        .enable_bwe(Some(Bitrate::kbps(4000)))
+        //.clear_extension_map()
+        //.set_extension(12, playout_delay)
+        .build();
+
+    let addr = select_host_address()?;
+
+    println!("Found usable network interface: {}", addr);
+
+    let socket = UdpSocket::bind(format!("{addr}:0")).await?;
+    let addr = socket.local_addr()?;
+    let candidate = Candidate::host(addr, "udp").expect("a host candidate");
+    rtc.add_local_candidate(candidate);
+
+    // Accept an incoming offer from the remote peer
+    // and get the corresponding answer.
+    let desc_data = BASE64_STANDARD.decode(payload.offer.clone())?;
+    let desc_data = std::str::from_utf8(&desc_data)?;
+    let their_offer = serde_json::from_str::<SdpOffer>(&desc_data)?;
+    let answer = rtc.sdp_api().accept_offer(their_offer).unwrap();
+    let json_str = serde_json::to_string(&answer)?;
+    let b64 = BASE64_STANDARD.encode(&json_str);
+
     println!("Killing last session");
-    // kill last session
-    {
+    // kill last session and
+    let kill_rx = {
         let mut sender = state.kill_switch.lock().unwrap();
         if let Some(sender) = sender.as_mut() {
             sender.send(()).ok();
         };
-        *sender = None;
-    }
-    println!("Spawning!");
-    let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(1);
-    let task = tokio::spawn(streaming::start_video_streaming(payload, tx, state));
-    tokio::select! {
-        Some(val) = rx.recv() => {
-            Ok((StatusCode::OK, Json(ResponseOffer::Offer(val))))
+        let (kill_tx, kill_rx) = unbounded_channel();
+        *sender = Some(kill_tx);
+        kill_rx
+    };
+
+    tokio::spawn(async move {
+        if let Err(e) = rtc::run(rtc, socket, state, payload, kill_rx).await {
+            eprintln!("Run task exited: {e:?}");
         }
-        _ = task => {
-            Ok((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ResponseOffer::Error("Task quit with error, or offer was never produced".to_string())),
-            ))
-        }
-    }
+    });
+
+    Ok((StatusCode::OK, Json(ResponseOffer::Offer(b64))))
+    // println!("Killing last session");
+    // // kill last session
+    // {
+    //     let mut sender = state.kill_switch.lock().unwrap();
+    //     if let Some(sender) = sender.as_mut() {
+    //         sender.send(()).ok();
+    //     };
+    //     *sender = None;
+    // }
+    // println!("Spawning!");
+    // let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(1);
+    // let task = tokio::spawn(streaming::start_video_streaming(payload, tx, state));
+    // tokio::select! {
+    //     Some(val) = rx.recv() => {
+    //         Ok((StatusCode::OK, Json(ResponseOffer::Offer(val))))
+    //     }
+    //     _ = task => {
+    //         Ok((
+    //             StatusCode::INTERNAL_SERVER_ERROR,
+    //             Json(ResponseOffer::Error("Task quit with error, or offer was never produced".to_string())),
+    //         ))
+    //     }
+    // }
 }
 
 #[derive(Template)]
@@ -209,7 +305,7 @@ async fn home() -> impl IntoResponse {
 #[derive(Debug, Clone)]
 pub struct AppState {
     input_tx: UnboundedSender<InputCommand>,
-    kill_switch: Arc<Mutex<Option<Sender<()>>>>,
+    kill_switch: Arc<Mutex<Option<UnboundedSender<()>>>>,
     bitrate: u32,
     startx: u32,
     password: String,
@@ -217,6 +313,11 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // simple_logger::SimpleLogger::new()
+    //     //.with_module_level("str0m", log::LevelFilter::Warn)
+    //     .init()
+    //     .unwrap();
+
     // Initialize GStreamer
     gstreamer::init().unwrap();
 
