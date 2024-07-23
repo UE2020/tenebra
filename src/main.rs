@@ -55,13 +55,15 @@
  */
 
 use std::{
+    net::SocketAddr,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
+use local_ip_address::local_ip;
 use tokio::{net::UdpSocket, sync::mpsc::unbounded_channel};
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 
 use askama::Template;
 use axum::{
@@ -92,6 +94,7 @@ use base64::prelude::*;
 use tokio::{spawn, sync::mpsc::UnboundedSender};
 
 mod rtc;
+mod stun;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct InputCommand {
@@ -137,26 +140,6 @@ where
     }
 }
 
-use std::net::IpAddr;
-use systemstat::{Platform, System};
-
-pub fn select_host_address() -> anyhow::Result<IpAddr> {
-    let system = System::new();
-    let networks = system.networks().unwrap();
-
-    for net in networks.values() {
-        for n in &net.addrs {
-            if let systemstat::IpAddr::V4(v) = n.addr {
-                if !v.is_loopback() && !v.is_link_local() && !v.is_broadcast() {
-                    return Ok(IpAddr::V4(v));
-                }
-            }
-        }
-    }
-
-    return Err(anyhow!("No usable network interface found"));
-}
-
 #[axum_macros::debug_handler]
 async fn offer(
     State(state): State<AppState>,
@@ -176,7 +159,6 @@ async fn offer(
     exts.set(3, Extension::TransportSequenceNumber);
     exts.set(4, Extension::RtpMid);
     exts.set(5, Extension::PlayoutDelay);
-    // exts.set_mapping(&ExtMap::new(8, Extension::ColorSpace));
     exts.set(10, Extension::RtpStreamId);
     exts.set(11, Extension::RepairedRtpStreamId);
     exts.set(13, Extension::VideoOrientation);
@@ -189,18 +171,25 @@ async fn offer(
         .set_extension_map(exts)
         .set_send_buffer_video(1000)
         .enable_bwe(Some(Bitrate::kbps(4000)))
-        //.clear_extension_map()
-        //.set_extension(12, playout_delay)
         .build();
 
-    let addr = select_host_address()?;
+    let socket = UdpSocket::bind("0.0.0.0:0").await?;
 
-    println!("Found usable network interface: {}", addr);
+    let local_ip = local_ip()?;
+    let local_socket_addr = SocketAddr::new(local_ip, socket.local_addr()?.port());
+    rtc.add_local_candidate(
+        Candidate::host(local_socket_addr, str0m::net::Protocol::Udp)
+            .expect("Failed to create local candidate"),
+    );
 
-    let socket = UdpSocket::bind(format!("{addr}:0")).await?;
-    let addr = socket.local_addr()?;
-    let candidate = Candidate::host(addr, "udp").expect("a host candidate");
-    rtc.add_local_candidate(candidate);
+    println!("Local socket addr: {}", local_socket_addr);
+
+    // add a remote candidate too
+    let stun_addr = stun::get_addr(&socket).await?;
+    rtc.add_local_candidate(
+        Candidate::server_reflexive(stun_addr, local_socket_addr, str0m::net::Protocol::Udp)
+            .expect("Failed to create local candidate"),
+    );
 
     // Accept an incoming offer from the remote peer
     // and get the corresponding answer.
@@ -224,35 +213,12 @@ async fn offer(
     };
 
     tokio::spawn(async move {
-        if let Err(e) = rtc::run(rtc, socket, state, payload, kill_rx).await {
+        if let Err(e) = rtc::run(rtc, socket, local_socket_addr, state, payload, kill_rx).await {
             eprintln!("Run task exited: {e:?}");
         }
     });
 
     Ok((StatusCode::OK, Json(ResponseOffer::Offer(b64))))
-    // println!("Killing last session");
-    // // kill last session
-    // {
-    //     let mut sender = state.kill_switch.lock().unwrap();
-    //     if let Some(sender) = sender.as_mut() {
-    //         sender.send(()).ok();
-    //     };
-    //     *sender = None;
-    // }
-    // println!("Spawning!");
-    // let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(1);
-    // let task = tokio::spawn(streaming::start_video_streaming(payload, tx, state));
-    // tokio::select! {
-    //     Some(val) = rx.recv() => {
-    //         Ok((StatusCode::OK, Json(ResponseOffer::Offer(val))))
-    //     }
-    //     _ = task => {
-    //         Ok((
-    //             StatusCode::INTERNAL_SERVER_ERROR,
-    //             Json(ResponseOffer::Error("Task quit with error, or offer was never produced".to_string())),
-    //         ))
-    //     }
-    // }
 }
 
 #[derive(Template)]

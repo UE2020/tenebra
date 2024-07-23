@@ -92,6 +92,17 @@ pub fn start_pipeline(
         .build()
         .unwrap();
 
+    let textoverlay = ElementFactory::make("textoverlay")
+        .property("text", "")
+        .property_from_str("valignment", "top")
+        .property_from_str("halignment", "center")
+        .property("font-desc", "Sans, 5")
+        .property("draw-outline", false)
+        .property("draw-shadow", false)
+        .property("color", u32::from_ne_bytes([0, 0, 255, 255]))
+        .build()
+        .unwrap();
+
     let video_caps = gstreamer::Caps::builder("video/x-raw")
         .field("framerate", gstreamer::Fraction::new(60, 1))
         .build();
@@ -242,6 +253,7 @@ pub fn start_pipeline(
         .add_many([
             &src,
             &video_capsfilter,
+            &textoverlay,
             &videoconvert,
             &format_capsfilter,
             &enc,
@@ -252,6 +264,7 @@ pub fn start_pipeline(
     gstreamer::Element::link_many([
         &src,
         &video_capsfilter,
+        &textoverlay,
         &videoconvert,
         &format_capsfilter,
         &enc,
@@ -265,13 +278,13 @@ pub fn start_pipeline(
 
     // Wait until error or EOS
     let bus = pipeline.bus().unwrap();
-    loop {
+    'outer: loop {
         let msg = bus.timed_pop(gstreamer::ClockTime::MSECOND);
         while let Ok(msg) = control_rx.try_recv() {
             match msg {
                 GStreamerControlMessage::Stop => {
                     println!("GStreamer thread received termination signal!");
-                    break;
+                    break 'outer;
                 }
                 GStreamerControlMessage::RequestKeyFrame => {
                     println!("Forcing keyframe");
@@ -284,7 +297,8 @@ pub fn start_pipeline(
                     ));
                 }
                 GStreamerControlMessage::Bitrate(bitrate) => {
-                    println!("Setting bitrate to {} kbps", bitrate);
+                    textoverlay
+                        .set_property("text", format!("Current Bitrate: {} kbit/s", bitrate));
                     enc.set_property("bitrate", bitrate);
                 }
             }

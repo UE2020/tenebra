@@ -28,15 +28,15 @@ fn parse_binding_response(buf: &[u8]) -> SocketAddr {
         .address()
 }
 
-pub async fn get_addr() -> anyhow::Result<SocketAddr> {
-    let socket = UdpSocket::bind("0.0.0.0:0").await?;
-    socket.connect("stun.l.google.com:19302").await?;
-    socket.send(&make_binding_request()).await?;
+pub async fn get_addr(socket: &UdpSocket) -> anyhow::Result<SocketAddr> {
+    socket
+        .send_to(&make_binding_request(), "stun.l.google.com:19302")
+        .await?;
 
     let mut buf = vec![0u8; 100];
     let num_read = socket.recv(&mut buf).await?;
     let address = parse_binding_response(&buf[..num_read]);
-    //socket.get
+
     println!("Our public IP is: {address}");
 
     Ok(address)

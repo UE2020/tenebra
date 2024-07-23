@@ -1,5 +1,6 @@
 use anyhow::anyhow;
 use std::io::ErrorKind;
+use std::net::SocketAddr;
 use std::thread::spawn;
 use std::time::Instant;
 use str0m::bwe::Bitrate;
@@ -40,6 +41,7 @@ struct GStreamerInstance {
 pub async fn run(
     mut rtc: Rtc,
     socket: UdpSocket,
+    local_socket_addr: SocketAddr,
     state: AppState,
     offer: CreateOffer,
     mut kill_rx: UnboundedReceiver<()>,
@@ -166,8 +168,11 @@ pub async fn run(
                     Receive {
                         proto: Protocol::Udp,
                         source,
-                        destination: socket.local_addr()?,
-                        contents: (&buf[..n]).try_into().expect("should webrtc"),
+                        destination: SocketAddr::new(
+                            local_socket_addr.ip(),
+                            socket.local_addr()?.port(),
+                        ),
+                        contents: (&buf[..n]).try_into()?,
                     },
                 )
             }
