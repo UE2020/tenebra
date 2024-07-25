@@ -20,7 +20,6 @@ local-ip-address = "0.6.1"
 rand = "0.8.5"
 serde = "1.0.197"
 serde_json = "1.0.115"
-simple_logger = "5.0.0"
 str0m = { version = "0.6.1" }
 stun_codec = "0.3.5"
 sysinfo = "0.30.13"
