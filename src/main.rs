@@ -63,7 +63,7 @@ use std::{
 use local_ip_address::local_ip;
 use tokio::{net::UdpSocket, sync::mpsc::unbounded_channel};
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 
 use askama::Template;
 use axum::{
@@ -185,7 +185,8 @@ async fn offer(
     println!("Local socket addr: {}", local_socket_addr);
 
     // add a remote candidate too
-    let stun_addr = stun::get_addr(&socket).await?;
+    let stun_addr = retry!(stun::get_addr(&socket, "stun.l.google.com:19302").await)?;
+    println!("Our public IP is: {stun_addr}");
     rtc.add_local_candidate(
         Candidate::server_reflexive(stun_addr, local_socket_addr, str0m::net::Protocol::Udp)
             .expect("Failed to create local candidate"),
@@ -279,10 +280,10 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // simple_logger::SimpleLogger::new()
-    //     //.with_module_level("str0m", log::LevelFilter::Warn)
-    //     .init()
-    //     .unwrap();
+    // check if we're behind symmetric NAT
+    if stun::is_symmetric_nat().await? {
+        bail!("You are behind a symmetric NAT. This configuration prevents STUN binding requests from establishing a proper connection. Please adjust your network settings or consult your network administrator.");
+    }
 
     // Initialize GStreamer
     gstreamer::init().unwrap();
