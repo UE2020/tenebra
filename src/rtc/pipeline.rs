@@ -62,6 +62,33 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use super::GStreamerControlMessage;
 
+#[derive(Default)]
+struct StatisticsOverlay {
+    bitrate: Option<u32>,
+    rtt: Option<f32>,
+    loss: Option<f32>,
+}
+
+impl StatisticsOverlay {
+    fn new() -> Self {
+        StatisticsOverlay::default()
+    }
+
+    fn render_to(&self, textoverlay: &gstreamer::Element) {
+        let mut text = String::new();
+        if let Some(bitrate) = self.bitrate {
+            text.push_str(&format!("Bitrate: {} kbit/s\n", bitrate));
+        }
+        if let Some(rtt) = self.rtt {
+            text.push_str(&format!("Round-trip: {} ms\n", rtt.round()));
+        }
+        if let Some(loss) = self.loss {
+            text.push_str(&format!("Loss: {}%", (loss * 100.0).round()));
+        }
+        textoverlay.set_property("text", text);
+    }
+}
+
 pub fn start_pipeline(
     bitrate: u32,
     startx: u32,
@@ -94,12 +121,13 @@ pub fn start_pipeline(
 
     let textoverlay = ElementFactory::make("textoverlay")
         .property("text", "")
-        .property_from_str("valignment", "top")
+        .property_from_str("valignment", "bottom")
         .property_from_str("halignment", "center")
-        .property("font-desc", "Sans, 5")
-        .property("draw-outline", false)
-        .property("draw-shadow", false)
-        .property("color", u32::from_ne_bytes([0, 0, 255, 255]))
+        .property("font-desc", "Sans, 3")
+        //.property("draw-outline", false)
+        //.property("draw-shadow", false)
+        .property("ypad", 3i32)
+        //.property("color", u32::from_ne_bytes([0, 0, 255, 255]))
         .build()
         .unwrap();
 
@@ -276,6 +304,8 @@ pub fn start_pipeline(
     // Set the pipeline to playing state
     pipeline.set_state(State::Playing).unwrap();
 
+    let mut stats = StatisticsOverlay::new();
+
     // Wait until error or EOS
     let bus = pipeline.bus().unwrap();
     'outer: loop {
@@ -297,9 +327,18 @@ pub fn start_pipeline(
                     ));
                 }
                 GStreamerControlMessage::Bitrate(bitrate) => {
-                    textoverlay
-                        .set_property("text", format!("Current Bitrate: {} kbit/s", bitrate));
+                    stats.bitrate = Some(bitrate);
+                    stats.render_to(&textoverlay);
                     enc.set_property("bitrate", bitrate);
+                }
+                GStreamerControlMessage::Stats { rtt, loss } => {
+                    if let Some(rtt) = rtt {
+                        stats.rtt = Some(rtt);
+                    }
+                    if let Some(loss) = loss {
+                        stats.loss = Some(loss);
+                    }
+                    stats.render_to(&textoverlay);
                 }
             }
         }
