@@ -350,7 +350,7 @@ pub async fn start_pipeline(
     while let Some(msg) = control_rx.recv().await {
         match msg {
             GStreamerControlMessage::Stop => {
-                println!("GStreamer thread received termination signal!");
+                println!("GStreamer task received termination signal!");
                 break;
             }
             GStreamerControlMessage::RequestKeyFrame => {
