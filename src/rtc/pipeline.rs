@@ -54,11 +54,16 @@
  * reserved by Aspect.
  */
 
+#[allow(unused)]
+use std::str::FromStr;
+use std::sync::Arc;
+
 use gstreamer::prelude::*;
 use gstreamer::{element_error, ElementFactory, Pipeline, State};
 
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::Notify;
 
 use super::GStreamerControlMessage;
 
@@ -95,6 +100,7 @@ pub fn start_pipeline(
     show_mouse: bool,
     mut control_rx: UnboundedReceiver<GStreamerControlMessage>,
     buffer_tx: UnboundedSender<(Vec<u8>, u64)>,
+    waker: Arc<Notify>,
 ) {
     #[cfg(target_os = "linux")]
     let src = ElementFactory::make("ximagesrc")
@@ -139,20 +145,38 @@ pub fn start_pipeline(
         .build()
         .unwrap();
 
+    #[cfg(not(feature = "vaapi"))]
     let videoconvert = ElementFactory::make("videoconvert").build().unwrap();
 
+    #[cfg(not(feature = "vaapi"))]
     let format_caps = gstreamer::Caps::builder("video/x-raw")
         .field("format", "NV12")
         .build();
+
+    #[cfg(feature = "vaapi")]
+    let videoconvert = ElementFactory::make("vapostproc")
+        .property_from_str("scale-method", "fast")
+        .build()
+        .unwrap();
+
+    #[cfg(feature = "vaapi")]
+    let format_caps = {
+        let caps_str = "video/x-raw(memory:VAMemory),format=NV12";
+        let caps = gstreamer::Caps::from_str(caps_str).unwrap();
+        caps
+    };
+
+    println!("Format caps: {}", format_caps);
     let format_capsfilter = ElementFactory::make("capsfilter")
         .property("caps", &format_caps)
         .build()
         .unwrap();
 
+    #[cfg(not(feature = "vaapi"))]
     let enc = ElementFactory::make("x264enc")
-        .property("qos", true)
+        //.property("qos", true)
         .property("threads", &4u32)
-        .property("aud", true)
+        .property("aud", false)
         .property("b-adapt", false)
         .property("bframes", 0u32)
         .property("insert-vui", true)
@@ -167,8 +191,26 @@ pub fn start_pipeline(
         .build()
         .unwrap();
 
+    #[cfg(feature = "vaapi")]
+    let enc = ElementFactory::make("vah264enc")
+        .property("aud", false)
+        .property("b-frames", 0u32)
+        .property("dct8x8", false)
+        .property("key-int-max", 1024u32)
+        .property("cpb-size", 120u32)
+        .property("num-slices", 4u32)
+        .property("ref-frames", 1u32)
+        .property("target-usage", 6u32)
+        .property_from_str("rate-control", "cbr")
+        .property_from_str("mbbrc", "disabled")
+        .property("bitrate", bitrate)
+        .build()
+        .unwrap();
+
+    println!("Enc: {:?}", enc);
+
     let h264_caps = gstreamer::Caps::builder("video/x-h264")
-        .field("profile", "baseline")
+        .field("profile", "main")
         .field("stream-format", "byte-stream")
         .build();
     let h264_capsfilter = ElementFactory::make("capsfilter")
@@ -267,7 +309,7 @@ pub fn start_pipeline(
                 buffer_tx
                     .send((packet.to_vec(), buffer.pts().unwrap().useconds()))
                     .ok();
-
+                waker.notify_one();
                 Ok(gstreamer::FlowSuccess::Ok)
             })
             .build(),
@@ -330,6 +372,11 @@ pub fn start_pipeline(
                     stats.bitrate = Some(bitrate);
                     stats.render_to(&textoverlay);
                     enc.set_property("bitrate", bitrate);
+                    #[cfg(feature = "vaapi")]
+                    enc.set_property(
+                        "cpb-size",
+                        ((bitrate as f64 + 60.0 - 1.0) / 60.0 * 1.5).floor() as u32,
+                    );
                 }
                 GStreamerControlMessage::Stats { rtt, loss } => {
                     if let Some(rtt) = rtt {

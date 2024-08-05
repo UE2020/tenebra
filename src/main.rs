@@ -125,7 +125,7 @@ impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Something went wrong: {}", self.0),
+            format!("Something went wrong: {:?}", self.0),
         )
             .into_response()
     }
@@ -170,7 +170,7 @@ async fn offer(
         // needed for zero-latency streaming
         .set_extension_map(exts)
         .set_send_buffer_video(1000)
-        .enable_bwe(Some(Bitrate::kbps(state.bitrate as u64)))
+        .enable_bwe(Some(Bitrate::kbps(250)))
         .set_stats_interval(Some(Duration::from_secs(1)))
         .build();
 

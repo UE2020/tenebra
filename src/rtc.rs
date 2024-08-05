@@ -57,6 +57,7 @@
 use anyhow::anyhow;
 use std::io::ErrorKind;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::thread::spawn;
 use std::time::Instant;
 use str0m::bwe::Bitrate;
@@ -64,6 +65,7 @@ use str0m::bwe::BweKind;
 use str0m::channel::ChannelData;
 use tokio::net::UdpSocket;
 use tokio::sync::mpsc::unbounded_channel;
+use tokio::sync::Notify;
 
 use anyhow::Context;
 use str0m::media::Frequency;
@@ -107,6 +109,8 @@ pub async fn run(
 
     let mut gstreamers: Vec<GStreamerInstance> = vec![];
 
+    let waker = Arc::new(Notify::new());
+
     let ret = loop {
         if kill_rx.try_recv().is_ok() {
             break Err(anyhow!("task killed from the kill_tx"));
@@ -146,10 +150,12 @@ pub async fn run(
                         break Ok(());
                     }
                     Event::MediaAdded(media_added) => {
-                        // rtc.direct_api()
-                        //     .stream_tx_by_mid(media_added.mid, None)
-                        //     .unwrap()
-                        //     .set_unpaced(true);
+                        rtc.direct_api()
+                            .stream_tx_by_mid(media_added.mid, None)
+                            .unwrap()
+                            .set_unpaced(true);
+                        rtc.bwe()
+                            .set_desired_bitrate(Bitrate::kbps(state.bitrate as u64));
                         let (control_tx, control_rx) =
                             unbounded_channel::<GStreamerControlMessage>();
                         let (buffer_tx, buffer_rx) = unbounded_channel();
@@ -159,6 +165,7 @@ pub async fn run(
                             media: media_added,
                             start: Instant::now(),
                         });
+                        let waker_clone = waker.clone();
                         spawn(move || {
                             pipeline::start_pipeline(
                                 state.bitrate,
@@ -166,6 +173,7 @@ pub async fn run(
                                 offer.show_mouse,
                                 control_rx,
                                 buffer_tx,
+                                waker_clone,
                             );
                         });
                     }
@@ -193,17 +201,18 @@ pub async fn run(
                                 .control_tx
                                 .send(GStreamerControlMessage::Bitrate(bwe))?;
                         }
-                        rtc.bwe().set_current_bitrate(bitrate);
-                        rtc.bwe()
-                            .set_desired_bitrate(Bitrate::kbps(state.bitrate as u64));
+                        rtc.bwe().set_current_bitrate(Bitrate::kbps(bwe as _));
                     }
                     Event::ChannelData(ChannelData { data, .. }) => {
                         let msg_str = String::from_utf8(data)?;
                         let cmd: InputCommand = serde_json::from_str(&msg_str)?;
                         state.input_tx.send(cmd)?;
                     }
-                    Event::IceConnectionStateChange(IceConnectionState::Connected) => {
-                        println!("ICE Connection state is now CONNECTED. Waiting for media to be added...");
+                    Event::IceConnectionStateChange(state) => {
+                        println!("New state: {:?}", state);
+                        if state == IceConnectionState::Connected {
+                            println!("ICE Connection state is now CONNECTED. Waiting for media to be added...");
+                        }
                     }
                     _ => {}
                 }
@@ -222,38 +231,42 @@ pub async fn run(
         //socket.set_read_timeout(Some(timeout))?;
         buf.resize(2000, 0);
 
-        let input = match tokio::time::timeout(timeout, socket.recv_from(&mut buf)).await {
-            Ok(Ok((n, source))) => {
-                // UDP data received.
-                Input::Receive(
-                    Instant::now(),
-                    Receive {
-                        proto: Protocol::Udp,
-                        source,
-                        destination: SocketAddr::new(
-                            local_socket_addr.ip(),
-                            socket.local_addr()?.port(),
-                        ),
-                        contents: (&buf[..n]).try_into()?,
-                    },
-                )
-            }
-            Ok(Err(e)) => match e.kind() {
-                ErrorKind::ConnectionReset => continue,
-                _ => {
-                    println!("[TransportWebrtc] network error {:?}", e);
-                    break Err(e.into());
+        let input = tokio::select! {
+            _ = tokio::time::sleep_until(time.into()) => Input::Timeout(Instant::now()),
+            _ = waker.notified() => Input::Timeout(Instant::now()),
+            msg = socket.recv_from(&mut buf) => {
+                match msg {
+                    Ok((n, source)) => {
+                        // UDP data received.
+                        Input::Receive(
+                            Instant::now(),
+                            Receive {
+                                proto: Protocol::Udp,
+                                source,
+                                destination: SocketAddr::new(
+                                    local_socket_addr.ip(),
+                                    socket.local_addr()?.port(),
+                                ),
+                                contents: (&buf[..n]).try_into()?,
+                            },
+                        )
+                    }
+                    Err(e) => match e.kind() {
+                        ErrorKind::ConnectionReset => continue,
+                        _ => {
+                            println!("[TransportWebrtc] network error {:?}", e);
+                            break Err(e.into());
+                        }
+                    }
                 }
-            },
-            Err(_e) => {
-                // Expected error for set_read_timeout().
-                // One for windows, one for the rest.
-                Input::Timeout(Instant::now())
             }
         };
 
-        // Input is either a Timeout or Receive of data. Both drive the state forward.
         rtc.handle_input(input)?;
+
+        // let input = match tokio::time::timeout(timeout, socket.recv_from(&mut buf)).await {};
+
+        // Input is either a Timeout or Receive of data. Both drive the state forward.
     };
 
     for gstreamer in gstreamers {
