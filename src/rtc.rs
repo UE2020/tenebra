@@ -58,7 +58,6 @@ use anyhow::anyhow;
 use std::io::ErrorKind;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::thread::spawn;
 use std::time::Instant;
 use str0m::bwe::Bitrate;
 use str0m::bwe::BweKind;
@@ -91,7 +90,7 @@ pub enum GStreamerControlMessage {
 }
 
 struct GStreamerInstance {
-    buffer_rx: UnboundedReceiver<(Vec<u8>, u64)>,
+    buffer_rx: UnboundedReceiver<Vec<u8>>,
     control_tx: UnboundedSender<GStreamerControlMessage>,
     media: MediaAdded,
     start: Instant,
@@ -119,7 +118,7 @@ pub async fn run(
         for gstreamer in gstreamers.iter_mut() {
             let buf = gstreamer.buffer_rx.try_recv();
 
-            if let Ok((buf, _)) = buf {
+            if let Ok(buf) = buf {
                 let writer = rtc
                     .writer(gstreamer.media.mid)
                     .context("couldn't get rtc writer")?
@@ -150,9 +149,10 @@ pub async fn run(
                         break Ok(());
                     }
                     Event::MediaAdded(media_added) => {
+                        #[cfg(feature = "vaapi")]
                         rtc.direct_api()
                             .stream_tx_by_mid(media_added.mid, None)
-                            .unwrap()
+                            .context("no stream")?
                             .set_unpaced(true);
                         rtc.bwe()
                             .set_desired_bitrate(Bitrate::kbps(state.bitrate as u64));
@@ -166,16 +166,14 @@ pub async fn run(
                             start: Instant::now(),
                         });
                         let waker_clone = waker.clone();
-                        spawn(move || {
-                            pipeline::start_pipeline(
-                                state.bitrate,
-                                state.startx,
-                                offer.show_mouse,
-                                control_rx,
-                                buffer_tx,
-                                waker_clone,
-                            );
-                        });
+                        tokio::task::spawn(pipeline::start_pipeline(
+                            state.bitrate,
+                            state.startx,
+                            offer.show_mouse,
+                            control_rx,
+                            buffer_tx,
+                            waker_clone,
+                        ));
                     }
                     Event::MediaEgressStats(stats) => {
                         for gstreamer in gstreamers.iter_mut() {
@@ -195,7 +193,7 @@ pub async fn run(
                     Event::EgressBitrateEstimate(
                         BweKind::Twcc(bitrate) | BweKind::Remb(_, bitrate),
                     ) => {
-                        let bwe = (bitrate.as_u64() / 1000).min(state.bitrate as u64) as u32;
+                        let bwe = (bitrate.as_u64() / 1000) as u32;
                         for gstreamer in gstreamers.iter_mut() {
                             gstreamer
                                 .control_tx

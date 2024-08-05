@@ -26,6 +26,9 @@ sysinfo = "0.30.13"
 tokio = { version = "1.37.0", features = ["full"] }
 tower-http = { version = "0.5.2", features = ["cors"] }
 
+[patch.crates-io]
+sctp-proto = { git = "https://github.com/algesten/sctp-proto.git", branch = "main" }
+
 [features]
 default = []
 vaapi = []

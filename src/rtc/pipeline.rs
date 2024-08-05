@@ -61,7 +61,6 @@ use std::sync::Arc;
 use gstreamer::prelude::*;
 use gstreamer::{element_error, ElementFactory, Pipeline, State};
 
-use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::Notify;
 
@@ -94,12 +93,12 @@ impl StatisticsOverlay {
     }
 }
 
-pub fn start_pipeline(
+pub async fn start_pipeline(
     bitrate: u32,
     startx: u32,
     show_mouse: bool,
     mut control_rx: UnboundedReceiver<GStreamerControlMessage>,
-    buffer_tx: UnboundedSender<(Vec<u8>, u64)>,
+    buffer_tx: UnboundedSender<Vec<u8>>,
     waker: Arc<Notify>,
 ) {
     #[cfg(target_os = "linux")]
@@ -175,7 +174,7 @@ pub fn start_pipeline(
     #[cfg(not(feature = "vaapi"))]
     let enc = ElementFactory::make("x264enc")
         //.property("qos", true)
-        .property("threads", &4u32)
+        .property("threads", 8u32)
         .property("aud", false)
         .property("b-adapt", false)
         .property("bframes", 0u32)
@@ -187,7 +186,7 @@ pub fn start_pipeline(
         .property_from_str("pass", "cbr")
         .property_from_str("speed-preset", "veryfast")
         .property_from_str("tune", "zerolatency")
-        .property("bitrate", bitrate)
+        .property("bitrate", 250u32)
         .build()
         .unwrap();
 
@@ -203,7 +202,7 @@ pub fn start_pipeline(
         .property("target-usage", 6u32)
         .property_from_str("rate-control", "cbr")
         .property_from_str("mbbrc", "disabled")
-        .property("bitrate", bitrate)
+        .property("bitrate", 250u32)
         .build()
         .unwrap();
 
@@ -306,9 +305,7 @@ pub fn start_pipeline(
 
                 // we can .ok() this, because if it DOES fail, the thread will be terminated
                 // after the latest `timed_pop` expires
-                buffer_tx
-                    .send((packet.to_vec(), buffer.pts().unwrap().useconds()))
-                    .ok();
+                buffer_tx.send(packet.to_vec()).ok();
                 waker.notify_one();
                 Ok(gstreamer::FlowSuccess::Ok)
             })
@@ -349,68 +346,41 @@ pub fn start_pipeline(
     let mut stats = StatisticsOverlay::new();
 
     // Wait until error or EOS
-    let bus = pipeline.bus().unwrap();
-    'outer: loop {
-        let msg = bus.timed_pop(gstreamer::ClockTime::MSECOND);
-        while let Ok(msg) = control_rx.try_recv() {
-            match msg {
-                GStreamerControlMessage::Stop => {
-                    println!("GStreamer thread received termination signal!");
-                    break 'outer;
-                }
-                GStreamerControlMessage::RequestKeyFrame => {
-                    println!("Forcing keyframe");
-                    let force_keyframe_event =
-                        gstreamer::Structure::builder("GstForceKeyUnit").build();
-
-                    // Send the event to the encoder element
-                    enc.send_event(gstreamer::event::CustomDownstream::new(
-                        force_keyframe_event,
-                    ));
-                }
-                GStreamerControlMessage::Bitrate(bitrate) => {
-                    stats.bitrate = Some(bitrate);
-                    stats.render_to(&textoverlay);
-                    enc.set_property("bitrate", bitrate);
-                    #[cfg(feature = "vaapi")]
-                    enc.set_property(
-                        "cpb-size",
-                        ((bitrate as f64 + 60.0 - 1.0) / 60.0 * 1.5).floor() as u32,
-                    );
-                }
-                GStreamerControlMessage::Stats { rtt, loss } => {
-                    if let Some(rtt) = rtt {
-                        stats.rtt = Some(rtt);
-                    }
-                    if let Some(loss) = loss {
-                        stats.loss = Some(loss);
-                    }
-                    stats.render_to(&textoverlay);
-                }
+    //let bus = pipeline.bus().unwrap();
+    while let Some(msg) = control_rx.recv().await {
+        match msg {
+            GStreamerControlMessage::Stop => {
+                println!("GStreamer thread received termination signal!");
+                break;
             }
-        }
+            GStreamerControlMessage::RequestKeyFrame => {
+                println!("Forcing keyframe");
+                let force_keyframe_event = gstreamer::Structure::builder("GstForceKeyUnit").build();
 
-        if let Err(TryRecvError::Disconnected) = control_rx.try_recv() {
-            println!(
-                "GStreamer control message channel has disconnected. Thread will be terminated."
-            );
-            break;
-        }
-
-        if let Some(msg) = msg {
-            use gstreamer::MessageView;
-            match msg.view() {
-                MessageView::Eos(..) => break,
-                MessageView::Error(err) => {
-                    eprintln!(
-                        "Error received from element {:?}: {}",
-                        err.src().map(|s| s.path_string()),
-                        err.error()
-                    );
-                    eprintln!("Debugging information: {:?}", err.debug());
-                    break;
+                // Send the event to the encoder element
+                enc.send_event(gstreamer::event::CustomDownstream::new(
+                    force_keyframe_event,
+                ));
+            }
+            GStreamerControlMessage::Bitrate(bitrate) => {
+                stats.bitrate = Some(bitrate);
+                stats.render_to(&textoverlay);
+                //#[cfg(not(feature = "vaapi"))]
+                enc.set_property("bitrate", bitrate);
+                #[cfg(feature = "vaapi")]
+                enc.set_property(
+                    "cpb-size",
+                    ((bitrate as f64 + 60.0 - 1.0) / 60.0 * 1.5).floor() as u32,
+                );
+            }
+            GStreamerControlMessage::Stats { rtt, loss } => {
+                if let Some(rtt) = rtt {
+                    stats.rtt = Some(rtt);
                 }
-                _ => (),
+                if let Some(loss) = loss {
+                    stats.loss = Some(loss);
+                }
+                stats.render_to(&textoverlay);
             }
         }
     }
