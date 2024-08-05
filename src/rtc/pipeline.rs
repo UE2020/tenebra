@@ -94,7 +94,6 @@ impl StatisticsOverlay {
 }
 
 pub async fn start_pipeline(
-    bitrate: u32,
     startx: u32,
     show_mouse: bool,
     mut control_rx: UnboundedReceiver<GStreamerControlMessage>,

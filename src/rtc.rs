@@ -167,7 +167,6 @@ pub async fn run(
                         });
                         let waker_clone = waker.clone();
                         tokio::task::spawn(pipeline::start_pipeline(
-                            state.bitrate,
                             state.startx,
                             offer.show_mouse,
                             control_rx,
@@ -193,7 +192,7 @@ pub async fn run(
                     Event::EgressBitrateEstimate(
                         BweKind::Twcc(bitrate) | BweKind::Remb(_, bitrate),
                     ) => {
-                        let bwe = (bitrate.as_u64() / 1000) as u32;
+                        let bwe = (bitrate.as_u64() / 1000).min(state.bitrate as u64 + 3000) as u32;
                         for gstreamer in gstreamers.iter_mut() {
                             gstreamer
                                 .control_tx
