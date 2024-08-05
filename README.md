@@ -4,9 +4,9 @@ Tenebra is a video-streaming server written in Rust (you will need a Rust compil
 
 ## Usage
 
-Tenebra uses GStreamer to encode an RTP H.264 stream, so GStreamer's runtime utilities must be installed on your system for Tenebra to work.
+Tenebra uses GStreamer to encode an RTP H.264 stream, so GStreamer's runtime utilities must be installed on your system for Tenebra to work. GStreamer should be available using your package manager. On MacOS, reference the hyperlink below.
 
-[GStreamer Installs](https://gstreamer.freedesktop.org/download/) <- install the RUNTIME version
+[GStreamer Installs](https://gstreamer.freedesktop.org/download/) <- install the development and runtime libraries
 
 After the server is built with `cargo build --release`, you may run it:
 ```
