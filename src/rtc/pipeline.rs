@@ -261,7 +261,7 @@ pub async fn start_pipeline(
         // This can be set after linking the two objects, because format negotiation between
         // both elements will happen during pre-rolling of the pipeline.
         .caps(&h264_caps)
-        .drop(true)
+        //.drop(true)
         .build();
 
     // appsink callback - send rtp packets to the streaming thread

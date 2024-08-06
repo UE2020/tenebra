@@ -251,7 +251,7 @@ pub async fn run(
                     Err(e) => match e.kind() {
                         ErrorKind::ConnectionReset => continue,
                         _ => {
-                            println!("[TransportWebrtc] network error {:?}", e);
+                            println!("webrtc network error {:?}", e);
                             break Err(e.into());
                         }
                     }

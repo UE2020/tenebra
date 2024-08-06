@@ -21,14 +21,30 @@ EXECUTABLE_BASENAME=$(basename "$EXECUTABLE")
 # Change to the destination folder
 cd "$DESTINATION" || exit
 
-# Use ldd to list the dependencies and copy them to the destination folder
-ldd "$EXECUTABLE_BASENAME" | grep '=>' | awk '{print $3}' | xargs -I '{}' cp -v '{}' .
+# Function to find and copy dependencies
+find_and_copy_dependencies() {
+    local file=$1
+    local dependencies=$(ldd "$file" | grep '=>' | awk '{print $3}' | sort -u)
 
-# Use ldd to also handle dependencies that are not explicitly linked with '=>'
-ldd "$EXECUTABLE_BASENAME" | grep -o '/lib.*\.so.[0-9]*' | xargs -I '{}' cp -v '{}' .
+    for dep in $dependencies; {
+        # Only copy if the dependency exists and is not already in the destination
+        if [ -e "$dep" ] && [ ! -e "$(basename "$dep")" ]; then
+            cp -v "$dep" .
+            # Recursively find dependencies of the copied library
+            find_and_copy_dependencies "$(basename "$dep")"
+        fi
+    }
+}
 
-# Change the RPATH of the executable to look for libraries in its own directory
-patchelf --set-rpath '$ORIGIN' "$EXECUTABLE_BASENAME"
+# Start by copying the dependencies of the main executable
+find_and_copy_dependencies "$EXECUTABLE_BASENAME"
+
+# Use patchelf to set the RPATH of the executable and all the copied libraries
+for file in *; do
+    if file "$file" | grep -q 'ELF'; then
+        patchelf --set-rpath '$ORIGIN' "$file"
+    fi
+done
 
 echo "Executable and its dependencies have been copied to $DESTINATION"
-echo "Executable's RPATH has been set to look for libraries in its own directory"
+echo "RPATH has been set to look for libraries in its own directory"
