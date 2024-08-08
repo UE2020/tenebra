@@ -208,7 +208,7 @@ pub async fn start_pipeline(
     println!("Enc: {:?}", enc);
 
     let h264_caps = gstreamer::Caps::builder("video/x-h264")
-        .field("profile", "main")
+        .field("profile", "baseline")
         .field("stream-format", "byte-stream")
         .build();
     let h264_capsfilter = ElementFactory::make("capsfilter")
