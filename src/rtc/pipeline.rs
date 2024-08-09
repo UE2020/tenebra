@@ -99,7 +99,7 @@ pub async fn start_pipeline(
     mut control_rx: UnboundedReceiver<GStreamerControlMessage>,
     buffer_tx: UnboundedSender<Vec<u8>>,
     waker: Arc<Notify>,
-) {
+) -> anyhow::Result<()> {
     #[cfg(target_os = "linux")]
     let src = ElementFactory::make("ximagesrc")
         .property("use-damage", false)
@@ -107,21 +107,18 @@ pub async fn start_pipeline(
         .property("show-pointer", show_mouse)
         .property("blocksize", 16384u32)
         .property("remote", true)
-        .build()
-        .unwrap();
+        .build()?;
 
     #[cfg(target_os = "macos")]
     let src = ElementFactory::make("avfvideosrc")
         .property("capture-screen", true)
         .property("capture-screen-cursor", show_mouse)
-        .build()
-        .unwrap();
+        .build()?;
 
     #[cfg(target_os = "windows")]
     let src = ElementFactory::make("d3d12screencapturesrc")
         .property("show-cursor", show_mouse)
-        .build()
-        .unwrap();
+        .build()?;
 
     let textoverlay = ElementFactory::make("textoverlay")
         .property("text", "")
@@ -132,19 +129,17 @@ pub async fn start_pipeline(
         //.property("draw-shadow", false)
         .property("ypad", 3i32)
         //.property("color", u32::from_ne_bytes([0, 0, 255, 255]))
-        .build()
-        .unwrap();
+        .build()?;
 
     let video_caps = gstreamer::Caps::builder("video/x-raw")
         .field("framerate", gstreamer::Fraction::new(60, 1))
         .build();
     let video_capsfilter = ElementFactory::make("capsfilter")
         .property("caps", &video_caps)
-        .build()
-        .unwrap();
+        .build()?;
 
     #[cfg(not(feature = "vaapi"))]
-    let videoconvert = ElementFactory::make("videoconvert").build().unwrap();
+    let videoconvert = ElementFactory::make("videoconvert").build()?;
 
     #[cfg(not(feature = "vaapi"))]
     let format_caps = gstreamer::Caps::builder("video/x-raw")
@@ -154,21 +149,24 @@ pub async fn start_pipeline(
     #[cfg(feature = "vaapi")]
     let videoconvert = ElementFactory::make("vapostproc")
         .property_from_str("scale-method", "fast")
-        .build()
-        .unwrap();
+        .build()?;
 
     #[cfg(feature = "vaapi")]
     let format_caps = {
         let caps_str = "video/x-raw(memory:VAMemory),format=NV12";
-        let caps = gstreamer::Caps::from_str(caps_str).unwrap();
+        let caps = gstreamer::Caps::from_str(caps_str)?;
         caps
     };
 
     println!("Format caps: {}", format_caps);
     let format_capsfilter = ElementFactory::make("capsfilter")
         .property("caps", &format_caps)
-        .build()
-        .unwrap();
+        .build()?;
+
+    // this makes the stream smoother on VAAPI, but on x264enc it causes severe latency
+    // especially when the CPU is under load (such as when playing minecraft)
+    #[cfg(feature = "vaapi")]
+    let conversion_queue = ElementFactory::make("queue").build()?;
 
     #[cfg(not(feature = "vaapi"))]
     let enc = ElementFactory::make("x264enc")
@@ -186,8 +184,7 @@ pub async fn start_pipeline(
         .property_from_str("speed-preset", "veryfast")
         .property_from_str("tune", "zerolatency")
         .property("bitrate", 250u32)
-        .build()
-        .unwrap();
+        .build()?;
 
     #[cfg(feature = "vaapi")]
     let enc = ElementFactory::make("vah264enc")
@@ -202,19 +199,17 @@ pub async fn start_pipeline(
         .property_from_str("rate-control", "cbr")
         .property_from_str("mbbrc", "disabled")
         .property("bitrate", 250u32)
-        .build()
-        .unwrap();
+        .build()?;
 
     println!("Enc: {:?}", enc);
 
     let h264_caps = gstreamer::Caps::builder("video/x-h264")
-        .field("profile", "baseline")
+        .field("profile", "high")
         .field("stream-format", "byte-stream")
         .build();
     let h264_capsfilter = ElementFactory::make("capsfilter")
         .property("caps", &h264_caps)
-        .build()
-        .unwrap();
+        .build()?;
 
     // let rtph264pay = ElementFactory::make("rtph264pay")
     //     .property("mtu", &1000u32)
@@ -223,7 +218,7 @@ pub async fn start_pipeline(
     //     .property_from_str("aggregate-mode", "zero-latency")
     //     .property("config-interval", -1)
     //     .build()
-    //     .unwrap();
+    //     ?;
 
     // let fecenc = ElementFactory::make("rtpulpfecenc")
     //     .property("pt", ulp_pt as u32)
@@ -231,7 +226,7 @@ pub async fn start_pipeline(
     //     .property("percentage", 100u32)
     //     .property("percentage-important", 100u32)
     //     .build()
-    //     .unwrap();
+    //     ?;
 
     // let redenc = ElementFactory::make("rtpredenc")
     //     // this doesn't actually matter because webrtc-rs rewrites the pt and ssrc
@@ -239,7 +234,7 @@ pub async fn start_pipeline(
     //     .property("allow-no-red-blocks", true)
     //     //.property("distance", 2u32)
     //     .build()
-    //     .unwrap();
+    //     ?;
 
     // // let rtp_caps = gstreamer::Caps::builder("application/x-rtp")
     // //     .field("media", "video")
@@ -253,7 +248,7 @@ pub async fn start_pipeline(
     // // let rtp_capsfilter = ElementFactory::make("capsfilter")
     // //     .property("caps", &rtp_caps)
     // //     .build()
-    // //     .unwrap();
+    // //     ?;
 
     let appsink = gstreamer_app::AppSink::builder()
         // Tell the appsink what format we want. It will then be the audiotestsrc's job to
@@ -315,37 +310,38 @@ pub async fn start_pipeline(
     let pipeline = Pipeline::default();
 
     // Add elements to the pipeline
-    pipeline
-        .add_many([
-            &src,
-            &video_capsfilter,
-            &textoverlay,
-            &videoconvert,
-            &format_capsfilter,
-            &enc,
-            &h264_capsfilter,
-            appsink.upcast_ref(),
-        ])
-        .unwrap();
-    gstreamer::Element::link_many([
+    pipeline.add_many([
         &src,
         &video_capsfilter,
         &textoverlay,
+        #[cfg(feature = "vaapi")]
+        &conversion_queue,
         &videoconvert,
         &format_capsfilter,
         &enc,
         &h264_capsfilter,
         appsink.upcast_ref(),
-    ])
-    .unwrap();
+    ])?;
+    gstreamer::Element::link_many([
+        &src,
+        &video_capsfilter,
+        &textoverlay,
+        #[cfg(feature = "vaapi")]
+        &conversion_queue,
+        &videoconvert,
+        &format_capsfilter,
+        &enc,
+        &h264_capsfilter,
+        appsink.upcast_ref(),
+    ])?;
 
     // Set the pipeline to playing state
-    pipeline.set_state(State::Playing).unwrap();
+    pipeline.set_state(State::Playing)?;
 
     let mut stats = StatisticsOverlay::new();
 
     // Wait until error or EOS
-    //let bus = pipeline.bus().unwrap();
+    //let bus = pipeline.bus()?;
     while let Some(msg) = control_rx.recv().await {
         match msg {
             GStreamerControlMessage::Stop => {
@@ -385,5 +381,7 @@ pub async fn start_pipeline(
     }
 
     // Clean up
-    pipeline.set_state(State::Null).unwrap();
+    pipeline.set_state(State::Null)?;
+
+    Ok(())
 }

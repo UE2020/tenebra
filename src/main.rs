@@ -170,7 +170,7 @@ async fn offer(
         // needed for zero-latency streaming
         .set_extension_map(exts)
         .set_send_buffer_video(1000)
-        .enable_bwe(Some(Bitrate::kbps(250)))
+        .enable_bwe(Some(Bitrate::kbps(3000)))
         .set_stats_interval(Some(Duration::from_secs(1)))
         .build();
 
@@ -316,9 +316,7 @@ async fn main() -> Result<()> {
             startx,
             password: password.to_string(),
         });
-    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port))
-        .await
-        .unwrap();
+    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
     spawn(async { axum::serve(listener, app).await });
 
     let mut enigo = Enigo::new(&Settings {

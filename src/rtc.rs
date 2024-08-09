@@ -192,7 +192,7 @@ pub async fn run(
                     Event::EgressBitrateEstimate(
                         BweKind::Twcc(bitrate) | BweKind::Remb(_, bitrate),
                     ) => {
-                        let bwe = (bitrate.as_u64() / 1000).clamp(250, state.bitrate as u64 + 3000)
+                        let bwe = (bitrate.as_u64() / 1000).clamp(3000, state.bitrate as u64 + 3000)
                             as u32;
                         for gstreamer in gstreamers.iter_mut() {
                             gstreamer
