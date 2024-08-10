@@ -165,13 +165,13 @@ pub async fn start_pipeline(
 
     // this makes the stream smoother on VAAPI, but on x264enc it causes severe latency
     // especially when the CPU is under load (such as when playing minecraft)
-    #[cfg(feature = "vaapi")]
-    let conversion_queue = ElementFactory::make("queue").build()?;
+    // #[cfg(feature = "vaapi")]
+    // let conversion_queue = ElementFactory::make("queue").build()?;
 
     #[cfg(not(feature = "vaapi"))]
     let enc = ElementFactory::make("x264enc")
         //.property("qos", true)
-        .property("threads", 8u32)
+        .property("threads", 4u32)
         .property("aud", false)
         .property("b-adapt", false)
         .property("bframes", 0u32)
@@ -183,7 +183,7 @@ pub async fn start_pipeline(
         .property_from_str("pass", "cbr")
         .property_from_str("speed-preset", "veryfast")
         .property_from_str("tune", "zerolatency")
-        .property("bitrate", 250u32)
+        .property("bitrate", 4000u32)
         .build()?;
 
     #[cfg(feature = "vaapi")]
@@ -198,7 +198,7 @@ pub async fn start_pipeline(
         .property("target-usage", 6u32)
         .property_from_str("rate-control", "cbr")
         .property_from_str("mbbrc", "disabled")
-        .property("bitrate", 250u32)
+        .property("bitrate", 4000u32)
         .build()?;
 
     println!("Enc: {:?}", enc);
@@ -314,8 +314,6 @@ pub async fn start_pipeline(
         &src,
         &video_capsfilter,
         &textoverlay,
-        #[cfg(feature = "vaapi")]
-        &conversion_queue,
         &videoconvert,
         &format_capsfilter,
         &enc,
@@ -326,8 +324,6 @@ pub async fn start_pipeline(
         &src,
         &video_capsfilter,
         &textoverlay,
-        #[cfg(feature = "vaapi")]
-        &conversion_queue,
         &videoconvert,
         &format_capsfilter,
         &enc,
