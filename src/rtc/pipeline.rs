@@ -74,8 +74,12 @@ struct StatisticsOverlay {
 }
 
 impl StatisticsOverlay {
-    fn new() -> Self {
-        StatisticsOverlay::default()
+    const fn new() -> Self {
+        StatisticsOverlay {
+            bitrate: None,
+            rtt: None,
+            loss: None,
+        }
     }
 
     fn render_to(&self, textoverlay: &gstreamer::Element) {

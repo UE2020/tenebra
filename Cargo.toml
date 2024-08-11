@@ -20,14 +20,11 @@ local-ip-address = "0.6.1"
 rand = "0.8.5"
 serde = "1.0.197"
 serde_json = "1.0.115"
-str0m = { version = "0.6.1" }
+str0m = { version = "0.6.2" }
 stun_codec = "0.3.5"
 sysinfo = "0.30.13"
 tokio = { version = "1.37.0", features = ["full"] }
 tower-http = { version = "0.5.2", features = ["cors"] }
-
-[patch.crates-io]
-sctp-proto = { git = "https://github.com/algesten/sctp-proto.git", branch = "main" }
 
 [features]
 default = []
