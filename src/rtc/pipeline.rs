@@ -183,7 +183,7 @@ pub async fn start_pipeline(
         .property_from_str("pass", "cbr")
         .property_from_str("speed-preset", "veryfast")
         .property_from_str("tune", "zerolatency")
-        .property("bitrate", 4000u32)
+        .property("bitrate", 250u32)
         .build()?;
 
     #[cfg(feature = "vaapi")]
@@ -210,45 +210,6 @@ pub async fn start_pipeline(
     let h264_capsfilter = ElementFactory::make("capsfilter")
         .property("caps", &h264_caps)
         .build()?;
-
-    // let rtph264pay = ElementFactory::make("rtph264pay")
-    //     .property("mtu", &1000u32)
-    //     .property("pt", h264_pt as u32)
-    //     .property("ssrc", ssrc)
-    //     .property_from_str("aggregate-mode", "zero-latency")
-    //     .property("config-interval", -1)
-    //     .build()
-    //     ?;
-
-    // let fecenc = ElementFactory::make("rtpulpfecenc")
-    //     .property("pt", ulp_pt as u32)
-    //     .property("multipacket", true)
-    //     .property("percentage", 100u32)
-    //     .property("percentage-important", 100u32)
-    //     .build()
-    //     ?;
-
-    // let redenc = ElementFactory::make("rtpredenc")
-    //     // this doesn't actually matter because webrtc-rs rewrites the pt and ssrc
-    //     .property("pt", 112i32)
-    //     .property("allow-no-red-blocks", true)
-    //     //.property("distance", 2u32)
-    //     .build()
-    //     ?;
-
-    // // let rtp_caps = gstreamer::Caps::builder("application/x-rtp")
-    // //     .field("media", "video")
-    // //     .field("clock-rate", 90000)
-    // //     .field("encoding-name", "H264")
-    // //     .field("payload", 102)
-    // //     .field("rtcp-fb-nack-pli", true)
-    // //     .field("rtcp-fb-ccm-fir", true)
-    // //     .field("rtcp-fb-x-gstreamer-fir-as-repair", true)
-    // //     .build();
-    // // let rtp_capsfilter = ElementFactory::make("capsfilter")
-    // //     .property("caps", &rtp_caps)
-    // //     .build()
-    // //     ?;
 
     let appsink = gstreamer_app::AppSink::builder()
         // Tell the appsink what format we want. It will then be the audiotestsrc's job to
@@ -336,8 +297,6 @@ pub async fn start_pipeline(
 
     let mut stats = StatisticsOverlay::new();
 
-    // Wait until error or EOS
-    //let bus = pipeline.bus()?;
     while let Some(msg) = control_rx.recv().await {
         match msg {
             GStreamerControlMessage::Stop => {
