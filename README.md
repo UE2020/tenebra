@@ -22,5 +22,19 @@ After the server is built with `cargo build --release`, you may run it:
 ./target/release/tenebra "password" 8080 4000
                            ^         ^    ^
                            |         |    ---|
-                     <password>   <port>  <bitrate>
+                     <password>   <port>  <bitrate (optional)>
 ```
+
+## Using UPnP
+
+Tenebra can portforward its built-in signalling server automatically using the UPnP (Universal Plug N Play) protocol. This can be achieved by compiling with the `upnp` feature flag. Do not use UPnP if you have already added a manual portforwarding rule.
+
+### Common issues
+
+#### UPnP portforwarding rule disappeares after a while
+
+Some routers automatically clean up unused UPnP portforwarding rules. In this case, this is harmful because tenebra cleans up its own rules when it's stopped, and because the signalling server may run for a very long time without receiving any requests. On my Verizon Fios router I was able to disable this functionality by unticking the box under "Advanced" > "Universal Plug and Play" > "Enable Automatic Cleanup of Old Unused UPnP Services".
+
+#### UPnP portforwarding rule exists, but does not work
+
+The UPnP portforwarding rule is overrided by any existing manual rule for the signalling server's port. Remove any conflicting manually added rules, or just disable the `upnp` feature flag to stop using UPnP.
