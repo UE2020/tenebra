@@ -60,9 +60,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-use igd_next::aio::tokio::search_gateway;
 use local_ip_address::local_ip;
-use tokio::{net::UdpSocket, signal::ctrl_c, sync::mpsc::unbounded_channel};
+use tokio::{net::UdpSocket, sync::mpsc::unbounded_channel};
 
 use anyhow::{bail, Result};
 
@@ -326,8 +325,10 @@ async fn main() -> Result<()> {
     spawn(async { axum::serve(listener, app).await });
 
     // We can try to forward the server with UPnP
-    match search_gateway(Default::default()).await {
+    #[cfg(feature = "upnp")]
+    match igd_next::aio::tokio::search_gateway(Default::default()).await {
         Ok(gateway) => {
+            use tokio::signal::ctrl_c;
             let local_addr = SocketAddr::new(local_ip()?, 8080u16);
             match gateway
                 .add_any_port(
@@ -342,9 +343,10 @@ async fn main() -> Result<()> {
                     println!("There was an error! {err}");
                 }
                 Ok(port) => {
+                    let global_ip = gateway.get_external_ip().await.unwrap();
+                    let global_addr = SocketAddr::new(global_ip, port);
                     println!(
-                        "The tenebra service has been portforwarded.\nThe external port is {}",
-                        port
+                        "The tenebra service has been portforwarded.\nThe external address is {global_addr}"
                     );
 
                     spawn(async move {
@@ -383,6 +385,8 @@ async fn main() -> Result<()> {
     .unwrap();
 
     let mut last_capslock = Instant::now();
+
+    println!("READY!");
 
     while let Some(msg) = rx.recv().await {
         match msg {

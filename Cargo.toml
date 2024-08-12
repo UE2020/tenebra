@@ -8,7 +8,6 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.81"
 askama = "0.12.1"
-async-trait = "0.1.80"
 axum = "0.7.5"
 axum-macros = "0.4.1"
 base64 = "0.22.0"
@@ -16,7 +15,7 @@ bytecodec = "0.4.15"
 enigo = "0.2.1"
 gstreamer = "0.22.6"
 gstreamer-app = "0.22.6"
-igd-next = { version = "0.14.3", features = ["aio_tokio"] }
+igd-next = { version = "0.14.3", features = ["aio_tokio"], optional = true }
 local-ip-address = "0.6.1"
 rand = "0.8.5"
 serde = "1.0.197"
@@ -30,3 +29,4 @@ tower-http = { version = "0.5.2", features = ["cors"] }
 [features]
 default = []
 vaapi = []
+upnp = ["dep:igd-next"]
