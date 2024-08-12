@@ -60,8 +60,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+use igd_next::aio::tokio::search_gateway;
 use local_ip_address::local_ip;
-use tokio::{net::UdpSocket, sync::mpsc::unbounded_channel};
+use tokio::{net::UdpSocket, signal::ctrl_c, sync::mpsc::unbounded_channel};
 
 use anyhow::{bail, Result};
 
@@ -323,6 +324,57 @@ async fn main() -> Result<()> {
         });
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
     spawn(async { axum::serve(listener, app).await });
+
+    // We can try to forward the server with UPnP
+    match search_gateway(Default::default()).await {
+        Ok(gateway) => {
+            let local_addr = SocketAddr::new(local_ip()?, 8080u16);
+            match gateway
+                .add_any_port(
+                    igd_next::PortMappingProtocol::TCP,
+                    local_addr,
+                    0,
+                    "add_port example",
+                )
+                .await
+            {
+                Err(ref err) => {
+                    println!("There was an error! {err}");
+                }
+                Ok(port) => {
+                    println!(
+                        "The tenebra service has been portforwarded.\nThe external port is {}",
+                        port
+                    );
+
+                    spawn(async move {
+                        #[cfg(target_family = "unix")]
+                        let mut stream = tokio::signal::unix::signal(
+                            tokio::signal::unix::SignalKind::terminate(),
+                        )
+                        .unwrap();
+
+                        #[cfg(target_family = "unix")]
+                        tokio::select! {
+                            _ = ctrl_c() => {},
+                            _ = stream.recv() => {},
+                        }
+
+                        #[cfg(not(target_family = "unix"))]
+                        ctrl_c().await.unwrap();
+
+                        gateway
+                            .remove_port(igd_next::PortMappingProtocol::TCP, port)
+                            .await
+                            .unwrap();
+                        println!("Port mapping removed. Exiting...");
+                        std::process::exit(0);
+                    });
+                }
+            }
+        }
+        Err(e) => println!("Error obtaining UPnP gateway: {}", e),
+    }
 
     let mut enigo = Enigo::new(&Settings {
         linux_delay: 1,

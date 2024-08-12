@@ -16,6 +16,7 @@ bytecodec = "0.4.15"
 enigo = "0.2.1"
 gstreamer = "0.22.6"
 gstreamer-app = "0.22.6"
+igd-next = { version = "0.14.3", features = ["aio_tokio"] }
 local-ip-address = "0.6.1"
 rand = "0.8.5"
 serde = "1.0.197"
