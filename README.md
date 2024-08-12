@@ -38,3 +38,7 @@ Some routers automatically clean up unused UPnP portforwarding rules. In this ca
 #### UPnP portforwarding rule exists, but does not work
 
 The UPnP portforwarding rule is overrided by any existing manual rule for the signalling server's port. Remove any conflicting manually added rules, or just disable the `upnp` feature flag to stop using UPnP.
+
+## Using VA-API
+
+On Linux, VA-API can be used to perform hardware accelerated H.264 encoding. This can be enabled by compiling with the `vaapi` feature flag. The `va` GStreamer plugin (NOT the `vaapi` plugin - this one is broken) must be installed and usable.
