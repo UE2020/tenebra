@@ -366,7 +366,7 @@ async fn main() -> Result<()> {
                         gateway
                             .remove_port(igd_next::PortMappingProtocol::TCP, port)
                             .await
-                            .unwrap();
+                            .ok();
                         println!("Port mapping removed. Exiting...");
                         std::process::exit(0);
                     });
