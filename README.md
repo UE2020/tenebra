@@ -8,7 +8,7 @@ Tenebra is a video-streaming server written in Rust (you will need a Rust compil
 | --------    | ------------- |
 | Linux/X11 | Excellent |
 | Windows | Good (performance may be poor) |
-| Mac | Okay (some keyboard combinations do not work) |
+| Mac | Okay (some keyboard combinations do not work, see [enigo issue](https://github.com/enigo-rs/enigo/issues/307)) |
 | Linux/Wayland | None; pipewiresrc is too slow |
 
 ## Usage
