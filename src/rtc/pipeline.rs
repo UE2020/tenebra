@@ -207,8 +207,14 @@ pub async fn start_pipeline(
 
     println!("Enc: {:?}", enc);
 
+    #[cfg(feature = "vaapi")]
     let h264_caps = gstreamer::Caps::builder("video/x-h264")
         .field("profile", "high")
+        .field("stream-format", "byte-stream")
+        .build();
+    #[cfg(not(feature = "vaapi"))]
+    let h264_caps = gstreamer::Caps::builder("video/x-h264")
+        .field("profile", "baseline")
         .field("stream-format", "byte-stream")
         .build();
     let h264_capsfilter = ElementFactory::make("capsfilter")
@@ -262,8 +268,7 @@ pub async fn start_pipeline(
 
                 let packet = map.as_slice();
 
-                // we can .ok() this, because if it DOES fail, the thread will be terminated
-                // after the latest `timed_pop` expires
+                // we can .ok() this, because if it DOES fail, the thread will be terminated soon
                 buffer_tx.send(packet.to_vec()).ok();
                 waker.notify_one();
                 Ok(gstreamer::FlowSuccess::Ok)
@@ -285,6 +290,8 @@ pub async fn start_pipeline(
         &h264_capsfilter,
         appsink.upcast_ref(),
     ])?;
+
+    // Link the elements
     gstreamer::Element::link_many([
         &src,
         &video_capsfilter,
