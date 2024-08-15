@@ -25,7 +25,6 @@ stun_codec = "0.3.5"
 sysinfo = "0.30.13"
 tokio = { version = "1.37.0", features = ["full"] }
 tower-http = { version = "0.5.2", features = ["cors"] }
-x11rb = { version = "0.13.1", features = ["xinput"] }
 
 [build-dependencies]
 cc = "1.0"
