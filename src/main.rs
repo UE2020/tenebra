@@ -95,6 +95,7 @@ use tokio::{spawn, sync::mpsc::UnboundedSender};
 
 mod rtc;
 mod stun;
+mod touch;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct InputCommand {
@@ -103,6 +104,7 @@ pub struct InputCommand {
     pub y: Option<f32>,
     pub button: Option<u8>,
     pub key: Option<String>,
+    pub id: Option<i32>,
 }
 
 #[derive(Deserialize, Clone)]
@@ -351,15 +353,21 @@ async fn main() -> Result<()> {
 
                     spawn(async move {
                         #[cfg(target_family = "unix")]
-                        let mut stream = tokio::signal::unix::signal(
+                        let mut sigterm_stream = tokio::signal::unix::signal(
                             tokio::signal::unix::SignalKind::terminate(),
                         )
                         .unwrap();
 
                         #[cfg(target_family = "unix")]
+                        let mut sighup_stream =
+                            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup())
+                                .unwrap();
+
+                        #[cfg(target_family = "unix")]
                         tokio::select! {
                             _ = ctrl_c() => {},
-                            _ = stream.recv() => {},
+                            _ = sigterm_stream.recv() => {},
+                            _ = sighup_stream.recv() => {},
                         }
 
                         #[cfg(not(target_family = "unix"))]
@@ -384,12 +392,28 @@ async fn main() -> Result<()> {
     })
     .unwrap();
 
+    let (w, h) = enigo.main_display()?;
+    #[cfg(target_os = "linux")]
+    let mut multi_touch = touch::MultiTouchSimulator::new(w, h);
+
     let mut last_capslock = Instant::now();
 
     println!("READY!");
 
     while let Some(msg) = rx.recv().await {
         match msg {
+            #[cfg(target_os = "linux")]
+            InputCommand {
+                r#type,
+                x: Some(x),
+                y: Some(y),
+                id: Some(id),
+                ..
+            } => match r#type.as_str() {
+                "touchstart" => multi_touch.touch_down(id, x as _, y as _, id),
+                "touchmove" => multi_touch.touch_move(id, x as _, y as _),
+                _ => {}
+            },
             InputCommand {
                 r#type,
                 x: Some(x),
@@ -410,6 +434,15 @@ async fn main() -> Result<()> {
                         .scroll((y / 120.0) as i32, enigo::Axis::Vertical)
                         .unwrap();
                 }
+                _ => {}
+            },
+            #[cfg(target_os = "linux")]
+            InputCommand {
+                r#type,
+                id: Some(id),
+                ..
+            } => match r#type.as_str() {
+                "touchend" => multi_touch.touch_up(id),
                 _ => {}
             },
             InputCommand {

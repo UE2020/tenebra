@@ -265,10 +265,6 @@ pub async fn run(
         };
 
         rtc.handle_input(input)?;
-
-        // let input = match tokio::time::timeout(timeout, socket.recv_from(&mut buf)).await {};
-
-        // Input is either a Timeout or Receive of data. Both drive the state forward.
     };
 
     for gstreamer in gstreamers {
