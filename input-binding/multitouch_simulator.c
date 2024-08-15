@@ -1,10 +1,9 @@
-#include <errno.h>
 #include <fcntl.h>
 #include <linux/uinput.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <stdlib.h>
 
 // Define a struct to hold the state for the multitouch simulator
 typedef struct {
@@ -12,9 +11,8 @@ typedef struct {
 } MultiTouchSimulator;
 
 // Function to setup the device
-void setup_device(MultiTouchSimulator *simulator, int width, int height) {
-    struct uinput_user_dev uidev;
-    memset(&uidev, 0, sizeof(uidev));
+void setup_device(MultiTouchSimulator* simulator, int width, int height) {
+    struct uinput_user_dev uidev = {0};
 
     strncpy(uidev.name, "Multi-Touch Device", UINPUT_MAX_NAME_SIZE);
     uidev.id.bustype = BUS_USB;
@@ -39,57 +37,58 @@ void setup_device(MultiTouchSimulator *simulator, int width, int height) {
     uidev.absmin[ABS_MT_TRACKING_ID] = 0;
     uidev.absmax[ABS_MT_TRACKING_ID] = 65535;
 
-    if (write(simulator->uinput_fd, &uidev, sizeof(uidev)) < 0) {
-        fprintf(stderr, "Error setting up device: %s\n", strerror(errno));
-        exit(1);
+    if (write(simulator->uinput_fd, &uidev, sizeof(uidev)) == -1) {
+        perror("Error setting up device");
+        exit(EXIT_FAILURE);
     }
 
     ioctl(simulator->uinput_fd, UI_SET_EVBIT, EV_SYN);
     ioctl(simulator->uinput_fd, UI_SET_PROPBIT, INPUT_PROP_DIRECT);
 
-    if (ioctl(simulator->uinput_fd, UI_DEV_CREATE) < 0) {
-        fprintf(stderr, "Error creating uinput device: %s\n", strerror(errno));
-        exit(1);
+    if (ioctl(simulator->uinput_fd, UI_DEV_CREATE) == -1) {
+        perror("Error creating uinput device");
+        exit(EXIT_FAILURE);
     }
 }
 
 // Function to emit input events
 void emit_event(int uinput_fd, int type, int code, int value) {
-    struct input_event ev;
-    memset(&ev, 0, sizeof(ev));
+    struct input_event ev = {0};
     ev.type = type;
     ev.code = code;
     ev.value = value;
     ev.time.tv_sec = 0;
     ev.time.tv_usec = 0;
 
-    if (write(uinput_fd, &ev, sizeof(ev)) < 0) {
-        fprintf(stderr, "Error writing event: %s\n", strerror(errno));
-        exit(1);
+    if (write(uinput_fd, &ev, sizeof(ev)) == -1) {
+        perror("Error writing event");
+        exit(EXIT_FAILURE);
     }
 }
 
 // Function to initialize the simulator
 MultiTouchSimulator* create_simulator(int width, int height) {
-    MultiTouchSimulator *simulator = (MultiTouchSimulator*) malloc(sizeof(MultiTouchSimulator));
+    MultiTouchSimulator* simulator = (MultiTouchSimulator*) malloc(sizeof(MultiTouchSimulator));
     simulator->uinput_fd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
-    if (simulator->uinput_fd < 0) {
-        fprintf(stderr, "Error opening /dev/uinput: %s\n", strerror(errno));
-        exit(1);
+    if (simulator->uinput_fd == -1) {
+        perror("Error opening /dev/uinput");
+        exit(EXIT_FAILURE);
     }
     setup_device(simulator, width, height);
     return simulator;
 }
 
 // Function to destroy the simulator
-void destroy_simulator(MultiTouchSimulator *simulator) {
-    ioctl(simulator->uinput_fd, UI_DEV_DESTROY);
-    close(simulator->uinput_fd);
-    free(simulator);
+void destroy_simulator(MultiTouchSimulator* simulator) {
+    if (simulator) {
+        ioctl(simulator->uinput_fd, UI_DEV_DESTROY);
+        close(simulator->uinput_fd);
+        free(simulator);
+    }
 }
 
 // Function to simulate touch down
-void touch_down(MultiTouchSimulator *simulator, int slot, int x, int y, int tracking_id) {
+void touch_down(MultiTouchSimulator* simulator, int slot, int x, int y, int tracking_id) {
     emit_event(simulator->uinput_fd, EV_ABS, ABS_MT_SLOT, slot);
     emit_event(simulator->uinput_fd, EV_ABS, ABS_MT_TRACKING_ID, tracking_id);
     emit_event(simulator->uinput_fd, EV_ABS, ABS_MT_POSITION_X, x);
@@ -98,7 +97,7 @@ void touch_down(MultiTouchSimulator *simulator, int slot, int x, int y, int trac
 }
 
 // Function to simulate touch move
-void touch_move(MultiTouchSimulator *simulator, int slot, int x, int y) {
+void touch_move(MultiTouchSimulator* simulator, int slot, int x, int y) {
     emit_event(simulator->uinput_fd, EV_ABS, ABS_MT_SLOT, slot);
     emit_event(simulator->uinput_fd, EV_ABS, ABS_MT_POSITION_X, x);
     emit_event(simulator->uinput_fd, EV_ABS, ABS_MT_POSITION_Y, y);
@@ -106,7 +105,7 @@ void touch_move(MultiTouchSimulator *simulator, int slot, int x, int y) {
 }
 
 // Function to simulate touch up
-void touch_up(MultiTouchSimulator *simulator, int slot) {
+void touch_up(MultiTouchSimulator* simulator, int slot) {
     emit_event(simulator->uinput_fd, EV_ABS, ABS_MT_SLOT, slot);
     emit_event(simulator->uinput_fd, EV_ABS, ABS_MT_TRACKING_ID, -1);
     emit_event(simulator->uinput_fd, EV_SYN, SYN_REPORT, 0);
