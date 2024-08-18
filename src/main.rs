@@ -377,7 +377,7 @@ async fn main() -> Result<()> {
     tokio::task::spawn_blocking(move || do_input(rx, startx)).await??;
 
     #[cfg(not(target_os = "linux"))]
-    do_input(rx, startx)?;
+    tokio::task::block_in_place(move || do_input(rx, startx))?;
 
     Ok(())
 }

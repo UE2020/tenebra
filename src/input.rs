@@ -65,6 +65,7 @@ use enigo::{
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::UnboundedReceiver;
 
+#[cfg(target_os = "linux")]
 mod touch;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
