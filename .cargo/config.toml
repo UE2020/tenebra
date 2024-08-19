@@ -11,11 +11,7 @@ rustflags = ["-Clink-arg=-fuse-ld=lld", "-Ctarget-cpu=native"]
 # NOTE: you must install [Mach-O LLD Port](https://lld.llvm.org/MachO/index.html) on mac. you can easily do this by installing llvm which includes lld with the "brew" package manager:
 # `brew install llvm`
 [target.x86_64-apple-darwin]
-rustflags = [
-    "-C",
-    "link-arg=-fuse-ld=/usr/local/opt/llvm/bin/ld64.lld",
-    "-Ctarget-cpu=native",
-]
+rustflags = ["-Ctarget-cpu=native"]
 
 [target.aarch64-apple-darwin]
 rustflags = ["-Ctarget-cpu=native"]
