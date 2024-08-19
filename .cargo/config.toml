@@ -18,11 +18,7 @@ rustflags = [
 ]
 
 [target.aarch64-apple-darwin]
-rustflags = [
-    "-C",
-    "link-arg=-fuse-ld=/opt/homebrew/opt/llvm/bin/ld64.lld",
-    "-Ctarget-cpu=native",
-]
+rustflags = ["-Ctarget-cpu=native"]
 
 [target.x86_64-pc-windows-msvc]
 linker = "rust-lld.exe"
