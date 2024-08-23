@@ -257,7 +257,7 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
                     "ControlRight" => Key::Control,
                     "NumpadDivide" => Key::Unicode('/'),
                     #[cfg(not(target_os = "macos"))]
-                    "PrintScreen" => Key::Print,
+                    "PrintScreen" => Key::PrintScr,
                     "AltRight" => Key::Alt,
                     "Home" => Key::Home,
                     "ArrowUp" => Key::UpArrow,
