@@ -172,10 +172,7 @@ pub async fn start_pipeline(
     // #[cfg(feature = "vaapi")]
     // let conversion_queue = ElementFactory::make("queue").build()?;
 
-    #[cfg(all(
-        not(feature = "vaapi"),
-        any(target_os = "linux", target_os = "windows")
-    ))]
+    #[cfg(not(feature = "vaapi"))]
     let enc = ElementFactory::make("x264enc")
         //.property("qos", true)
         .property("threads", 4u32)
@@ -191,15 +188,6 @@ pub async fn start_pipeline(
         .property_from_str("speed-preset", "veryfast")
         .property_from_str("tune", "zerolatency")
         .property("bitrate", 250u32)
-        .build()?;
-
-    // VideoToolbox H264 encoder
-    #[cfg(target_os = "macos")]
-    let enc = ElementFactory::make("vtenc_h264_hw")
-        //.property("qos", true)
-        .property("allow-frame-reordering", false)
-        .property("bitrate", 250u32)
-        .property("realtime", true)
         .build()?;
 
     #[cfg(feature = "vaapi")]
@@ -224,15 +212,7 @@ pub async fn start_pipeline(
         .field("profile", "high")
         .field("stream-format", "byte-stream")
         .build();
-    #[cfg(all(
-        not(feature = "vaapi"),
-        any(target_os = "linux", target_os = "windows")
-    ))]
-    let h264_caps = gstreamer::Caps::builder("video/x-h264")
-        .field("profile", "baseline")
-        .field("stream-format", "byte-stream")
-        .build();
-    #[cfg(target_os = "macos")]
+    #[cfg(not(feature = "vaapi"))]
     let h264_caps = gstreamer::Caps::builder("video/x-h264")
         .field("profile", "baseline")
         .field("stream-format", "byte-stream")
