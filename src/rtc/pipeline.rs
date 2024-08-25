@@ -195,7 +195,7 @@ pub async fn start_pipeline(
 
     // VideoToolbox H264 encoder
     #[cfg(target_os = "macos")]
-    let enc = ElementFactory::make("vtenc_h264_hw")
+    let enc = ElementFactory::make("vtenc_h264")
         //.property("qos", true)
         .property("allow-frame-reordering", false)
         .property("bitrate", 250u32)
@@ -238,9 +238,21 @@ pub async fn start_pipeline(
         .property("caps", &h264_caps)
         .build()?;
 
+    // try h264parse for macOS
+    #[cfg(target_os = "macos")]
+    let parse = ElementFactory::make("h264parse").build()?;
+
+    #[cfg(target_os = "macos")]
+    let parse_caps = gstreamer::Caps::builder("video/x-h264")
+        .field("stream-format", "byte-stream")
+        .build();
+    #[cfg(target_os = "macos")]
+    let parse_capsfilter = ElementFactory::make("capsfilter")
+        .property("caps", &h264_caps)
+        .build()?;
+
     let appsink = gstreamer_app::AppSink::builder()
-        // Tell the appsink what format we want. It will then be the audiotestsrc's job to
-        // provide the format we request.
+        // Tell the appsink what format we want.
         // This can be set after linking the two objects, because format negotiation between
         // both elements will happen during pre-rolling of the pipeline.
         .caps(&h264_caps)
@@ -305,6 +317,10 @@ pub async fn start_pipeline(
         &format_capsfilter,
         &enc,
         &h264_capsfilter,
+        #[cfg(target_os = "macos")]
+        &parse,
+        #[cfg(target_os = "macos")]
+        &parse_capsfilter,
         appsink.upcast_ref(),
     ])?;
 
@@ -317,6 +333,10 @@ pub async fn start_pipeline(
         &format_capsfilter,
         &enc,
         &h264_capsfilter,
+        #[cfg(target_os = "macos")]
+        &parse,
+        #[cfg(target_os = "macos")]
+        &parse_capsfilter,
         appsink.upcast_ref(),
     ])?;
 
