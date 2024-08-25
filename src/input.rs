@@ -82,8 +82,7 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
     let mut enigo = Enigo::new(&Settings {
         linux_delay: 1,
         ..Default::default()
-    })
-    .unwrap();
+    })?;
 
     let (w, h) = enigo.main_display()?;
 
@@ -111,19 +110,13 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
                 y: Some(y),
                 ..
             } => match r#type.as_str() {
-                "mousemove" => enigo
-                    .move_mouse(x as i32, y as i32, Coordinate::Rel)
-                    .unwrap(),
-                "mousemoveabs" => enigo
-                    .move_mouse(x as i32 + startx as i32, y as i32, Coordinate::Abs)
-                    .unwrap(),
+                "mousemove" => enigo.move_mouse(x as i32, y as i32, Coordinate::Rel)?,
+                "mousemoveabs" => {
+                    enigo.move_mouse(x as i32 + startx as i32, y as i32, Coordinate::Abs)?
+                }
                 "wheel" => {
-                    enigo
-                        .scroll((x / 120.0) as i32, enigo::Axis::Horizontal)
-                        .unwrap();
-                    enigo
-                        .scroll((y / 120.0) as i32, enigo::Axis::Vertical)
-                        .unwrap();
+                    enigo.scroll((x / 120.0) as i32, enigo::Axis::Horizontal)?;
+                    enigo.scroll((y / 120.0) as i32, enigo::Axis::Vertical)?;
                 }
                 _ => {}
             },
@@ -141,21 +134,19 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
                 button: Some(button),
                 ..
             } => {
-                enigo
-                    .button(
-                        match button {
-                            0 => Button::Left,
-                            1 => Button::Middle,
-                            2 => Button::Right,
-                            _ => continue,
-                        },
-                        match r#type.as_str() {
-                            "mousedown" => Press,
-                            "mouseup" => Release,
-                            _ => continue,
-                        },
-                    )
-                    .unwrap();
+                enigo.button(
+                    match button {
+                        0 => Button::Left,
+                        1 => Button::Middle,
+                        2 => Button::Right,
+                        _ => continue,
+                    },
+                    match r#type.as_str() {
+                        "mousedown" => Press,
+                        "mouseup" => Release,
+                        _ => continue,
+                    },
+                )?;
             }
             InputCommand {
                 r#type,
@@ -315,27 +306,37 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
                 };
                 // fix capslock on iPad client
                 if key == Key::CapsLock && last_capslock.elapsed() > Duration::from_millis(250) {
-                    enigo.key(key, Click).unwrap();
+                    enigo.key(key, Click)?;
                     last_capslock = Instant::now();
                     continue;
                 }
-                enigo
-                    .key(
-                        key,
-                        match r#type.as_str() {
-                            "keydown" => Press,
-                            "keyup" => Release,
-                            _ => continue,
-                        },
-                    )
-                    .unwrap();
-                // A bug in Safari means that that any keys that are pressed while Meta is held are never released.
+                enigo.key(
+                    key,
+                    match r#type.as_str() {
+                        "keydown" => Press,
+                        "keyup" => Release,
+                        _ => continue,
+                    },
+                )?;
+                // A SEVERE BUG in Safari means that that any keys that are pressed while Meta is held are never released.
                 // We work around this by specifically ensuring that all numbers, etc. are released when Meta is released.
                 if key == Key::Meta && r#type == "keyup" {
                     let (held, _) = enigo.held();
                     for key in held {
-                        enigo.key(key, Release).unwrap();
+                        enigo.key(key, Release)?;
                     }
+                }
+
+                // On macOS ventura, coregraphics is ASTOUNDINGLY BROKEN!
+                // Simulating arrow key presses SOMEHOW causes the function key to get stuck.
+                // We fix it by unpressing function when an arrow key is pressed.
+                #[cfg(target_os = "macos")]
+                if matches!(
+                    key,
+                    Key::UpArrow | Key::DownArrow | Key::LeftArrow | Key::RightArrow
+                ) && r#type == "keyup"
+                {
+                    enigo.key(Key::Function, Release)?;
                 }
             }
             _ => {}
