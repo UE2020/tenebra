@@ -232,6 +232,8 @@ pub async fn start_pipeline(
         .field("profile", "baseline")
         .field("stream-format", "byte-stream")
         .build();
+    #[cfg(target_os = "macos")]
+    let h264_caps = gstreamer::Caps::builder("video/x-h264").build();
     let h264_capsfilter = ElementFactory::make("capsfilter")
         .property("caps", &h264_caps)
         .build()?;
