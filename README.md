@@ -1,14 +1,18 @@
+![image](https://github.com/user-attachments/assets/afd30088-a6cd-44fa-ae73-d27386489a88)
+
+*A tenebra instance on macOS ventura viewed using [Lux Desktop](https://github.com/BlueCannonBall/lux-desktop) on Ubuntu 24.04.*
+
 # Tenebra
 
-Tenebra is a video-streaming server written in Rust (you will need a Rust compiler to compile it). Connect to Tenebra with a [compatible client](https://github.com/BlueCannonBall/lux) to view and control another machine's screen.
+Tenebra is a remote desktop server based on modern video streaming technology written in Rust (you will need a Rust compiler to compile it). Connect to Tenebra with a [compatible client](https://github.com/BlueCannonBall/lux) to view and control another machine's screen.
 
 ## Platform Support
 
 | Platform    | Compatibility |
 | --------    | ------------- |
 | Linux/X11 | Excellent |
+| Mac | Almost excellent (the mouse cursor doesn't automatically appear when the cursor moves, so client-side mouse is a requirement) |
 | Windows | Okay (performance may be poor) |
-| Mac | Almost Excellent (the mouse cursor doesn't automatically appear when the cursor moves, so client-side mouse is a requirement) |
 | Linux/Wayland | None; pipewiresrc is too slow |
 
 ## Usage
