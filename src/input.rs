@@ -114,9 +114,15 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
                 "mousemoveabs" => {
                     enigo.move_mouse(x as i32 + startx as i32, y as i32, Coordinate::Abs)?
                 }
+                #[cfg(not(target_os = "macos"))]
                 "wheel" => {
                     enigo.scroll((x / 120.0) as i32, enigo::Axis::Horizontal)?;
                     enigo.scroll((y / 120.0) as i32, enigo::Axis::Vertical)?;
+                }
+                #[cfg(target_os = "macos")]
+                "wheel" => {
+                    enigo.scroll((x / 120.0) as i32 * 3, enigo::Axis::Horizontal)?;
+                    enigo.scroll((y / 120.0) as i32 * 3, enigo::Axis::Vertical)?;
                 }
                 _ => {}
             },
