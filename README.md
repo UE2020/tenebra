@@ -1,6 +1,6 @@
-![image](https://github.com/user-attachments/assets/afd30088-a6cd-44fa-ae73-d27386489a88)
+![image](https://github.com/user-attachments/assets/0811d95b-952c-4f31-828d-6e14b8c2e7a5)
 
-*A tenebra instance on macOS ventura viewed using [Lux Desktop](https://github.com/BlueCannonBall/lux-desktop) on Ubuntu 24.04.*
+*Two Tenebra instances streaming macOS Ventura and Windows 11 viewed using [Lux Desktop](https://github.com/BlueCannonBall/lux-desktop) on Arch Linux.*
 
 # Tenebra
 
@@ -37,7 +37,7 @@ Tenebra can portforward its built-in signalling server automatically using the U
 
 #### UPnP portforwarding rule disappeares after a while
 
-Some routers automatically clean up unused UPnP portforwarding rules. In this case, this is harmful because tenebra cleans up its own rules when it's stopped, and because the signalling server may run for a very long time without receiving any requests. On my Verizon Fios router I was able to disable this functionality by unticking the box under "Advanced" > "Universal Plug and Play" > "Enable Automatic Cleanup of Old Unused UPnP Services".
+Some routers automatically clean up unused UPnP portforwarding rules. In this case, this is harmful because Tenebra cleans up its own rules when it's stopped, and because the signalling server may run for a very long time without receiving any requests. On my Verizon Fios router I was able to disable this functionality by unticking the box under "Advanced" > "Universal Plug and Play" > "Enable Automatic Cleanup of Old Unused UPnP Services".
 
 #### UPnP portforwarding rule exists, but does not work
 
@@ -49,4 +49,4 @@ On Linux, VA-API can be used to perform hardware accelerated H.264 encoding. Thi
 
 ## Touch input
 
-On Linux, tenebra has support for receiving and emulating touch events (e.g., from an iPad client). The touch emulator is written in C for simplicity and uses uinput.h (this constitutes the only usage of `unsafe` in the project). Using uinput to emulate touch events may require special permissions. Reference your distribution's documentation for details.
+On Linux, Tenebra has support for receiving and emulating touch events (e.g., from an iPad client). The touch emulator is written in C for simplicity and uses uinput.h (this constitutes the only usage of `unsafe` in the project). Using uinput to emulate touch events may require special permissions. Reference your distribution's documentation for details.
