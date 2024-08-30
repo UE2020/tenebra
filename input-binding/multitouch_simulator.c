@@ -11,7 +11,7 @@ typedef struct {
 } MultiTouchSimulator;
 
 // Function to setup the device
-void setup_device(MultiTouchSimulator* simulator, int width, int height) {
+void setup_device(MultiTouchSimulator* simulator) {
     struct uinput_user_dev uidev = {0};
 
     strncpy(uidev.name, "Multi-Touch Device", UINPUT_MAX_NAME_SIZE);
@@ -27,9 +27,9 @@ void setup_device(MultiTouchSimulator* simulator, int width, int height) {
     ioctl(simulator->uinput_fd, UI_SET_ABSBIT, ABS_MT_TRACKING_ID);
 
     uidev.absmin[ABS_MT_POSITION_X] = 0;
-    uidev.absmax[ABS_MT_POSITION_X] = width;
+    uidev.absmax[ABS_MT_POSITION_X] = 2000;
     uidev.absmin[ABS_MT_POSITION_Y] = 0;
-    uidev.absmax[ABS_MT_POSITION_Y] = height;
+    uidev.absmax[ABS_MT_POSITION_Y] = 2000;
 
     uidev.absmin[ABS_MT_SLOT] = 0;
     uidev.absmax[ABS_MT_SLOT] = 9;
@@ -67,14 +67,14 @@ void emit_event(int uinput_fd, int type, int code, int value) {
 }
 
 // Function to initialize the simulator
-MultiTouchSimulator* create_simulator(int width, int height) {
+MultiTouchSimulator* create_simulator() {
     MultiTouchSimulator* simulator = (MultiTouchSimulator*) malloc(sizeof(MultiTouchSimulator));
     simulator->uinput_fd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
     if (simulator->uinput_fd == -1) {
         perror("Error opening /dev/uinput");
         exit(EXIT_FAILURE);
     }
-    setup_device(simulator, width, height);
+    setup_device(simulator);
     return simulator;
 }
 

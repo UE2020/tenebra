@@ -9,7 +9,7 @@ extern "C" {
         int uinput_fd;
     } MultiTouchSimulator;
 
-    MultiTouchSimulator* create_simulator(int width, int height);
+    MultiTouchSimulator* create_simulator();
     void destroy_simulator(MultiTouchSimulator* simulator);
     void touch_down(MultiTouchSimulator* simulator, int slot, int x, int y, int tracking_id);
     void touch_move(MultiTouchSimulator* simulator, int slot, int x, int y);

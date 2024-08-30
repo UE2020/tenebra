@@ -151,20 +151,16 @@ async fn offer(
     exts.set(13, Extension::VideoOrientation);
 
     // Instantiate a new Rtc instance.
-    let rtc = Rtc::builder()
+    let mut rtc = Rtc::builder()
         .clear_codecs()
         .enable_h264(true)
         // needed for zero-latency streaming
         .set_extension_map(exts)
         .set_send_buffer_video(1000)
         .enable_bwe(Some(Bitrate::kbps(3000)))
-        .set_stats_interval(Some(Duration::from_secs(1)));
-
-    #[cfg(feature = "vaapi")]
-    let mut rtc = rtc.enable_bwe(Some(Bitrate::kbps(4000))).build();
-
-    #[cfg(not(feature = "vaapi"))]
-    let mut rtc = rtc.enable_bwe(Some(Bitrate::kbps(250))).build();
+        .enable_bwe(Some(Bitrate::kbps(4000)))
+        .set_stats_interval(Some(Duration::from_secs(1)))
+        .build();
 
     let socket = UdpSocket::bind("0.0.0.0:0").await?;
 

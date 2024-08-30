@@ -187,7 +187,7 @@ pub async fn start_pipeline(
         .property_from_str("pass", "cbr")
         .property_from_str("speed-preset", "veryfast")
         .property_from_str("tune", "zerolatency")
-        .property("bitrate", 250u32)
+        .property("bitrate", 4000u32)
         .build()?;
 
     #[cfg(feature = "vaapi")]

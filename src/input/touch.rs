@@ -61,22 +61,26 @@ pub struct MultiTouchSimulator {
 }
 
 impl MultiTouchSimulator {
-    pub fn new(width: i32, height: i32) -> MultiTouchSimulator {
+    pub fn new() -> MultiTouchSimulator {
         Self {
-            ptr: unsafe { bindings::create_simulator(width, height) },
+            ptr: unsafe { bindings::create_simulator() },
         }
     }
 
-    pub fn touch_down(&mut self, slot: i32, x: i32, y: i32, tracking_id: i32) {
-        unsafe { bindings::touch_down(self.ptr, slot, x, y, tracking_id) }
+    pub fn touch_down(&mut self, slot: i32, x: i32, y: i32, tracking_id: i32, size: (i32, i32)) {
+        let x = (x as f64 / size.0 as f64) * 2000.0;
+        let y = (y as f64 / size.1 as f64) * 2000.0;
+        unsafe { bindings::touch_down(self.ptr, slot, x as i32, y as i32, tracking_id) }
     }
 
     pub fn touch_up(&mut self, slot: i32) {
         unsafe { bindings::touch_up(self.ptr, slot) }
     }
 
-    pub fn touch_move(&mut self, slot: i32, x: i32, y: i32) {
-        unsafe { bindings::touch_move(self.ptr, slot, x, y) }
+    pub fn touch_move(&mut self, slot: i32, x: i32, y: i32, size: (i32, i32)) {
+        let x = (x as f64 / size.0 as f64) * 2000.0;
+        let y = (y as f64 / size.1 as f64) * 2000.0;
+        unsafe { bindings::touch_move(self.ptr, slot, x as i32, y as i32) }
     }
 }
 

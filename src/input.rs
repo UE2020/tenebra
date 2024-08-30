@@ -84,12 +84,10 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
         ..Default::default()
     })?;
 
-    let (w, h) = enigo.main_display()?;
-
     let mut last_capslock = Instant::now();
 
     #[cfg(target_os = "linux")]
-    let mut multi_touch = touch::MultiTouchSimulator::new(w, h);
+    let mut multi_touch = touch::MultiTouchSimulator::new();
     while let Some(msg) = rx.blocking_recv() {
         match msg {
             #[cfg(target_os = "linux")]
@@ -99,11 +97,14 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
                 y: Some(y),
                 id: Some(id),
                 ..
-            } => match r#type.as_str() {
-                "touchstart" => multi_touch.touch_down(id, x as _, y as _, id),
-                "touchmove" => multi_touch.touch_move(id, x as _, y as _),
-                _ => {}
-            },
+            } => {
+                let size = enigo.main_display()?;
+                match r#type.as_str() {
+                    "touchstart" => multi_touch.touch_down(id, x as _, y as _, id, size),
+                    "touchmove" => multi_touch.touch_move(id, x as _, y as _, size),
+                    _ => {}
+                }
+            }
             InputCommand {
                 r#type,
                 x: Some(x),
