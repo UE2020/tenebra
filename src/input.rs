@@ -65,7 +65,7 @@ use enigo::{
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::UnboundedReceiver;
 
-#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+#[cfg(target_os = "linux")]
 mod touch;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -86,11 +86,11 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
 
     let mut last_capslock = Instant::now();
 
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    #[cfg(target_os = "linux")]
     let mut multi_touch = touch::MultiTouchSimulator::new();
     while let Some(msg) = rx.blocking_recv() {
         match msg {
-            #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+            #[cfg(target_os = "linux")]
             InputCommand {
                 r#type,
                 x: Some(x),
@@ -127,7 +127,7 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
                 }
                 _ => {}
             },
-            #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+            #[cfg(target_os = "linux")]
             InputCommand {
                 r#type,
                 id: Some(id),
