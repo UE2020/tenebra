@@ -104,7 +104,7 @@ pub async fn start_pipeline(
     buffer_tx: UnboundedSender<Vec<u8>>,
     waker: Arc<Notify>,
 ) -> anyhow::Result<()> {
-    #[cfg(not(any(target_os = "windows", target_os = "mac")))]
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     let src = ElementFactory::make("ximagesrc")
         .property("use-damage", false)
         .property("startx", startx)
