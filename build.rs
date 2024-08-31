@@ -2,7 +2,7 @@ use std::env;
 use std::path::PathBuf;
 
 fn main() {
-    #[cfg(target_os = "linux")]
+    #[cfg(not(any(target_os = "windows", target_os = "mac")))]
     {
         // Generate bindings for the C header
         let bindings = bindgen::Builder::default()
