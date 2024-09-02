@@ -336,13 +336,10 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
 
                 // On macOS ventura, coregraphics is ASTOUNDINGLY BROKEN!
                 // Simulating arrow key presses SOMEHOW causes the function key to get stuck.
-                // We fix it by unpressing function when an arrow key is pressed.
+                // There are some other keys that get function stuck that I don't know yet, so
+                // we fix it by unpressing function on keydown
                 #[cfg(target_os = "macos")]
-                if matches!(
-                    key,
-                    Key::UpArrow | Key::DownArrow | Key::LeftArrow | Key::RightArrow
-                ) && r#type == "keyup"
-                {
+                if r#type == "keydown" {
                     enigo.key(Key::Function, Release)?;
                 }
             }
