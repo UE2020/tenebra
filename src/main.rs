@@ -92,6 +92,11 @@ mod input;
 mod rtc;
 mod stun;
 
+use shalloc::Shalloc;
+
+#[global_allocator]
+static ALLOCATOR: Shalloc = Shalloc;
+
 #[derive(Deserialize, Clone)]
 struct CreateOffer {
     password: String,
