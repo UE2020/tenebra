@@ -173,6 +173,24 @@ async fn offer(
 
     let local_ip = local_ip()?;
 
+    let socket = UdpSocket::bind("0.0.0.0:0").await?;
+
+    let local_socket_addr = SocketAddr::new(local_ip, socket.local_addr()?.port());
+    rtc.add_local_candidate(
+        Candidate::host(local_socket_addr, str0m::net::Protocol::Udp)
+            .expect("Failed to create local candidate"),
+    );
+
+    println!("Local socket addr: {}", local_socket_addr);
+
+    // add a remote candidate too
+    let stun_addr = retry!(stun::get_addr(&socket, "stun.l.google.com:19302").await)?;
+    println!("Our public IP is: {stun_addr}");
+    rtc.add_local_candidate(
+        Candidate::server_reflexive(stun_addr, local_socket_addr, str0m::net::Protocol::Udp)
+            .expect("Failed to create local candidate"),
+    );
+
     let tcp = TcpListener::bind("0.0.0.0:0").await?;
     let tcp_local_socket_addr = SocketAddr::new(local_ip, tcp.local_addr()?.port());
     rtc.add_local_candidate(
@@ -208,23 +226,6 @@ async fn offer(
         } else {
             None
         };
-    let socket = UdpSocket::bind("0.0.0.0:0").await?;
-
-    let local_socket_addr = SocketAddr::new(local_ip, socket.local_addr()?.port());
-    rtc.add_local_candidate(
-        Candidate::host(local_socket_addr, str0m::net::Protocol::Udp)
-            .expect("Failed to create local candidate"),
-    );
-
-    println!("Local socket addr: {}", local_socket_addr);
-
-    // add a remote candidate too
-    let stun_addr = retry!(stun::get_addr(&socket, "stun.l.google.com:19302").await)?;
-    println!("Our public IP is: {stun_addr}");
-    rtc.add_local_candidate(
-        Candidate::server_reflexive(stun_addr, local_socket_addr, str0m::net::Protocol::Udp)
-            .expect("Failed to create local candidate"),
-    );
 
     // Accept an incoming offer from the remote peer
     // and get the corresponding answer.
