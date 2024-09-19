@@ -210,7 +210,7 @@ pub async fn run(
                             as u32;
                         #[cfg(not(feature = "vaapi"))]
                         let bwe =
-                            (bitrate.as_u64() / 1000).clamp(50, state.bitrate as u64 + 3000) as u32;
+                            (bitrate.as_u64() / 1000).clamp(2000, state.bitrate as u64 + 3000) as u32;
                         for gstreamer in gstreamers.iter_mut() {
                             gstreamer
                                 .control_tx
