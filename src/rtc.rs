@@ -62,6 +62,7 @@ use std::time::Instant;
 use str0m::bwe::Bitrate;
 use str0m::bwe::BweKind;
 use str0m::channel::ChannelData;
+use tokio::net::TcpListener;
 use tokio::net::UdpSocket;
 use tokio::sync::mpsc::unbounded_channel;
 use tokio::sync::Notify;
@@ -81,6 +82,7 @@ use crate::CreateOffer;
 use crate::InputCommand;
 
 mod pipeline;
+mod tcp;
 
 pub enum GStreamerControlMessage {
     Stop,
@@ -98,13 +100,17 @@ struct GStreamerInstance {
 
 pub async fn run(
     mut rtc: Rtc,
-    socket: UdpSocket,
+    udp_socket: UdpSocket,
+    tcp_listener: TcpListener,
     local_socket_addr: SocketAddr,
+    tcp_addr: SocketAddr,
     state: AppState,
     offer: CreateOffer,
     mut kill_rx: UnboundedReceiver<()>,
 ) -> anyhow::Result<()> {
     let mut buf = Vec::new();
+
+    let mut listener = tcp::Listener::listen(tcp_listener)?;
 
     let mut gstreamers: Vec<GStreamerInstance> = vec![];
 
@@ -138,7 +144,14 @@ pub async fn run(
             Output::Timeout(v) => v,
 
             Output::Transmit(v) => {
-                socket.send_to(&v.contents, v.destination).await?;
+                match v.proto {
+                    Protocol::Tcp => listener.send(&v.contents, v.destination).await?,
+                    Protocol::Udp => {
+                        udp_socket.send_to(&v.contents, v.destination).await?;
+                    }
+                    p => println!("Unimplemented protocol: {}", p),
+                }
+
                 continue;
             }
 
@@ -236,7 +249,19 @@ pub async fn run(
         let input = tokio::select! {
             _ = tokio::time::sleep_until(time.into()) => Input::Timeout(Instant::now()),
             _ = waker.notified() => Input::Timeout(Instant::now()),
-            msg = socket.recv_from(&mut buf) => {
+            Some((msg, addr)) = listener.read() => {
+                buf = msg;
+                Input::Receive(
+                    Instant::now(),
+                    Receive {
+                        proto: Protocol::Tcp,
+                        source: addr,
+                        destination: tcp_addr,
+                        contents: (&buf).as_slice().try_into()?,
+                    },
+                )
+                }
+            msg = udp_socket.recv_from(&mut buf) => {
                 match msg {
                     Ok((n, source)) => {
                         // UDP data received.
@@ -247,7 +272,7 @@ pub async fn run(
                                 source,
                                 destination: SocketAddr::new(
                                     local_socket_addr.ip(),
-                                    socket.local_addr()?.port(),
+                                    udp_socket.local_addr()?.port(),
                                 ),
                                 contents: (&buf[..n]).try_into()?,
                             },

@@ -62,7 +62,10 @@ use std::{
 
 use input::{do_input, InputCommand};
 use local_ip_address::local_ip;
-use tokio::{net::UdpSocket, sync::mpsc::unbounded_channel};
+use tokio::{
+    net::{TcpListener, UdpSocket},
+    sync::mpsc::unbounded_channel,
+};
 
 use anyhow::{bail, Result};
 
@@ -74,6 +77,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use axum_server::tls_rustls::RustlsConfig;
 
 use serde::{Deserialize, Serialize};
 
@@ -167,24 +171,60 @@ async fn offer(
         .set_stats_interval(Some(Duration::from_secs(1)))
         .build();
 
-    let socket = UdpSocket::bind("0.0.0.0:0").await?;
-
     let local_ip = local_ip()?;
-    let local_socket_addr = SocketAddr::new(local_ip, socket.local_addr()?.port());
+
+    let tcp = TcpListener::bind("0.0.0.0:0").await?;
+    let tcp_local_socket_addr = SocketAddr::new(local_ip, tcp.local_addr()?.port());
     rtc.add_local_candidate(
-        Candidate::host(local_socket_addr, str0m::net::Protocol::Udp)
+        Candidate::host(tcp_local_socket_addr, str0m::net::Protocol::Tcp)
             .expect("Failed to create local candidate"),
     );
+
+    let gateway_and_port =
+        if let Ok(gateway) = igd_next::aio::tokio::search_gateway(Default::default()).await {
+            println!("Successfully obtained gateway");
+
+            let port = gateway
+                .add_any_port(
+                    igd_next::PortMappingProtocol::TCP,
+                    tcp_local_socket_addr,
+                    0,
+                    "ICE-TCP port",
+                )
+                .await?;
+
+            let global_ip = gateway.get_external_ip().await.unwrap();
+            let global_addr = SocketAddr::new(global_ip, port);
+            println!("TCP server has been opened at {} globally", global_addr);
+            rtc.add_local_candidate(
+                Candidate::server_reflexive(
+                    global_addr,
+                    tcp_local_socket_addr,
+                    str0m::net::Protocol::Tcp,
+                )
+                .expect("Failed to create local candidate"),
+            );
+            Some((gateway, port))
+        } else {
+            None
+        };
+    let socket = UdpSocket::bind("0.0.0.0:0").await?;
+
+    let local_socket_addr = SocketAddr::new(local_ip, socket.local_addr()?.port());
+    // rtc.add_local_candidate(
+    //     Candidate::host(local_socket_addr, str0m::net::Protocol::Udp)
+    //         .expect("Failed to create local candidate"),
+    // );
 
     println!("Local socket addr: {}", local_socket_addr);
 
     // add a remote candidate too
     let stun_addr = retry!(stun::get_addr(&socket, "stun.l.google.com:19302").await)?;
     println!("Our public IP is: {stun_addr}");
-    rtc.add_local_candidate(
-        Candidate::server_reflexive(stun_addr, local_socket_addr, str0m::net::Protocol::Udp)
-            .expect("Failed to create local candidate"),
-    );
+    // rtc.add_local_candidate(
+    //     Candidate::server_reflexive(stun_addr, local_socket_addr, str0m::net::Protocol::Udp)
+    //         .expect("Failed to create local candidate"),
+    // );
 
     // Accept an incoming offer from the remote peer
     // and get the corresponding answer.
@@ -207,9 +247,28 @@ async fn offer(
         kill_rx
     };
 
-    tokio::spawn(async move {
-        if let Err(e) = rtc::run(rtc, socket, local_socket_addr, state, payload, kill_rx).await {
+    spawn(async move {
+        if let Err(e) = rtc::run(
+            rtc,
+            socket,
+            tcp,
+            local_socket_addr,
+            tcp_local_socket_addr,
+            state,
+            payload,
+            kill_rx,
+        )
+        .await
+        {
             eprintln!("Run task exited: {e:?}");
+        }
+
+        if let Some((gateway, port)) = gateway_and_port {
+            println!("Removing port mapping {}.", port);
+            gateway
+                .remove_port(igd_next::PortMappingProtocol::TCP, port)
+                .await
+                .ok();
         }
     });
 
@@ -309,8 +368,19 @@ async fn main() -> Result<()> {
             startx,
             password: password.to_string(),
         });
-    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
-    spawn(async { axum::serve(listener, app).await });
+
+    let config = RustlsConfig::from_pem(
+        include_bytes!("../cert.pem").to_vec(),
+        include_bytes!("../key.pem").to_vec(),
+    )
+    .await?;
+
+    spawn(async move {
+        axum_server::bind_rustls(SocketAddr::from(([0, 0, 0, 0], port as u16)), config)
+            .serve(app.into_make_service())
+            .await
+            .unwrap();
+    });
 
     // We can try to forward the server with UPnP
     #[cfg(feature = "upnp")]
@@ -323,7 +393,7 @@ async fn main() -> Result<()> {
                     igd_next::PortMappingProtocol::TCP,
                     local_addr,
                     0,
-                    "add_port example",
+                    "Telewindow server",
                 )
                 .await
             {
