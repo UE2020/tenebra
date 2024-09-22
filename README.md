@@ -21,6 +21,8 @@ Tenebra uses GStreamer to encode an RTP H.264 stream, so GStreamer's runtime uti
 
 [GStreamer Installs](https://gstreamer.freedesktop.org/download/) <- install the development and runtime libraries
 
+**You need an SSL certificate to run tenebra. Before building, obtain an SSL cert and place `cert.pem` and `key.pem` in the root directory.**
+
 After the server is built with `cargo build --release`, you may run it:
 ```
 ./target/release/tenebra "password" 8080 4000
