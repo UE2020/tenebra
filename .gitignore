@@ -3,3 +3,4 @@ xbox-live.pcapng
 /src/pipeline.rs
 /package
 package.tar.gz
+*.pem
