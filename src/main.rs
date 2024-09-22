@@ -96,11 +96,6 @@ mod input;
 mod rtc;
 mod stun;
 
-use shalloc::Shalloc;
-
-#[global_allocator]
-static ALLOCATOR: Shalloc = Shalloc;
-
 #[derive(Deserialize, Clone)]
 struct CreateOffer {
     password: String,
@@ -384,8 +379,8 @@ async fn main() -> Result<()> {
         });
 
     let config = RustlsConfig::from_pem(
-        include_bytes!("../cert.pem").to_vec(),
-        include_bytes!("../key.pem").to_vec(),
+        include_bytes!("../../ssl/fullchain.pem").to_vec(),
+        include_bytes!("../../ssl/privkey.pem").to_vec(),
     )
     .await?;
 
