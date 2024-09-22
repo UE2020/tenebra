@@ -379,8 +379,8 @@ async fn main() -> Result<()> {
         });
 
     let config = RustlsConfig::from_pem(
-        include_bytes!("../../ssl/fullchain.pem").to_vec(),
-        include_bytes!("../../ssl/privkey.pem").to_vec(),
+        include_bytes!("../cert.pem").to_vec(),
+        include_bytes!("../key.pem").to_vec(),
     )
     .await?;
 
