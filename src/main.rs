@@ -171,28 +171,30 @@ async fn offer(
     let socket = UdpSocket::bind("0.0.0.0:0").await?;
 
     let local_socket_addr = SocketAddr::new(local_ip, socket.local_addr()?.port());
-    rtc.add_local_candidate(
-        Candidate::host(local_socket_addr, str0m::net::Protocol::Udp)
-            .expect("Failed to create local candidate"),
-    );
+    rtc.add_local_candidate(Candidate::host(
+        local_socket_addr,
+        str0m::net::Protocol::Udp,
+    )?);
 
     println!("Local socket addr: {}", local_socket_addr);
 
     // add a remote candidate too
     let stun_addr = retry!(stun::get_addr(&socket, "stun.l.google.com:19302").await)?;
     println!("Our public IP is: {stun_addr}");
-    rtc.add_local_candidate(
-        Candidate::server_reflexive(stun_addr, local_socket_addr, str0m::net::Protocol::Udp)
-            .expect("Failed to create local candidate"),
-    );
+    rtc.add_local_candidate(Candidate::server_reflexive(
+        stun_addr,
+        local_socket_addr,
+        str0m::net::Protocol::Udp,
+    )?);
 
     let tcp = TcpListener::bind("0.0.0.0:0").await?;
     let tcp_local_socket_addr = SocketAddr::new(local_ip, tcp.local_addr()?.port());
-    rtc.add_local_candidate(
-        Candidate::host(tcp_local_socket_addr, str0m::net::Protocol::Tcp)
-            .expect("Failed to create local candidate"),
-    );
+    rtc.add_local_candidate(Candidate::host(
+        tcp_local_socket_addr,
+        str0m::net::Protocol::Tcp,
+    )?);
 
+    #[cfg(feature = "tcp-upnp")]
     let gateway_and_port =
         if let Ok(gateway) = igd_next::aio::tokio::search_gateway(Default::default()).await {
             println!("Successfully obtained gateway");
@@ -211,18 +213,24 @@ async fn offer(
             let global_ip = gateway.get_external_ip().await.unwrap();
             let global_addr = SocketAddr::new(global_ip, port);
             println!("TCP server has been opened at {} globally", global_addr);
-            rtc.add_local_candidate(
-                Candidate::server_reflexive(
-                    global_addr,
-                    tcp_local_socket_addr,
-                    str0m::net::Protocol::Tcp,
-                )
-                .expect("Failed to create local candidate"),
-            );
+            rtc.add_local_candidate(Candidate::server_reflexive(
+                global_addr,
+                tcp_local_socket_addr,
+                str0m::net::Protocol::Tcp,
+            )?);
             Some((gateway, port))
         } else {
             None
         };
+
+    // if tcp-upnp is OFF, we can assume that the
+    // server's ports are all open
+    #[cfg(not(feature = "tcp-upnp"))]
+    rtc.add_local_candidate(Candidate::server_reflexive(
+        SocketAddr::new(stun_addr.ip(), tcp.local_addr()?.port()),
+        tcp_local_socket_addr,
+        str0m::net::Protocol::Tcp,
+    )?);
 
     // Accept an incoming offer from the remote peer
     // and get the corresponding answer.
@@ -261,6 +269,7 @@ async fn offer(
             eprintln!("Run task exited: {e:?}");
         }
 
+        #[cfg(feature = "tcp-upnp")]
         if let Some((gateway, port)) = gateway_and_port {
             println!("Removing port mapping {}.", port);
             gateway

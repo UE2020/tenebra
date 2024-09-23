@@ -32,7 +32,7 @@ cc = "1.1.14"
 bindgen = "0.69.4"
 
 [features]
-default = []
+default = ["tcp-upnp"]
 vaapi = []
 upnp = []
-ice-tcp = []
+tcp-upnp = []
