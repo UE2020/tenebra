@@ -400,6 +400,8 @@ async fn main() -> Result<()> {
             .unwrap();
     });
 
+    println!("Tenebra is listening on port {}.", port);
+
     // We can try to forward the server with UPnP
     match igd_next::aio::tokio::search_gateway(Default::default()).await {
         Ok(gateway) => {
@@ -465,8 +467,6 @@ async fn main() -> Result<()> {
         }
         Err(e) => println!("Error obtaining UPnP gateway: {}", e),
     }
-
-    println!("Tenebra is listening on port {}.", port);
 
     #[cfg(target_os = "linux")]
     tokio::task::spawn_blocking(move || do_input(rx, startx)).await??;
