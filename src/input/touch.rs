@@ -61,26 +61,33 @@ pub struct MultiTouchSimulator {
 }
 
 impl MultiTouchSimulator {
-    pub fn new() -> MultiTouchSimulator {
+    /// If the simulator cannot be created, all methods will be no-ops.
+    pub fn new() -> Self {
         Self {
             ptr: unsafe { bindings::create_simulator() },
         }
     }
 
     pub fn touch_down(&mut self, slot: i32, x: i32, y: i32, tracking_id: i32, size: (i32, i32)) {
-        let x = (x as f64 / size.0 as f64) * 2000.0;
-        let y = (y as f64 / size.1 as f64) * 2000.0;
-        unsafe { bindings::touch_down(self.ptr, slot, x as i32, y as i32, tracking_id) }
+        if !self.ptr.is_null() {
+            let x = (x as f64 / size.0 as f64) * 2000.0;
+            let y = (y as f64 / size.1 as f64) * 2000.0;
+            unsafe { bindings::touch_down(self.ptr, slot, x as i32, y as i32, tracking_id) }
+        }
     }
 
     pub fn touch_up(&mut self, slot: i32) {
-        unsafe { bindings::touch_up(self.ptr, slot) }
+        if !self.ptr.is_null() {
+            unsafe { bindings::touch_up(self.ptr, slot) }
+        }
     }
 
     pub fn touch_move(&mut self, slot: i32, x: i32, y: i32, size: (i32, i32)) {
-        let x = (x as f64 / size.0 as f64) * 2000.0;
-        let y = (y as f64 / size.1 as f64) * 2000.0;
-        unsafe { bindings::touch_move(self.ptr, slot, x as i32, y as i32) }
+        if !self.ptr.is_null() {
+            let x = (x as f64 / size.0 as f64) * 2000.0;
+            let y = (y as f64 / size.1 as f64) * 2000.0;
+            unsafe { bindings::touch_move(self.ptr, slot, x as i32, y as i32) }
+        }
     }
 }
 

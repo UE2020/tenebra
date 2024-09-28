@@ -1,5 +1,5 @@
-#ifndef MULTITOUCH_SIMULATOR_H
-#define MULTITOUCH_SIMULATOR_H
+#ifndef _MULTITOUCH_SIMULATOR_H
+#define _MULTITOUCH_SIMULATOR_H
 
 #ifdef __cplusplus
 extern "C" {

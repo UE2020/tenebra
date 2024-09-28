@@ -466,7 +466,7 @@ async fn main() -> Result<()> {
         Err(e) => println!("Error obtaining UPnP gateway: {}", e),
     }
 
-    println!("READY!");
+    println!("Tenebra is listening on port {}.", port);
 
     #[cfg(target_os = "linux")]
     tokio::task::spawn_blocking(move || do_input(rx, startx)).await??;
