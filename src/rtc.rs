@@ -68,7 +68,6 @@ use tokio::sync::mpsc::unbounded_channel;
 use tokio::sync::Notify;
 
 use anyhow::Context;
-use str0m::media::Frequency;
 use str0m::media::MediaAdded;
 use str0m::media::MediaTime;
 use str0m::net::Protocol;
@@ -92,10 +91,9 @@ pub enum GStreamerControlMessage {
 }
 
 struct GStreamerInstance {
-    buffer_rx: UnboundedReceiver<Vec<u8>>,
+    buffer_rx: UnboundedReceiver<(Vec<u8>, u64)>,
     control_tx: UnboundedSender<GStreamerControlMessage>,
     media: MediaAdded,
-    start: Instant,
 }
 
 pub async fn run(
@@ -124,16 +122,14 @@ pub async fn run(
         for gstreamer in gstreamers.iter_mut() {
             let buf = gstreamer.buffer_rx.try_recv();
 
-            if let Ok(buf) = buf {
+            if let Ok((buf, pts)) = buf {
                 let writer = rtc
                     .writer(gstreamer.media.mid)
                     .context("couldn't get rtc writer")?
                     .playout_delay(MediaTime::ZERO, MediaTime::ZERO);
                 let pt = writer.payload_params().nth(0).unwrap().pt();
                 let now = Instant::now();
-                let mt: MediaTime = (now - gstreamer.start).into();
-                let mt = mt.rebase(Frequency::NINETY_KHZ);
-                writer.write(pt, now, mt, buf)?;
+                writer.write(pt, now, MediaTime::from_micros(pts), buf)?;
             }
         }
 
@@ -176,7 +172,6 @@ pub async fn run(
                             buffer_rx,
                             control_tx,
                             media: media_added,
-                            start: Instant::now(),
                         });
                         let waker_clone = waker.clone();
                         tokio::task::spawn(pipeline::start_pipeline(

@@ -101,7 +101,7 @@ pub async fn start_pipeline(
     startx: u32,
     show_mouse: bool,
     mut control_rx: UnboundedReceiver<GStreamerControlMessage>,
-    buffer_tx: UnboundedSender<Vec<u8>>,
+    buffer_tx: UnboundedSender<(Vec<u8>, u64)>,
     waker: Arc<Notify>,
 ) -> anyhow::Result<()> {
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
@@ -268,8 +268,10 @@ pub async fn start_pipeline(
 
                 let packet = map.as_slice();
 
+                let pts = buffer.pts().unwrap().useconds();
+
                 // we can .ok() this, because if it DOES fail, the thread will be terminated soon
-                buffer_tx.send(packet.to_vec()).ok();
+                buffer_tx.send((packet.to_vec(), pts)).ok();
                 waker.notify_one();
                 Ok(gstreamer::FlowSuccess::Ok)
             })
