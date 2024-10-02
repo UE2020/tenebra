@@ -120,7 +120,7 @@ pub async fn start_pipeline(
         .build()?;
 
     #[cfg(target_os = "windows")]
-    let src = ElementFactory::make("d3d12screencapturesrc")
+    let src = ElementFactory::make("d3d11screencapturesrc")
         .property("show-cursor", show_mouse)
         .build()?;
 

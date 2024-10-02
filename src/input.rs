@@ -68,7 +68,7 @@ use tokio::sync::mpsc::UnboundedReceiver;
 #[cfg(target_os = "linux")]
 mod touch;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct InputCommand {
     pub r#type: String,
     pub x: Option<f32>,
@@ -343,7 +343,7 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
                     enigo.key(Key::Function, Release)?;
                 }
             }
-            _ => {}
+            _ => break,
         }
     }
 

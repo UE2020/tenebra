@@ -77,7 +77,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use axum_server::tls_rustls::RustlsConfig;
+use axum_server::tls_openssl::OpenSSLConfig;
 
 use serde::{Deserialize, Serialize};
 
@@ -387,14 +387,11 @@ async fn main() -> Result<()> {
             ports: ports.clone(),
         });
 
-    let config = RustlsConfig::from_pem(
-        include_bytes!("../cert.pem").to_vec(),
-        include_bytes!("../key.pem").to_vec(),
-    )
-    .await?;
+    let config =
+        OpenSSLConfig::from_pem(include_bytes!("../cert.pem"), include_bytes!("../key.pem"))?;
 
     spawn(async move {
-        axum_server::bind_rustls(SocketAddr::from(([0, 0, 0, 0], port as u16)), config)
+        axum_server::bind_openssl(SocketAddr::from(([0, 0, 0, 0], port as u16)), config)
             .serve(app.into_make_service())
             .await
             .unwrap();

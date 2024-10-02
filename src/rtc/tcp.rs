@@ -1,9 +1,15 @@
-use std::{collections::HashMap, net::SocketAddr};
+use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::{tcp::OwnedReadHalf, TcpListener},
-    sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
+    net::{
+        tcp::{OwnedReadHalf, OwnedWriteHalf},
+        TcpListener,
+    },
+    sync::{
+        mpsc::{channel, unbounded_channel, UnboundedReceiver, UnboundedSender},
+        Mutex,
+    },
 };
 
 pub struct Listener {
@@ -21,24 +27,50 @@ impl Listener {
         let (tx, mut task_rx) = unbounded_channel::<(Vec<u8>, SocketAddr)>();
         let (task_tx, rx) = unbounded_channel::<(Vec<u8>, SocketAddr)>();
         tokio::spawn(async move {
-            let mut map = HashMap::new();
+            let map = Arc::new(Mutex::new(HashMap::new()));
             loop {
                 tokio::select! {
+                    // this will stop accepting when task_rx dies
                     Ok((socket, peer_addr)) = listener.accept() => {
                         println!("Accepted TCP connection from {peer_addr}");
                         let (reader, writer) = socket.into_split();
-                        map.insert(peer_addr, writer);
-                        tokio::spawn(Self::handle_read(task_tx.clone(), reader));
+                        let (close_tx, mut close_rx) = channel(1);
+                        map.lock().await.insert(peer_addr, (writer, close_tx));
+                        let task_tx = task_tx.clone();
+                        let map_clone = map.clone();
+                        tokio::spawn(async move {
+                            tokio::select! {
+                                Err(e) = Self::handle_read(task_tx, reader) => {
+                                    println!("Failed to read from {peer_addr} because of: {e}");
+                                    map_clone.lock().await.remove(&peer_addr);
+                                }
+                                _ = close_rx.recv() => {}
+                            }
+                        });
                     }
                     data = task_rx.recv() => {
                         match data {
                             Some((data, addr)) => {
-                                if let Some(socket) =  map.get_mut(&addr) {
-                                    socket.write_u16(data.len() as u16).await.ok();
-                                    socket.write_all(data.as_slice()).await.ok();
+                                let mut map = map.lock().await;
+                                if let Some((socket, close_tx)) =  map.get_mut(&addr) {
+                                    if let Err(e) = Self::frame_and_send(socket, &data).await {
+                                        println!("Closing {addr} because of send error {e}");
+                                        close_tx.send(()).await.ok();
+                                        map.remove(&addr);
+                                    }
                                 }
                             },
-                            None => break,
+                            None => {
+                                // close every socket
+                                let map = map.lock().await;
+                                println!("Closing {} sockets.", map.len());
+                                for (addr, (_, close_tx)) in map.iter() {
+                                    println!("Closing socket {addr}");
+                                    close_tx.send(()).await.ok();
+                                }
+
+                                break;
+                            },
                         }
                     }
                 }
@@ -46,6 +78,12 @@ impl Listener {
         });
 
         Ok(Self { tx, rx })
+    }
+
+    async fn frame_and_send(socket: &mut OwnedWriteHalf, data: &[u8]) -> anyhow::Result<()> {
+        socket.write_u16(data.len() as u16).await?;
+        socket.write_all(data).await?;
+        Ok(())
     }
 
     pub async fn send(&self, data: &[u8], addr: SocketAddr) -> anyhow::Result<()> {
