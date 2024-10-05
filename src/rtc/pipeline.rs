@@ -145,9 +145,20 @@ pub async fn start_pipeline(
     #[cfg(not(feature = "vaapi"))]
     let videoconvert = ElementFactory::make("videoconvert").build()?;
 
+    #[cfg(feature = "full-chroma")]
+    const FORMAT: &str = "Y444";
+
+    #[cfg(not(feature = "full-chroma"))]
+    const FORMAT: &str = "NV12";
+
+    #[cfg(all(feature = "full-chroma", feature = "vaapi"))]
+    println!(
+        "Full-chroma is not supported with VA-API! This compile-time option has been ignored."
+    );
+
     #[cfg(not(feature = "vaapi"))]
     let format_caps = gstreamer::Caps::builder("video/x-raw")
-        .field("format", "NV12")
+        .field("format", FORMAT)
         .build();
 
     #[cfg(feature = "vaapi")]
@@ -207,6 +218,12 @@ pub async fn start_pipeline(
 
     println!("Enc: {:?}", enc);
 
+    #[cfg(feature = "full-chroma")]
+    const PROFILE: &str = "high-4:4:4";
+
+    #[cfg(not(feature = "full-chroma"))]
+    const PROFILE: &str = "baseline";
+
     #[cfg(feature = "vaapi")]
     let h264_caps = gstreamer::Caps::builder("video/x-h264")
         .field("profile", "high")
@@ -214,7 +231,7 @@ pub async fn start_pipeline(
         .build();
     #[cfg(not(feature = "vaapi"))]
     let h264_caps = gstreamer::Caps::builder("video/x-h264")
-        .field("profile", "baseline")
+        .field("profile", PROFILE)
         .field("stream-format", "byte-stream")
         .build();
     let h264_capsfilter = ElementFactory::make("capsfilter")
