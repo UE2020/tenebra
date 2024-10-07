@@ -343,7 +343,8 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
                     enigo.key(Key::Function, Release)?;
                 }
             }
-            _ => break,
+            // We ignore bad input
+            _ => {},
         }
     }
 
