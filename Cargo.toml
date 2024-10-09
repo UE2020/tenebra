@@ -12,7 +12,7 @@ axum = "0.7.7"
 axum-macros = "0.4.2"
 base64 = "0.22.1"
 bytecodec = "0.4.15"
-enigo = { git = "https://github.com/UE2020/enigo.git", branch = "main" }
+enigo = { git = "https://github.com/UE2020/enigo.git", branch = "main", default-features = false, features = ["x11rb"] }
 gstreamer = "0.23.2"
 gstreamer-app = "0.23.2"
 igd-next = { version = "0.14.3", features = ["aio_tokio"] }
