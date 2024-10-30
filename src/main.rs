@@ -237,7 +237,7 @@ async fn offer(
     let desc_data = BASE64_STANDARD.decode(payload.offer.clone())?;
     let desc_data = std::str::from_utf8(&desc_data)?;
     let their_offer = serde_json::from_str::<SdpOffer>(&desc_data)?;
-    let answer = rtc.sdp_api().accept_offer(their_offer).unwrap();
+    let answer = rtc.sdp_api().accept_offer(their_offer)?;
     let json_str = serde_json::to_string(&answer)?;
     let b64 = BASE64_STANDARD.encode(&json_str);
 
