@@ -142,7 +142,6 @@ pub async fn start_pipeline(
         .property("caps", &video_caps)
         .build()?;
 
-    #[cfg(not(feature = "vaapi"))]
     let videoconvert = ElementFactory::make("videoconvert").build()?;
 
     #[cfg(feature = "full-chroma")]
@@ -156,22 +155,9 @@ pub async fn start_pipeline(
         "Full-chroma is not supported with VA-API! This compile-time option has been ignored."
     );
 
-    #[cfg(not(feature = "vaapi"))]
     let format_caps = gstreamer::Caps::builder("video/x-raw")
         .field("format", FORMAT)
         .build();
-
-    #[cfg(feature = "vaapi")]
-    let videoconvert = ElementFactory::make("vapostproc")
-        .property_from_str("scale-method", "fast")
-        .build()?;
-
-    #[cfg(feature = "vaapi")]
-    let format_caps = {
-        let caps_str = "video/x-raw(memory:VAMemory),format=NV12";
-        let caps = gstreamer::Caps::from_str(caps_str)?;
-        caps
-    };
 
     println!("Format caps: {}", format_caps);
     let format_capsfilter = ElementFactory::make("capsfilter")
