@@ -344,7 +344,7 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
                 }
             }
             // We ignore bad input
-            _ => {},
+            _ => {}
         }
     }
 

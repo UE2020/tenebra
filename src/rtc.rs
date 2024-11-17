@@ -96,6 +96,12 @@ struct GStreamerInstance {
     media: MediaAdded,
 }
 
+impl Drop for GStreamerInstance {
+    fn drop(&mut self) {
+        self.control_tx.send(GStreamerControlMessage::Stop).ok();
+    }
+}
+
 pub async fn run(
     mut rtc: Rtc,
     udp_socket: UdpSocket,
