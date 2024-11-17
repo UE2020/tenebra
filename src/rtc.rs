@@ -143,7 +143,7 @@ pub async fn run(
                 match v.proto {
                     Protocol::Tcp => listener.send(&v.contents, v.destination).await?,
                     Protocol::Udp => {
-                        udp_socket.send_to(&v.contents, v.destination).await?;
+                        udp_socket.send_to(&v.contents, v.destination).await.ok();
                     }
                     p => println!("Unimplemented protocol: {}", p),
                 }
