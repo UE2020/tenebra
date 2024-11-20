@@ -161,7 +161,6 @@ async fn offer(
         // needed for zero-latency streaming
         .set_extension_map(exts)
         .set_send_buffer_video(1000)
-        .enable_bwe(Some(Bitrate::kbps(3000)))
         .enable_bwe(Some(Bitrate::kbps(4000)))
         .set_stats_interval(Some(Duration::from_secs(1)))
         .build();
