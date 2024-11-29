@@ -32,7 +32,8 @@ cc = "1.1.24"
 bindgen = "0.69.4"
 
 [features]
-default = ["tcp-upnp"]
+default = ["tcp-upnp", "textoverlay"]
+textoverlay = []
 vaapi = []
 upnp = []
 tcp-upnp = []

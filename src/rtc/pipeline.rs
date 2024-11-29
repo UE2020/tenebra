@@ -82,6 +82,7 @@ impl StatisticsOverlay {
         }
     }
 
+    #[cfg(feature = "textoverlay")]
     fn render_to(&self, textoverlay: &gstreamer::Element) {
         let mut text = String::new();
         if let Some(bitrate) = self.bitrate {
@@ -95,6 +96,9 @@ impl StatisticsOverlay {
         }
         textoverlay.set_property("text", text);
     }
+
+    #[cfg(not(feature = "textoverlay"))]
+    fn render_to(&self, _textoverlay: &gstreamer::Element) {}
 }
 
 pub async fn start_pipeline(
