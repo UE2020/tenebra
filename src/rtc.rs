@@ -203,6 +203,7 @@ pub async fn run(
                                 .send(GStreamerControlMessage::RequestKeyFrame)?;
                         }
                     }
+                    #[cfg(not(feature = "vaapi"))]
                     Event::EgressBitrateEstimate(
                         BweKind::Twcc(bitrate) | BweKind::Remb(_, bitrate),
                     ) => {
