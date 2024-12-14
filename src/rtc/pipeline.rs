@@ -203,7 +203,7 @@ pub async fn start_pipeline(
         .property("target-usage", 6u32)
         .property_from_str("rate-control", "cbr")
         .property_from_str("mbbrc", "disabled")
-        .property("bitrate", 4000u32)
+        .property("bitrate", 10000u32)
         .build()?;
 
     println!("Enc: {:?}", enc);
