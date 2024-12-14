@@ -192,7 +192,7 @@ pub async fn start_pipeline(
         .build()?;
 
     #[cfg(feature = "vaapi")]
-    let enc = ElementFactory::make("vah264enc")
+    let enc = ElementFactory::make("vah264lpenc")
         .property("aud", false)
         .property("b-frames", 0u32)
         .property("dct8x8", false)
@@ -201,9 +201,7 @@ pub async fn start_pipeline(
         .property("num-slices", 4u32)
         .property("ref-frames", 1u32)
         .property("target-usage", 6u32)
-        .property_from_str("rate-control", "cbr")
         .property_from_str("mbbrc", "disabled")
-        .property("bitrate", 10000u32)
         .build()?;
 
     println!("Enc: {:?}", enc);
