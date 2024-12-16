@@ -197,7 +197,6 @@ pub async fn start_pipeline(
         .property("b-frames", 0u32)
         .property("dct8x8", false)
         .property("key-int-max", 1024u32)
-        .property("cpb-size", 120u32)
         .property("num-slices", 4u32)
         .property("ref-frames", 1u32)
         .property("target-usage", 6u32)
