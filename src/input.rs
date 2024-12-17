@@ -121,26 +121,28 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
                 "wheel" => {
                     wheel_x += x;
                     wheel_y += y;
+
                     if wheel_x.abs() >= 120 {
                         enigo.scroll(wheel_x / 120, enigo::Axis::Horizontal)?;
-                        wheel_x = 0;
+                        wheel_x = wheel_x % 120;
                     }
                     if wheel_y.abs() >= 120 {
                         enigo.scroll(wheel_y / 120, enigo::Axis::Vertical)?;
-                        wheel_y = 0;
+                        wheel_y = wheel_y % 120;
                     }
                 }
                 #[cfg(target_os = "macos")]
                 "wheel" => {
                     wheel_x += x;
                     wheel_y += y;
+
                     if wheel_x.abs() >= 120 {
                         enigo.scroll(wheel_x / 120 * 3, enigo::Axis::Horizontal)?;
-                        wheel_x = 0;
+                        wheel_x = wheel_x % 120;
                     }
                     if wheel_y.abs() >= 120 {
                         enigo.scroll(wheel_y / 120 * 3, enigo::Axis::Vertical)?;
-                        wheel_y = 0;
+                        wheel_y = wheel_y % 120;
                     }
                 }
                 #[cfg(target_os = "linux")]

@@ -8,6 +8,8 @@
 typedef struct {
     int touch_fd;
     int scroll_fd;
+    int wheel_x;
+    int wheel_y;
 } MultiTouchSimulator;
 
 int setup_devices(MultiTouchSimulator* simulator) {
@@ -111,6 +113,9 @@ MultiTouchSimulator* create_simulator() {
         return NULL;
     }
 
+    simulator->wheel_x = 0;
+    simulator->wheel_y = 0;
+
     if (setup_devices(simulator)) {
         close(simulator->touch_fd);
         close(simulator->scroll_fd);
@@ -131,14 +136,24 @@ void destroy_simulator(MultiTouchSimulator* simulator) {
 
 void scroll_vertically(MultiTouchSimulator* simulator, int value) {
     if (value) {
+        simulator->wheel_y += value;
         emit_event(simulator->scroll_fd, EV_REL, REL_WHEEL_HI_RES, -value);
+        if (abs(simulator->wheel_y) >= 120) {
+            emit_event(simulator->scroll_fd, EV_REL, REL_WHEEL, -simulator->wheel_y / 120);
+            simulator->wheel_y = simulator->wheel_y % 120;
+        }
         emit_event(simulator->scroll_fd, EV_SYN, SYN_REPORT, 0);
     }
 }
 
 void scroll_horizontally(MultiTouchSimulator* simulator, int value) {
     if (value) {
+        simulator->wheel_x += value;
         emit_event(simulator->scroll_fd, EV_REL, REL_HWHEEL_HI_RES, value);
+        if (abs(simulator->wheel_x) >= 120) {
+            emit_event(simulator->scroll_fd, EV_REL, REL_HWHEEL, simulator->wheel_x / 120);
+            simulator->wheel_x = simulator->wheel_x % 120;
+        }
         emit_event(simulator->scroll_fd, EV_SYN, SYN_REPORT, 0);
     }
 }
