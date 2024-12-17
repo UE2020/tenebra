@@ -116,9 +116,7 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
                 ..
             } => match r#type.as_str() {
                 "mousemove" => enigo.move_mouse(x, y, Coordinate::Rel)?,
-                "mousemoveabs" => {
-                    enigo.move_mouse(x + startx as i32, y, Coordinate::Abs)?
-                }
+                "mousemoveabs" => enigo.move_mouse(x + startx as i32, y, Coordinate::Abs)?,
                 #[cfg(target_os = "windows")]
                 "wheel" => {
                     wheel_x += x;
