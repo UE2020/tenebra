@@ -138,7 +138,7 @@ void scroll_vertically(MultiTouchSimulator* simulator, int value) {
 
 void scroll_horizontally(MultiTouchSimulator* simulator, int value) {
     if (value) {
-        emit_event(simulator->scroll_fd, EV_REL, REL_HWHEEL_HI_RES, -value);
+        emit_event(simulator->scroll_fd, EV_REL, REL_HWHEEL_HI_RES, value);
         emit_event(simulator->scroll_fd, EV_SYN, SYN_REPORT, 0);
     }
 }
