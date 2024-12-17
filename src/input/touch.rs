@@ -68,6 +68,18 @@ impl MultiTouchSimulator {
         }
     }
 
+    pub fn scroll_vertically(&mut self, value: i32) {
+        if !self.ptr.is_null() {
+            unsafe { bindings::scroll_vertically(self.ptr, value) }
+        }
+    }
+
+    pub fn scroll_horizontally(&mut self, value: i32) {
+        if !self.ptr.is_null() {
+            unsafe { bindings::scroll_horizontally(self.ptr, value) }
+        }
+    }
+
     pub fn touch_down(&mut self, slot: i32, x: i32, y: i32, tracking_id: i32, size: (i32, i32)) {
         if !self.ptr.is_null() {
             let x = (x as f64 / size.0 as f64) * 2000.0;

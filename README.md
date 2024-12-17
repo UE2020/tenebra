@@ -17,7 +17,7 @@ Tenebra is a remote desktop server based on modern video streaming technology wr
 
 ## Usage
 
-Tenebra uses GStreamer to encode an RTP H.264 stream, so GStreamer's runtime utilities must be installed on your system for Tenebra to work. GStreamer should be available using your package manager. On MacOS, reference the hyperlink below.
+Tenebra uses GStreamer to encode an RTP H.264 stream, so GStreamer's runtime utilities must be installed on your system for Tenebra to work. GStreamer should be available using your package manager. On macOS, reference the hyperlink below.
 
 [GStreamer Installs](https://gstreamer.freedesktop.org/download/) <- install the development and runtime libraries
 

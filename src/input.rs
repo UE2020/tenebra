@@ -71,8 +71,8 @@ mod touch;
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct InputCommand {
     pub r#type: String,
-    pub x: Option<f32>,
-    pub y: Option<f32>,
+    pub x: Option<i32>,
+    pub y: Option<i32>,
     pub button: Option<u8>,
     pub key: Option<String>,
     pub id: Option<i32>,
@@ -85,6 +85,10 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
     })?;
 
     let mut last_capslock = Instant::now();
+
+    // Windows and macOS need accumulators to handle small scroll events
+    #[cfg(not(target_os = "linux"))]
+    let (mut wheel_x, mut wheel_y) = (0, 0);
 
     #[cfg(target_os = "linux")]
     let mut multi_touch = touch::MultiTouchSimulator::new();
@@ -111,19 +115,40 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
                 y: Some(y),
                 ..
             } => match r#type.as_str() {
-                "mousemove" => enigo.move_mouse(x as i32, y as i32, Coordinate::Rel)?,
+                "mousemove" => enigo.move_mouse(x, y, Coordinate::Rel)?,
                 "mousemoveabs" => {
-                    enigo.move_mouse(x as i32 + startx as i32, y as i32, Coordinate::Abs)?
+                    enigo.move_mouse(x + startx as i32, y, Coordinate::Abs)?
                 }
-                #[cfg(not(target_os = "macos"))]
+                #[cfg(target_os = "windows")]
                 "wheel" => {
-                    enigo.scroll((x / 120.0) as i32, enigo::Axis::Horizontal)?;
-                    enigo.scroll((y / 120.0) as i32, enigo::Axis::Vertical)?;
+                    wheel_x += x;
+                    wheel_y += y;
+                    if wheel_x.abs() >= 120 {
+                        enigo.scroll(wheel_x / 120, enigo::Axis::Horizontal)?;
+                        wheel_x = 0;
+                    }
+                    if wheel_y.abs() >= 120 {
+                        enigo.scroll(wheel_y / 120, enigo::Axis::Vertical)?;
+                        wheel_y = 0;
+                    }
                 }
                 #[cfg(target_os = "macos")]
                 "wheel" => {
-                    enigo.scroll((x / 120.0) as i32 * 3, enigo::Axis::Horizontal)?;
-                    enigo.scroll((y / 120.0) as i32 * 3, enigo::Axis::Vertical)?;
+                    wheel_x += x;
+                    wheel_y += y;
+                    if wheel_x.abs() >= 120 {
+                        enigo.scroll(wheel_x / 120 * 3, enigo::Axis::Horizontal)?;
+                        wheel_x = 0;
+                    }
+                    if wheel_y.abs() >= 120 {
+                        enigo.scroll(wheel_y / 120 * 3, enigo::Axis::Vertical)?;
+                        wheel_y = 0;
+                    }
+                }
+                #[cfg(target_os = "linux")]
+                "wheel" => {
+                    multi_touch.scroll_horizontally(x);
+                    multi_touch.scroll_vertically(y);
                 }
                 _ => {}
             },
@@ -334,7 +359,7 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
                     }
                 }
 
-                // On macOS ventura, coregraphics is ASTOUNDINGLY BROKEN!
+                // On macOS Ventura, coregraphics is ASTOUNDINGLY BROKEN!
                 // Simulating arrow key presses SOMEHOW causes the function key to get stuck.
                 // There are some other keys that get function stuck that I don't know yet, so
                 // we fix it by unpressing function on keydown
