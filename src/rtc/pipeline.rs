@@ -177,7 +177,7 @@ pub async fn start_pipeline(
     let enc = ElementFactory::make("x264enc")
         //.property("qos", true)
         .property("threads", 4u32)
-        .property("aud", false)
+        .property("aud", true)
         .property("b-adapt", false)
         .property("bframes", 0u32)
         .property("insert-vui", true)
