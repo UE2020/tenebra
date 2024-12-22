@@ -146,6 +146,10 @@ pub async fn start_pipeline(
         .property("caps", &video_caps)
         .build()?;
 
+    #[cfg(feature = "vaapi")]
+    let videoconvert = ElementFactory::make("vapostproc").build()?;
+
+    #[cfg(not(feature = "vaapi"))]
     let videoconvert = ElementFactory::make("videoconvert").build()?;
 
     #[cfg(feature = "full-chroma")]
