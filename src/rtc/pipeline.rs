@@ -197,7 +197,7 @@ pub async fn start_pipeline(
 
     #[cfg(feature = "vaapi")]
     let enc = ElementFactory::make("vah264lpenc")
-        .property("aud", false)
+        .property("aud", true)
         .property("b-frames", 0u32)
         .property("dct8x8", false)
         .property("key-int-max", 1024u32)
