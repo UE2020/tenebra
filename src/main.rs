@@ -163,9 +163,9 @@ async fn offer(
         .set_send_buffer_video(1000)
         .set_stats_interval(Some(Duration::from_secs(1)));
 
-    #[cfg(not(feature = "vaapi"))]
+    #[cfg(not(feature = "no-bwe"))]
     let mut rtc = rtc.enable_bwe(Some(Bitrate::kbps(4000))).build();
-    #[cfg(feature = "vaapi")]
+    #[cfg(feature = "no-bwe")]
     let mut rtc = rtc.build();
 
     let local_ip = local_ip()?;
