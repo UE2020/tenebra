@@ -34,7 +34,7 @@ bindgen = "0.69.4"
 [features]
 default = ["tcp-upnp", "textoverlay"]
 textoverlay = []
-vaapi = ["no-bwe", "vapostproc"]
+vaapi = ["no-bwe"]
 vapostproc = []
 upnp = []
 tcp-upnp = []
