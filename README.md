@@ -47,7 +47,7 @@ The UPnP portforwarding rule is overrided by any existing manual rule for the si
 
 ## Using VA-API
 
-On Linux, VA-API can be used to perform hardware accelerated H.264 encoding. This can be enabled by compiling with the `vaapi` feature flag. The `va` GStreamer plugin (NOT the `vaapi` plugin - this one is broken) must be installed and usable.
+On Linux, VA-API can be used to perform hardware accelerated H.264 encoding. This can be enabled by compiling with the `vaapi` feature flag. The `va` GStreamer plugin (NOT the `vaapi` plugin - this one is broken) must be installed and usable. If your system supports the `vapostproc` GStreamer element, you may enable the `vapostproc` feature flag as well.
 
 ## Touch input
 

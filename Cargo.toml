@@ -35,6 +35,7 @@ bindgen = "0.69.4"
 default = ["tcp-upnp", "textoverlay"]
 textoverlay = []
 vaapi = ["no-bwe"]
+vapostproc = []
 upnp = []
 tcp-upnp = []
 full-chroma = []
