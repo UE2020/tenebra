@@ -55,8 +55,9 @@
  */
 
 #[allow(unused)]
-use std::str::FromStr;
+use std::str::{self, FromStr};
 use std::sync::Arc;
+use tokio::process::Command;
 
 use gstreamer::prelude::*;
 use gstreamer::{element_error, ElementFactory, Pipeline, State};
@@ -64,7 +65,39 @@ use gstreamer::{element_error, ElementFactory, Pipeline, State};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::Notify;
 
+use anyhow::{Context, Result};
+
 use super::GStreamerControlMessage;
+
+async fn get_pulseaudio_monitor_name() -> Result<String> {
+    let output = Command::new("pactl")
+        .arg("list")
+        .arg("sources")
+        .output()
+        .await
+        .context("Failed to execute pactl")?;
+
+    if !output.status.success() {
+        anyhow::bail!("pactl exited with status: {}", output.status);
+    }
+
+    let stdout = str::from_utf8(&output.stdout).context("Invalid UTF-8 output")?;
+
+    for line in stdout.lines() {
+        if line.trim_start().starts_with("Name:") {
+            let name = line
+                .split_whitespace()
+                .nth(1)
+                .context("Could not parse Name line")?;
+
+            if name.contains("monitor") {
+                return Ok(name.to_string());
+            }
+        }
+    }
+
+    anyhow::bail!("No monitor device found");
+}
 
 #[derive(Default)]
 struct StatisticsOverlay {
@@ -99,6 +132,114 @@ impl StatisticsOverlay {
 
     #[cfg(not(feature = "textoverlay"))]
     fn render_to(&self, _textoverlay: &gstreamer::Element) {}
+}
+
+/// # Warning: LINUX ONLY
+pub async fn start_audio_pipeline(
+    mut control_rx: UnboundedReceiver<GStreamerControlMessage>,
+    buffer_tx: UnboundedSender<(Vec<u8>, u64)>,
+    waker: Arc<Notify>,
+) -> anyhow::Result<()> {
+    // gst-launch-1.0 -v pulsesrc device=alsa_output.pci-0000_00_1f.3.analog-stereo.monitor ! audioconvert ! vorbisenc ! oggmux ! filesink location=alsasrc.ogg
+    let monitor_device_name = get_pulseaudio_monitor_name().await?;
+    println!("Monitor device name: {}", monitor_device_name);
+    let src = ElementFactory::make("pulsesrc")
+        .property("device", &monitor_device_name)
+        .build()?;
+    println!("Made pulsesrc");
+    let audioconvert = ElementFactory::make("audioconvert").build()?;
+    let opusenc = ElementFactory::make("opusenc").build()?;
+    println!("Made opusenc");
+
+    let opus_caps = gstreamer::Caps::builder("audio/x-opus").build();
+    println!("Made opuscaps");
+
+    let appsink = gstreamer_app::AppSink::builder()
+        // Tell the appsink what format we want. It will then be the audiotestsrc's job to
+        // provide the format we request.
+        // This can be set after linking the two objects, because format negotiation between
+        // both elements will happen during pre-rolling of the pipeline.
+        .caps(&opus_caps)
+        //.drop(true)
+        .build();
+
+    // appsink callback - send rtp packets to the streaming thread
+    appsink.set_callbacks(
+        gstreamer_app::AppSinkCallbacks::builder()
+            // Add a handler to the "new-sample" signal.
+            .new_sample(move |appsink| {
+                // Pull the sample in question out of the appsink's buffer.
+                let sample = appsink
+                    .pull_sample()
+                    .map_err(|_| gstreamer::FlowError::Eos)?;
+                let buffer = sample.buffer().ok_or_else(|| {
+                    element_error!(
+                        appsink,
+                        gstreamer::ResourceError::Failed,
+                        ("Failed to get buffer from appsink")
+                    );
+
+                    gstreamer::FlowError::Error
+                })?;
+
+                // At this point, buffer is only a reference to an existing memory region somewhere.
+                // When we want to access its content, we have to map it while requesting the required
+                // mode of access (read, read/write).
+                // This type of abstraction is necessary, because the buffer in question might not be
+                // on the machine's main memory itself, but rather in the GPU's memory.
+                // So mapping the buffer makes the underlying memory region accessible to us.
+                // See: https://gstreamer.freedesktop.org/documentation/plugin-development/advanced/allocation.html
+                let map = buffer.map_readable().map_err(|_| {
+                    element_error!(
+                        appsink,
+                        gstreamer::ResourceError::Failed,
+                        ("Failed to map buffer readable")
+                    );
+
+                    gstreamer::FlowError::Error
+                })?;
+
+                let packet = map.as_slice();
+
+                let pts = buffer.pts().unwrap().useconds();
+
+                // we can .ok() this, because if it DOES fail, the thread will be terminated soon
+                buffer_tx.send((packet.to_vec(), pts)).ok();
+                waker.notify_one();
+                Ok(gstreamer::FlowSuccess::Ok)
+            })
+            .build(),
+    );
+
+    // Create the pipeline
+    let pipeline = Pipeline::default();
+    println!("Made pipeline");
+
+    // Add elements to the pipeline
+    pipeline.add_many([&src, &audioconvert, &opusenc, appsink.upcast_ref()])?;
+    println!("Audio is adding!");
+
+    // Link the elements
+    gstreamer::Element::link_many([&src, &audioconvert, &opusenc, appsink.upcast_ref()])?;
+    println!("Audio is linking!");
+
+    // Set the pipeline to playing state
+    pipeline.set_state(State::Playing)?;
+    println!("Audio is playing!");
+    while let Some(msg) = control_rx.recv().await {
+        match msg {
+            GStreamerControlMessage::Stop => {
+                println!("GStreamer task received termination signal!");
+                break;
+            }
+            _ => {}
+        }
+    }
+
+    // Clean up
+    pipeline.set_state(State::Null)?;
+
+    Ok(())
 }
 
 pub async fn start_pipeline(
@@ -192,7 +333,7 @@ pub async fn start_pipeline(
         .property_from_str("pass", "cbr")
         .property_from_str("speed-preset", "veryfast")
         .property_from_str("tune", "zerolatency")
-        .property("bitrate", 4000u32)
+        .property("bitrate", 3200u32)
         .build()?;
 
     #[cfg(feature = "vaapi")]
@@ -337,7 +478,7 @@ pub async fn start_pipeline(
                 stats.bitrate = Some(bitrate);
                 stats.render_to(&textoverlay);
                 //#[cfg(not(feature = "vaapi"))]
-                enc.set_property("bitrate", bitrate);
+                enc.set_property("bitrate", bitrate); // video takes 80% bitrate
                 #[cfg(feature = "vaapi")]
                 enc.set_property(
                     "cpb-size",

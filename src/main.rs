@@ -158,6 +158,7 @@ async fn offer(
     let rtc = Rtc::builder()
         .clear_codecs()
         .enable_h264(true)
+        .enable_opus(true)
         // needed for zero-latency streaming
         .set_extension_map(exts)
         .set_send_buffer_video(1000)

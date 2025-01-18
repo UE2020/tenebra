@@ -62,6 +62,8 @@ use std::time::Instant;
 use str0m::bwe::Bitrate;
 use str0m::bwe::BweKind;
 use str0m::channel::ChannelData;
+use str0m::format::Codec;
+use str0m::media::MediaKind;
 use tokio::net::TcpListener;
 use tokio::net::UdpSocket;
 use tokio::sync::mpsc::unbounded_channel;
@@ -129,11 +131,23 @@ pub async fn run(
             let buf = gstreamer.buffer_rx.try_recv();
 
             if let Ok((buf, pts)) = buf {
-                let writer = rtc
-                    .writer(gstreamer.media.mid)
-                    .context("couldn't get rtc writer")?
-                    .playout_delay(MediaTime::ZERO, MediaTime::ZERO);
-                let pt = writer.payload_params().nth(0).unwrap().pt();
+                let needed_codec = match gstreamer.media.kind {
+                    MediaKind::Audio => Codec::Opus,
+                    MediaKind::Video => Codec::H264,
+                };
+                let writer = if needed_codec == Codec::H264 {
+                    rtc.writer(gstreamer.media.mid)
+                        .context("couldn't get rtc writer")?
+                        .playout_delay(MediaTime::ZERO, MediaTime::ZERO)
+                } else {
+                    rtc.writer(gstreamer.media.mid)
+                        .context("couldn't get rtc writer")?
+                };
+                let pt = writer
+                    .payload_params()
+                    .find(|&params| params.spec().codec == needed_codec)
+                    .unwrap()
+                    .pt();
                 let now = Instant::now();
                 writer.write(pt, now, MediaTime::from_micros(pts), buf)?;
             }
@@ -164,6 +178,11 @@ pub async fn run(
                         break Ok(());
                     }
                     Event::MediaAdded(media_added) => {
+                        let kind = media_added.kind;
+                        #[cfg(not(target_os = "linux"))]
+                        if kind.is_audio() {
+                            continue;
+                        }
                         #[cfg(feature = "vaapi")]
                         rtc.direct_api()
                             .stream_tx_by_mid(media_added.mid, None)
@@ -180,13 +199,20 @@ pub async fn run(
                             media: media_added,
                         });
                         let waker_clone = waker.clone();
-                        tokio::task::spawn(pipeline::start_pipeline(
-                            state.startx,
-                            offer.show_mouse,
-                            control_rx,
-                            buffer_tx,
-                            waker_clone,
-                        ));
+                        match kind {
+                            MediaKind::Video => tokio::task::spawn(pipeline::start_pipeline(
+                                state.startx,
+                                offer.show_mouse,
+                                control_rx,
+                                buffer_tx,
+                                waker_clone,
+                            )),
+                            MediaKind::Audio => tokio::task::spawn(pipeline::start_audio_pipeline(
+                                control_rx,
+                                buffer_tx,
+                                waker_clone,
+                            )),
+                        };
                     }
                     Event::MediaEgressStats(stats) => {
                         for gstreamer in gstreamers.iter_mut() {
@@ -213,10 +239,15 @@ pub async fn run(
                         #[cfg(not(feature = "vaapi"))]
                         let bwe = (bitrate.as_u64() / 1000).clamp(2000, state.bitrate as u64 + 3000)
                             as u32;
+                        let deducted = gstreamers
+                            .iter()
+                            .filter(|gstreamer| gstreamer.media.kind.is_audio())
+                            .count()
+                            * 64;
                         for gstreamer in gstreamers.iter_mut() {
                             gstreamer
                                 .control_tx
-                                .send(GStreamerControlMessage::Bitrate(bwe))?;
+                                .send(GStreamerControlMessage::Bitrate(bwe - deducted as u32))?;
                         }
                         rtc.bwe().set_current_bitrate(Bitrate::kbps(bwe as _));
                     }
