@@ -135,14 +135,10 @@ pub async fn run(
                     MediaKind::Audio => Codec::Opus,
                     MediaKind::Video => Codec::H264,
                 };
-                let writer = if needed_codec == Codec::H264 {
-                    rtc.writer(gstreamer.media.mid)
-                        .context("couldn't get rtc writer")?
-                        .playout_delay(MediaTime::ZERO, MediaTime::ZERO)
-                } else {
-                    rtc.writer(gstreamer.media.mid)
-                        .context("couldn't get rtc writer")?
-                };
+                let writer = rtc
+                    .writer(gstreamer.media.mid)
+                    .context("couldn't get rtc writer")?
+                    .playout_delay(MediaTime::ZERO, MediaTime::ZERO);
                 let pt = writer
                     .payload_params()
                     .find(|&params| params.spec().codec == needed_codec)
