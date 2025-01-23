@@ -142,17 +142,22 @@ pub async fn start_audio_pipeline(
 ) -> anyhow::Result<()> {
     // gst-launch-1.0 -v pulsesrc device=alsa_output.pci-0000_00_1f.3.analog-stereo.monitor ! audioconvert ! vorbisenc ! oggmux ! filesink location=alsasrc.ogg
     let monitor_device_name = get_pulseaudio_monitor_name().await?;
-    println!("Monitor device name: {}", monitor_device_name);
+    println!("Picked audio monitor device name: {}", monitor_device_name);
     let src = ElementFactory::make("pulsesrc")
         .property("device", &monitor_device_name)
         .build()?;
-    println!("Made pulsesrc");
+    let src_capsfilter = ElementFactory::make("capsfilter")
+        .property(
+            "caps",
+            &gstreamer::Caps::builder("audio/x-raw")
+                .field("channels", 2)
+                .build(),
+        )
+        .build()?;
     let audioconvert = ElementFactory::make("audioconvert").build()?;
     let opusenc = ElementFactory::make("opusenc").build()?;
-    println!("Made opusenc");
 
     let opus_caps = gstreamer::Caps::builder("audio/x-opus").build();
-    println!("Made opuscaps");
 
     let appsink = gstreamer_app::AppSink::builder()
         // Tell the appsink what format we want. It will then be the audiotestsrc's job to
@@ -216,11 +221,23 @@ pub async fn start_audio_pipeline(
     println!("Made pipeline");
 
     // Add elements to the pipeline
-    pipeline.add_many([&src, &audioconvert, &opusenc, appsink.upcast_ref()])?;
+    pipeline.add_many([
+        &src,
+        &src_capsfilter,
+        &audioconvert,
+        &opusenc,
+        appsink.upcast_ref(),
+    ])?;
     println!("Audio is adding!");
 
     // Link the elements
-    gstreamer::Element::link_many([&src, &audioconvert, &opusenc, appsink.upcast_ref()])?;
+    gstreamer::Element::link_many([
+        &src,
+        &src_capsfilter,
+        &audioconvert,
+        &opusenc,
+        appsink.upcast_ref(),
+    ])?;
     println!("Audio is linking!");
 
     // Set the pipeline to playing state
