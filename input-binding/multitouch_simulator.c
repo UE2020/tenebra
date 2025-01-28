@@ -107,6 +107,7 @@ int setup_devices(MultiTouchSimulator* simulator) {
         ioctl(simulator->pen_fd, UI_SET_ABSBIT, ABS_X);
         ioctl(simulator->pen_fd, UI_SET_ABSBIT, ABS_Y);
         ioctl(simulator->pen_fd, UI_SET_ABSBIT, ABS_PRESSURE);
+        ioctl(simulator->pen_fd, UI_SET_ABSBIT, ABS_DISTANCE);
         ioctl(simulator->pen_fd, UI_SET_ABSBIT, ABS_TILT_X);
         ioctl(simulator->pen_fd, UI_SET_ABSBIT, ABS_TILT_Y);
         ioctl(simulator->pen_fd, UI_SET_EVBIT, EV_KEY);
@@ -129,6 +130,8 @@ int setup_devices(MultiTouchSimulator* simulator) {
 
         uidev.absmin[ABS_PRESSURE] = 0;
         uidev.absmax[ABS_PRESSURE] = 1000;
+        uidev.absmin[ABS_DISTANCE] = 0;
+        uidev.absmax[ABS_DISTANCE] = 1000;
 
         uidev.absmin[ABS_TILT_X] = -90;
         uidev.absmax[ABS_TILT_X] = 90;
