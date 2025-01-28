@@ -111,6 +111,14 @@ int setup_devices(MultiTouchSimulator* simulator) {
         ioctl(simulator->pen_fd, UI_SET_ABSBIT, ABS_TILT_Y);
         ioctl(simulator->pen_fd, UI_SET_EVBIT, EV_KEY);
         ioctl(simulator->pen_fd, UI_SET_KEYBIT, BTN_TOOL_PEN);
+        ioctl(simulator->pen_fd, UI_SET_KEYBIT, BTN_TOOL_RUBBER);
+        ioctl(simulator->pen_fd, UI_SET_KEYBIT, BTN_TOOL_BRUSH);
+        ioctl(simulator->pen_fd, UI_SET_KEYBIT, BTN_TOOL_PENCIL);
+        ioctl(simulator->pen_fd, UI_SET_KEYBIT, BTN_TOOL_AIRBRUSH);
+        ioctl(simulator->pen_fd, UI_SET_KEYBIT, BTN_STYLUS3);
+        ioctl(simulator->pen_fd, UI_SET_KEYBIT, BTN_TOUCH);
+        ioctl(simulator->pen_fd, UI_SET_KEYBIT, BTN_STYLUS);
+        ioctl(simulator->pen_fd, UI_SET_KEYBIT, BTN_STYLUS2);
         ioctl(simulator->pen_fd, UI_SET_PROPBIT, INPUT_PROP_POINTER);
         ioctl(simulator->pen_fd, UI_SET_PROPBIT, INPUT_PROP_DIRECT);
 
