@@ -123,20 +123,43 @@ int setup_devices(MultiTouchSimulator* simulator) {
         ioctl(simulator->pen_fd, UI_SET_PROPBIT, INPUT_PROP_POINTER);
         ioctl(simulator->pen_fd, UI_SET_PROPBIT, INPUT_PROP_DIRECT);
 
-        uidev.absmin[ABS_X] = 0;
-        uidev.absmax[ABS_X] = 2000;
-        uidev.absmin[ABS_Y] = 0;
-        uidev.absmax[ABS_Y] = 2000;
+        struct uinput_abs_setup abs_setup;
 
-        uidev.absmin[ABS_PRESSURE] = 0;
-        uidev.absmax[ABS_PRESSURE] = 1000;
-        uidev.absmin[ABS_DISTANCE] = 0;
-        uidev.absmax[ABS_DISTANCE] = 1000;
+        memset(&abs_setup, 0, sizeof abs_setup);
+        abs_setup.code = ABS_X;
+        abs_setup.absinfo.maximum = 2000;
+        abs_setup.absinfo.resolution = 50;
+        ioctl(simulator->pen_fd, UI_ABS_SETUP, &abs_setup);
 
-        uidev.absmin[ABS_TILT_X] = -90;
-        uidev.absmax[ABS_TILT_X] = 90;
-        uidev.absmin[ABS_TILT_Y] = -90;
-        uidev.absmax[ABS_TILT_Y] = 90;
+        memset(&abs_setup, 0, sizeof abs_setup);
+        abs_setup.code = ABS_Y;
+        abs_setup.absinfo.maximum = 2000;
+        abs_setup.absinfo.resolution = 50;
+        ioctl(simulator->pen_fd, UI_ABS_SETUP, &abs_setup);
+
+        memset(&abs_setup, 0, sizeof abs_setup);
+        abs_setup.code = ABS_PRESSURE;
+        abs_setup.absinfo.maximum = 1000;
+        ioctl(simulator->pen_fd, UI_ABS_SETUP, &abs_setup);
+
+        memset(&abs_setup, 0, sizeof abs_setup);
+        abs_setup.code = ABS_DISTANCE;
+        abs_setup.absinfo.maximum = 1000;
+        ioctl(simulator->pen_fd, UI_ABS_SETUP, &abs_setup);
+
+        memset(&abs_setup, 0, sizeof abs_setup);
+        abs_setup.code = ABS_TILT_X;
+        abs_setup.absinfo.minimum = -90;
+        abs_setup.absinfo.maximum = 90;
+        abs_setup.absinfo.resolution = 50;
+        ioctl(simulator->pen_fd, UI_ABS_SETUP, &abs_setup);
+
+        memset(&abs_setup, 0, sizeof abs_setup);
+        abs_setup.code = ABS_TILT_Y;
+        abs_setup.absinfo.minimum = -90;
+        abs_setup.absinfo.maximum = 90;
+        abs_setup.absinfo.resolution = 50;
+        ioctl(simulator->pen_fd, UI_ABS_SETUP, &abs_setup);
 
         if (write(simulator->pen_fd, &uidev, sizeof(uidev)) == -1) {
             perror("Error setting up device");
