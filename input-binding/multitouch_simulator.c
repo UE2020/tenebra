@@ -123,6 +123,11 @@ int setup_devices(MultiTouchSimulator* simulator) {
         ioctl(simulator->pen_fd, UI_SET_PROPBIT, INPUT_PROP_POINTER);
         ioctl(simulator->pen_fd, UI_SET_PROPBIT, INPUT_PROP_DIRECT);
 
+        if (write(simulator->pen_fd, &uidev, sizeof(uidev)) == -1) {
+            perror("Error setting up device");
+            return -1;
+        }
+
         struct uinput_abs_setup abs_setup;
 
         memset(&abs_setup, 0, sizeof abs_setup);
@@ -160,11 +165,6 @@ int setup_devices(MultiTouchSimulator* simulator) {
         abs_setup.absinfo.maximum = 90;
         abs_setup.absinfo.resolution = 50;
         ioctl(simulator->pen_fd, UI_ABS_SETUP, &abs_setup);
-
-        if (write(simulator->pen_fd, &uidev, sizeof(uidev)) == -1) {
-            perror("Error setting up device");
-            return -1;
-        }
 
         if (ioctl(simulator->pen_fd, UI_DEV_CREATE) == -1) {
             perror("Error creating uinput device");
