@@ -11,20 +11,8 @@ typedef struct {
     int pen_fd;
     int wheel_x;
     int wheel_y;
+    double last_pressure;
 } MultiTouchSimulator;
-
-void emit_event(int uinput_fd, int type, int code, int value) {
-    struct input_event ev = {0};
-    ev.type = type;
-    ev.code = code;
-    ev.value = value;
-    ev.time.tv_sec = 0;
-    ev.time.tv_usec = 0;
-
-    if (write(uinput_fd, &ev, sizeof(ev)) == -1) {
-        perror("Error writing event");
-    }
-}
 
 int setup_devices(MultiTouchSimulator* simulator) {
     {
@@ -111,6 +99,7 @@ int setup_devices(MultiTouchSimulator* simulator) {
         ioctl(simulator->pen_fd, UI_SET_ABSBIT, ABS_TILT_Y);
         ioctl(simulator->pen_fd, UI_SET_EVBIT, EV_KEY);
         ioctl(simulator->pen_fd, UI_SET_KEYBIT, BTN_TOOL_PEN);
+        ioctl(simulator->pen_fd, UI_SET_KEYBIT, BTN_TOUCH);
         ioctl(simulator->pen_fd, UI_SET_PROPBIT, INPUT_PROP_POINTER);
         ioctl(simulator->pen_fd, UI_SET_PROPBIT, INPUT_PROP_DIRECT);
 
@@ -149,8 +138,6 @@ int setup_devices(MultiTouchSimulator* simulator) {
             perror("Error creating uinput device");
             return -1;
         }
-
-        emit_event(simulator->pen_fd, EV_KEY, BTN_TOOL_PEN, 1);
     }
 
     return 0;
@@ -181,9 +168,6 @@ MultiTouchSimulator* create_simulator() {
         return NULL;
     }
 
-    simulator->wheel_x = 0;
-    simulator->wheel_y = 0;
-
     if (setup_devices(simulator)) {
         close(simulator->touch_fd);
         close(simulator->scroll_fd);
@@ -191,6 +175,10 @@ MultiTouchSimulator* create_simulator() {
         free(simulator);
         return NULL;
     }
+
+    simulator->wheel_x = 0;
+    simulator->wheel_y = 0;
+    simulator->last_pressure = 0.;
 
     return simulator;
 }
@@ -205,6 +193,19 @@ void destroy_simulator(MultiTouchSimulator* simulator) {
         close(simulator->pen_fd);
     }
     free(simulator);
+}
+
+void emit_event(int uinput_fd, int type, int code, int value) {
+    struct input_event ev = {0};
+    ev.type = type;
+    ev.code = code;
+    ev.value = value;
+    ev.time.tv_sec = 0;
+    ev.time.tv_usec = 0;
+
+    if (write(uinput_fd, &ev, sizeof(ev)) == -1) {
+        perror("Error writing event");
+    }
 }
 
 void touch_down(MultiTouchSimulator* simulator, int slot, int x, int y, int tracking_id) {
@@ -253,10 +254,22 @@ void scroll_horizontally(MultiTouchSimulator* simulator, int value) {
 }
 
 void pen(MultiTouchSimulator* simulator, int x, int y, double pressure, int tilt_x, int tilt_y) {
+    if (simulator->last_pressure < 0.001 && pressure >= 0.001) {
+        emit_event(simulator->pen_fd, EV_KEY, BTN_TOOL_PEN, 1);
+        emit_event(simulator->pen_fd, EV_KEY, BTN_TOUCH, 1);
+    }
+
     emit_event(simulator->pen_fd, EV_ABS, ABS_X, x);
     emit_event(simulator->pen_fd, EV_ABS, ABS_Y, y);
     emit_event(simulator->pen_fd, EV_ABS, ABS_PRESSURE, pressure * 1000);
     emit_event(simulator->pen_fd, EV_ABS, ABS_TILT_X, tilt_x);
     emit_event(simulator->pen_fd, EV_ABS, ABS_TILT_Y, tilt_y);
+
+    if (simulator->last_pressure >= 0.001 && pressure < 0.001) {
+        emit_event(simulator->pen_fd, EV_KEY, BTN_TOUCH, 0);
+        emit_event(simulator->pen_fd, EV_KEY, BTN_TOOL_PEN, 0);
+    }
+
     emit_event(simulator->pen_fd, EV_SYN, SYN_REPORT, 0);
+    simulator->last_pressure = pressure;
 }
