@@ -8,8 +8,9 @@ while true; do
         nmcli radio wifi off
         sleep 2
         nmcli radio wifi on
+	sleep 20
     fi
     # Sleep before checking again to avoid excessive resource usage
-    sleep 10
+    sleep 1
 done
 

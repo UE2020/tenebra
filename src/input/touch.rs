@@ -101,6 +101,22 @@ impl MultiTouchSimulator {
             unsafe { bindings::touch_move(self.ptr, slot, x as i32, y as i32) }
         }
     }
+
+    pub fn pen(
+        &mut self,
+        x: i32,
+        y: i32,
+        pressure: f64,
+        tilt_x: i32,
+        tilt_y: i32,
+        size: (i32, i32),
+    ) {
+        if !self.ptr.is_null() {
+            let x = (x as f64 / size.0 as f64) * 2000.0;
+            let y = (y as f64 / size.1 as f64) * 2000.0;
+            unsafe { bindings::pen(self.ptr, x as i32, y as i32, pressure, tilt_x, tilt_y) }
+        }
+    }
 }
 
 impl Drop for MultiTouchSimulator {

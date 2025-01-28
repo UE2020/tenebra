@@ -68,6 +68,7 @@ use tokio::sync::mpsc::UnboundedReceiver;
 #[cfg(target_os = "linux")]
 mod touch;
 
+#[allow(non_snake_case)]
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct InputCommand {
     pub r#type: String,
@@ -76,6 +77,9 @@ pub struct InputCommand {
     pub button: Option<u8>,
     pub key: Option<String>,
     pub id: Option<i32>,
+    pub pressure: Option<f64>,
+    pub tiltX: Option<i32>,
+    pub tiltY: Option<i32>,
 }
 
 pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow::Result<()> {
@@ -94,6 +98,46 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
     let mut multi_touch = touch::MultiTouchSimulator::new();
     while let Some(msg) = rx.blocking_recv() {
         match msg {
+            // Windows and macOS compat implementation
+            #[cfg(not(target_os = "linux"))]
+            InputCommand {
+                r#type,
+                x: Some(x),
+                y: Some(y),
+                pressure: Some(pressure),
+                tiltX: Some(_tilt_x),
+                tiltY: Some(_tilt_y),
+                ..
+            } => {
+                if r#type != "pen" {
+                    continue;
+                }
+                enigo.button(
+                    Button::Left,
+                    match pressure > 0.0 {
+                        true => Press,
+                        false => Release,
+                        _ => continue,
+                    },
+                )?;
+                enigo.move_mouse(x + startx as i32, y, Coordinate::Abs)?;
+            }
+            #[cfg(target_os = "linux")]
+            InputCommand {
+                r#type,
+                x: Some(x),
+                y: Some(y),
+                pressure: Some(pressure),
+                tiltX: Some(tilt_x),
+                tiltY: Some(tilt_y),
+                ..
+            } => {
+                if r#type != "pen" {
+                    continue;
+                }
+                let size = enigo.main_display()?;
+                multi_touch.pen(x, y, pressure, tilt_x, tilt_y, size);
+            }
             #[cfg(target_os = "linux")]
             InputCommand {
                 r#type,
