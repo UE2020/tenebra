@@ -113,11 +113,10 @@ int setup_devices(MultiTouchSimulator* simulator) {
         memset(&abs_setup, 0, sizeof abs_setup);
         abs_setup.code = ABS_X;
         abs_setup.absinfo.maximum = 2000;
-        abs_setup.absinfo.resolution = 6;
+        abs_setup.absinfo.resolution = 10;
         ioctl(simulator->pen_fd, UI_ABS_SETUP, &abs_setup);
 
         abs_setup.code = ABS_Y;
-        abs_setup.absinfo.resolution = 9;
         ioctl(simulator->pen_fd, UI_ABS_SETUP, &abs_setup);
 
         memset(&abs_setup, 0, sizeof abs_setup);
