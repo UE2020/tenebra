@@ -113,10 +113,11 @@ int setup_devices(MultiTouchSimulator* simulator) {
         memset(&abs_setup, 0, sizeof abs_setup);
         abs_setup.code = ABS_X;
         abs_setup.absinfo.maximum = 2000;
-        abs_setup.absinfo.resolution = 50;
+        abs_setup.absinfo.resolution = 6;
         ioctl(simulator->pen_fd, UI_ABS_SETUP, &abs_setup);
 
         abs_setup.code = ABS_Y;
+        abs_setup.absinfo.resolution = 9;
         ioctl(simulator->pen_fd, UI_ABS_SETUP, &abs_setup);
 
         memset(&abs_setup, 0, sizeof abs_setup);
@@ -128,7 +129,6 @@ int setup_devices(MultiTouchSimulator* simulator) {
         abs_setup.code = ABS_TILT_X;
         abs_setup.absinfo.minimum = -90;
         abs_setup.absinfo.maximum = 90;
-        abs_setup.absinfo.resolution = 50;
         ioctl(simulator->pen_fd, UI_ABS_SETUP, &abs_setup);
 
         abs_setup.code = ABS_TILT_Y;
