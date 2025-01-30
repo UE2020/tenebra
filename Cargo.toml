@@ -32,8 +32,9 @@ cc = "1.1.24"
 bindgen = "0.69.4"
 
 [features]
-default = ["tcp-upnp", "textoverlay"]
+default = ["tcp-upnp", "textoverlay", "sound-forwarding"]
 textoverlay = []
+sound-forwarding = []
 vaapi = ["no-bwe"]
 vapostproc = []
 upnp = []

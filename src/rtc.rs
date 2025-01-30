@@ -175,7 +175,7 @@ pub async fn run(
                     }
                     Event::MediaAdded(media_added) => {
                         let kind = media_added.kind;
-                        #[cfg(not(target_os = "linux"))]
+                        #[cfg(not(all(target_os = "linux", feature = "sound-forwarding")))]
                         if kind.is_audio() {
                             continue;
                         }
