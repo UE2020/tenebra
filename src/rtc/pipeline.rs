@@ -308,7 +308,7 @@ pub async fn start_pipeline(
     let videoconvert = ElementFactory::make("vapostproc").build()?;
 
     #[cfg(not(feature = "vapostproc"))]
-    let videoconvert = ElementFactory::make("videoconvert").build()?;
+    let videoconvert = ElementFactory::make("videoconvert").property("n-threads", 4u32).build()?;
 
     #[cfg(feature = "full-chroma")]
     const FORMAT: &str = "Y444";
@@ -339,7 +339,7 @@ pub async fn start_pipeline(
     let enc = ElementFactory::make("x264enc")
         //.property("qos", true)
         .property("threads", 4u32)
-        .property("aud", true)
+        .property("aud", false)
         .property("b-adapt", false)
         .property("bframes", 0u32)
         .property("insert-vui", true)

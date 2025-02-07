@@ -249,12 +249,17 @@ pub async fn run(
                     }
                     Event::ChannelData(ChannelData { data, .. }) => {
                         let msg_str = String::from_utf8(data)?;
-                        let cmd: InputCommand = serde_json::from_str(&msg_str)?;
+                        let mut cmd: InputCommand = serde_json::from_str(&msg_str)?;
+                        cmd.update_display = false;
                         state.input_tx.send(cmd)?;
                     }
-                    Event::IceConnectionStateChange(state) => {
-                        println!("New state: {:?}", state);
-                        if state == IceConnectionState::Connected {
+                    Event::IceConnectionStateChange(connection_state) => {
+                        println!("New state: {:?}", connection_state);
+                        if connection_state == IceConnectionState::Connected {
+                            state.input_tx.send(InputCommand {
+                                update_display: true,
+                                ..Default::default()
+                            })?;
                             println!("ICE Connection state is now CONNECTED. Waiting for media to be added...");
                         }
                     }
