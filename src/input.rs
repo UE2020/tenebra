@@ -62,9 +62,10 @@ use enigo::{
     Enigo, Key, Keyboard, Mouse, Settings,
 };
 
-use display_info::DisplayInfo;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::UnboundedReceiver;
+
+use x11rb::{connection::Connection, rust_connection::RustConnection};
 
 #[cfg(target_os = "linux")]
 mod touch;
@@ -81,20 +82,16 @@ pub struct InputCommand {
     pub pressure: Option<f64>,
     pub tiltX: Option<i32>,
     pub tiltY: Option<i32>,
-    #[serde(default)]
-    pub update_display: bool,
 }
 
-pub fn get_total_size() -> anyhow::Result<(i32, i32)> {
-    let displays = DisplayInfo::all()?;
-    // FIXME: this assumes that monitors are arranged horizontally
-    let width = displays.iter().map(|display| display.width as i32).sum();
-    let height = displays
-        .iter()
-        .map(|display| display.height as i32)
-        .max()
-        .unwrap();
-    Ok((width, height))
+pub fn get_total_size(conn: &RustConnection, screen_num: usize) -> anyhow::Result<(i32, i32)> {
+    // Access the default screen's configuration
+    let screen = &conn.setup().roots[screen_num];
+
+    // Retrieve the total dimensions
+    let total_width = screen.width_in_pixels;
+    let total_height = screen.height_in_pixels;
+    Ok((total_width as _, total_height as _))
 }
 
 pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow::Result<()> {
@@ -105,7 +102,8 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
 
     let mut last_capslock = Instant::now();
 
-    let mut size = get_total_size()?;
+    #[cfg(target_os = "linux")]
+    let (conn, screen_num) = x11rb::connect(None)?;
 
     // Windows and macOS need accumulators to handle small scroll events
     #[cfg(not(target_os = "linux"))]
@@ -152,6 +150,7 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
                 if r#type != "pen" {
                     continue;
                 }
+                let size = get_total_size(&conn, screen_num)?;
                 multi_touch.pen(x + startx as i32, y, pressure, tilt_x, tilt_y, size);
             }
             #[cfg(target_os = "linux")]
@@ -161,11 +160,14 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
                 y: Some(y),
                 id: Some(id),
                 ..
-            } => match r#type.as_str() {
-                "touchstart" => multi_touch.touch_down(id, x + startx as i32, y, id, size),
-                "touchmove" => multi_touch.touch_move(id, x + startx as i32, y, size),
-                _ => {}
-            },
+            } => {
+                let size = get_total_size(&conn, screen_num)?;
+                match r#type.as_str() {
+                    "touchstart" => multi_touch.touch_down(id, x + startx as i32, y, id, size),
+                    "touchmove" => multi_touch.touch_move(id, x + startx as i32, y, size),
+                    _ => {}
+                }
+            }
             InputCommand {
                 r#type,
                 x: Some(x),
@@ -424,12 +426,6 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
                 if r#type == "keydown" {
                     enigo.key(Key::Function, Release)?;
                 }
-            }
-            InputCommand {
-                update_display: true,
-                ..
-            } => {
-                size = get_total_size()?;
             }
             // We ignore bad input
             _ => {}

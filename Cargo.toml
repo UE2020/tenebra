@@ -26,7 +26,9 @@ sysinfo = "0.31.4"
 tokio = { version = "1.40.0", features = ["full"] }
 tower-http = { version = "0.5.2", features = ["cors"] }
 axum-server = { version = "0.7.1", features = ["tls-rustls"] }
-display-info = "0.5.4"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+x11rb = "0.13.1"
 
 [build-dependencies]
 cc = "1.1.24"

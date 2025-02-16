@@ -305,11 +305,11 @@ pub async fn start_pipeline(
         .build()?;
 
     #[cfg(feature = "vapostproc")]
-    let videoconvert = ElementFactory::make("vapostproc").build()?;
+    let videoconvert = ElementFactory::make("vapostproc").property_from_str("scale-method", "fast").build()?;
 
     #[cfg(not(feature = "vapostproc"))]
     let videoconvert = ElementFactory::make("videoconvert").property("n-threads", 4u32).build()?;
-
+    dbg!(&videoconvert);
     #[cfg(feature = "full-chroma")]
     const FORMAT: &str = "Y444";
 
@@ -321,9 +321,17 @@ pub async fn start_pipeline(
         "Full-chroma is not supported with VA-API! This compile-time option has been ignored."
     );
 
+    #[cfg(not(feature = "vapostproc"))]
     let format_caps = gstreamer::Caps::builder("video/x-raw")
         .field("format", FORMAT)
         .build();
+
+    #[cfg(feature = "vapostproc")]
+    let format_caps = {
+        let caps_str = "video/x-raw(memory:VAMemory)";
+        let caps = gstreamer::Caps::from_str(caps_str)?;
+        caps
+    };
 
     println!("Format caps: {}", format_caps);
     let format_capsfilter = ElementFactory::make("capsfilter")
@@ -444,6 +452,8 @@ pub async fn start_pipeline(
             .build(),
     );
 
+    //let queue = ElementFactory::make("queue").property("max-size-buffers", 1u32).property("max-size-time", 0u64).property("max-size-bytes", 0u32).property_from_str("leaky", "downstream").build()?;
+
     // Create the pipeline
     let pipeline = Pipeline::default();
 
@@ -454,6 +464,7 @@ pub async fn start_pipeline(
         &textoverlay,
         &videoconvert,
         &format_capsfilter,
+        //&queue,
         &enc,
         &h264_capsfilter,
         appsink.upcast_ref(),
@@ -466,6 +477,7 @@ pub async fn start_pipeline(
         &textoverlay,
         &videoconvert,
         &format_capsfilter,
+        //&queue,
         &enc,
         &h264_capsfilter,
         appsink.upcast_ref(),
