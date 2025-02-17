@@ -313,7 +313,7 @@ pub async fn start_pipeline(
             .property_from_str("pass", "cbr")
             .property_from_str("speed-preset", "veryfast")
             .property_from_str("tune", "zerolatency")
-            .property("bitrate", 3200u32)
+            .property("bitrate", 4000u32 - 64u32)
             .build()?
     } else {
         ElementFactory::make("vah264lpenc")
