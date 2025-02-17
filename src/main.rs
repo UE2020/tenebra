@@ -56,6 +56,7 @@
 
 use std::{
     net::SocketAddr,
+    path::PathBuf,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -67,7 +68,7 @@ use tokio::{
     sync::mpsc::unbounded_channel,
 };
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 
 use askama::Template;
 use axum::{
@@ -137,7 +138,7 @@ async fn offer(
     Json(payload): Json<CreateOffer>,
 ) -> Result<(StatusCode, Json<ResponseOffer>), AppError> {
     println!("Received offer");
-    if payload.password != state.password {
+    if payload.password != state.config.password {
         return Ok((
             StatusCode::UNAUTHORIZED,
             Json(ResponseOffer::Error("Password incorrect.".to_string())),
@@ -164,10 +165,11 @@ async fn offer(
         .set_send_buffer_video(1000)
         .set_stats_interval(Some(Duration::from_secs(1)));
 
-    #[cfg(not(feature = "no-bwe"))]
-    let mut rtc = rtc.enable_bwe(Some(Bitrate::kbps(4000))).build();
-    #[cfg(feature = "no-bwe")]
-    let mut rtc = rtc.build();
+    let mut rtc = if state.config.no_bwe {
+        rtc.build()
+    } else {
+        rtc.enable_bwe(Some(Bitrate::kbps(4000))).build()
+    };
 
     let local_ip = local_ip()?;
 
@@ -197,8 +199,7 @@ async fn offer(
         str0m::net::Protocol::Tcp,
     )?);
 
-    #[cfg(feature = "tcp-upnp")]
-    let gateway_and_port =
+    let gateway_and_port = if state.config.tcp_upnp {
         if let Ok(gateway) = igd_next::aio::tokio::search_gateway(Default::default()).await {
             println!("Successfully obtained gateway");
 
@@ -224,16 +225,17 @@ async fn offer(
             Some((gateway, port))
         } else {
             None
-        };
-
-    // if tcp-upnp is OFF, we can assume that the
-    // server's ports are all open
-    #[cfg(not(feature = "tcp-upnp"))]
-    rtc.add_local_candidate(Candidate::server_reflexive(
-        SocketAddr::new(stun_addr.ip(), tcp.local_addr()?.port()),
-        tcp_local_socket_addr,
-        str0m::net::Protocol::Tcp,
-    )?);
+        }
+    } else {
+        // if tcp-upnp is OFF, we can assume that the
+        // server's ports are all open
+        rtc.add_local_candidate(Candidate::server_reflexive(
+            SocketAddr::new(stun_addr.ip(), tcp.local_addr()?.port()),
+            tcp_local_socket_addr,
+            str0m::net::Protocol::Tcp,
+        )?);
+        None
+    };
 
     // Accept an incoming offer from the remote peer
     // and get the corresponding answer.
@@ -272,7 +274,6 @@ async fn offer(
             eprintln!("Run task exited: {e:?}");
         }
 
-        #[cfg(feature = "tcp-upnp")]
         if let Some((gateway, port)) = gateway_and_port {
             println!("Removing port mapping {}.", port);
             gateway
@@ -344,10 +345,24 @@ async fn home() -> impl IntoResponse {
 pub struct AppState {
     input_tx: UnboundedSender<InputCommand>,
     kill_switch: Arc<Mutex<Option<UnboundedSender<()>>>>,
-    bitrate: u32,
-    startx: u32,
-    password: String,
     ports: Arc<Mutex<Vec<u16>>>,
+    config: Config,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+struct Config {
+    target_bitrate: u32,
+    startx: u32,
+    port: u16,
+    password: String,
+    sound_forwarding: bool,
+    vaapi: bool,
+    vapostproc: bool,
+    no_bwe: bool,
+    full_chroma: bool,
+    tcp_upnp: bool,
+    cert: PathBuf,
+    key: PathBuf,
 }
 
 #[tokio::main]
@@ -360,21 +375,19 @@ async fn main() -> Result<()> {
     // Initialize GStreamer
     gstreamer::init().unwrap();
 
-    let args = std::env::args().collect::<Vec<_>>();
-    let password = &args[1];
-    let port = args[2]
-        .parse::<u32>()
-        .expect("port should be passed as a numerical argument");
-    let bitrate = args
-        .get(3)
-        .unwrap_or(&"4000".to_owned())
-        .parse::<u32>()
-        .expect("bitrate should be passed as a numerical argument");
-    let startx = args
-        .get(4)
-        .unwrap_or(&"0".to_owned())
-        .parse::<u32>()
-        .expect("startx should be passed as a numerical argument");
+    // get the config path
+    let mut config_path = dirs::config_dir()
+        .context("Failed to find config directory")?
+        .join("tenebra");
+    std::fs::create_dir_all(&config_path)?;
+    config_path.push("config.toml");
+    if !config_path.exists() {
+        std::fs::write(&config_path, include_bytes!("default.toml"))?;
+    }
+
+    // read the config
+    let config: Config = toml::from_str(&std::fs::read_to_string(config_path)?)?;
+
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<InputCommand>();
     let ports = Arc::new(Mutex::new(Vec::new()));
     let app = Router::new()
@@ -384,98 +397,70 @@ async fn main() -> Result<()> {
         .with_state(AppState {
             input_tx: tx,
             kill_switch: Arc::new(Mutex::new(None)),
-            bitrate,
-            startx,
-            password: password.to_string(),
+            config: config.clone(),
             ports: ports.clone(),
         });
 
-    let config = RustlsConfig::from_pem(
-        include_bytes!("../cert.pem").to_vec(),
-        include_bytes!("../key.pem").to_vec(),
-    )
-    .await?;
+    let tls_config =
+        RustlsConfig::from_pem(std::fs::read(&config.cert)?, std::fs::read(&config.key)?).await?;
 
     spawn(async move {
-        axum_server::bind_rustls(SocketAddr::from(([0, 0, 0, 0], port as u16)), config)
+        axum_server::bind_rustls(SocketAddr::from(([0, 0, 0, 0], config.port)), tls_config)
             .serve(app.into_make_service())
             .await
             .unwrap();
     });
 
-    println!("Tenebra is listening on port {}.", port);
+    println!("Tenebra is listening on port {}.", config.port);
 
-    // We can try to forward the server with UPnP
-    match igd_next::aio::tokio::search_gateway(Default::default()).await {
-        Ok(gateway) => {
-            use tokio::signal::ctrl_c;
-            #[cfg(feature = "upnp")]
-            let local_addr = SocketAddr::new(local_ip()?, port as u16);
-            #[cfg(feature = "upnp")]
-            match gateway
-                .add_any_port(
-                    igd_next::PortMappingProtocol::TCP,
-                    local_addr,
-                    0,
-                    "Telewindow server",
-                )
-                .await
-            {
-                Err(ref err) => {
-                    println!("There was an error! {err}");
-                }
-                Ok(port) => {
-                    ports.lock().unwrap().push(port);
-                    let global_ip = gateway.get_external_ip().await.unwrap();
-                    let global_addr = SocketAddr::new(global_ip, port);
-                    println!(
-                        "The tenebra service has been portforwarded.\nThe external address is {global_addr}"
-                    );
-                }
+    if config.tcp_upnp {
+        match igd_next::aio::tokio::search_gateway(Default::default()).await {
+            Ok(gateway) => {
+                use tokio::signal::ctrl_c;
+                spawn(async move {
+                    #[cfg(target_family = "unix")]
+                    let mut sigterm_stream =
+                        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                            .unwrap();
+
+                    #[cfg(target_family = "unix")]
+                    let mut sighup_stream =
+                        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup())
+                            .unwrap();
+
+                    #[cfg(target_family = "unix")]
+                    tokio::select! {
+                        _ = ctrl_c() => {},
+                        _ = sigterm_stream.recv() => {},
+                        _ = sighup_stream.recv() => {},
+                    }
+
+                    #[cfg(not(target_family = "unix"))]
+                    ctrl_c().await.unwrap();
+
+                    let ports = ports.lock().unwrap().clone();
+
+                    println!();
+                    for port in ports {
+                        gateway
+                            .remove_port(igd_next::PortMappingProtocol::TCP, port)
+                            .await
+                            .ok();
+                        println!("Port mapping {port} removed. Exiting...");
+                    }
+
+                    std::process::exit(0);
+                });
             }
-
-            spawn(async move {
-                #[cfg(target_family = "unix")]
-                let mut sigterm_stream =
-                    tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-                        .unwrap();
-
-                #[cfg(target_family = "unix")]
-                let mut sighup_stream =
-                    tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup()).unwrap();
-
-                #[cfg(target_family = "unix")]
-                tokio::select! {
-                    _ = ctrl_c() => {},
-                    _ = sigterm_stream.recv() => {},
-                    _ = sighup_stream.recv() => {},
-                }
-
-                #[cfg(not(target_family = "unix"))]
-                ctrl_c().await.unwrap();
-
-                let ports = ports.lock().unwrap().clone();
-
-                println!();
-                for port in ports {
-                    gateway
-                        .remove_port(igd_next::PortMappingProtocol::TCP, port)
-                        .await
-                        .ok();
-                    println!("Port mapping {port} removed. Exiting...");
-                }
-
-                std::process::exit(0);
-            });
+            Err(e) => println!("Error obtaining UPnP gateway: {}", e),
         }
-        Err(e) => println!("Error obtaining UPnP gateway: {}", e),
     }
 
     #[cfg(target_os = "linux")]
-    tokio::task::spawn_blocking(move || do_input(rx, startx)).await??;
+    tokio::task::spawn_blocking(move || do_input(rx, config.startx)).await??;
 
     #[cfg(not(target_os = "linux"))]
-    tokio::task::block_in_place(move || do_input(rx, startx))?;
+    tokio::task::block_in_place(move || do_input(rx, config.startx))?;
 
     Ok(())
 }

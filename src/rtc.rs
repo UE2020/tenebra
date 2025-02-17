@@ -89,7 +89,6 @@ pub enum GStreamerControlMessage {
     Stop,
     RequestKeyFrame,
     Bitrate(u32),
-    Stats { rtt: Option<f32>, loss: Option<f32> },
 }
 
 struct GStreamerInstance {
@@ -175,17 +174,21 @@ pub async fn run(
                     }
                     Event::MediaAdded(media_added) => {
                         let kind = media_added.kind;
-                        #[cfg(not(all(target_os = "linux", feature = "sound-forwarding")))]
                         if kind.is_audio() {
+                            if !state.config.sound_forwarding {
+                                continue;
+                            }
+                            #[cfg(not(target_os = "linux"))]
                             continue;
                         }
-                        #[cfg(feature = "vaapi")]
-                        rtc.direct_api()
-                            .stream_tx_by_mid(media_added.mid, None)
-                            .context("no stream")?
-                            .set_unpaced(true);
+                        if state.config.vaapi {
+                            rtc.direct_api()
+                                .stream_tx_by_mid(media_added.mid, None)
+                                .context("no stream")?
+                                .set_unpaced(true);
+                        }
                         rtc.bwe()
-                            .set_desired_bitrate(Bitrate::kbps(state.bitrate as u64));
+                            .set_desired_bitrate(Bitrate::kbps(state.config.target_bitrate as u64));
                         let (control_tx, control_rx) =
                             unbounded_channel::<GStreamerControlMessage>();
                         let (buffer_tx, buffer_rx) = unbounded_channel();
@@ -197,7 +200,7 @@ pub async fn run(
                         let waker_clone = waker.clone();
                         match kind {
                             MediaKind::Video => tokio::task::spawn(pipeline::start_pipeline(
-                                state.startx,
+                                state.config.clone(),
                                 offer.show_mouse,
                                 control_rx,
                                 buffer_tx,
@@ -210,14 +213,6 @@ pub async fn run(
                             )),
                         };
                     }
-                    Event::MediaEgressStats(stats) => {
-                        for gstreamer in gstreamers.iter_mut() {
-                            gstreamer.control_tx.send(GStreamerControlMessage::Stats {
-                                rtt: stats.rtt,
-                                loss: stats.loss,
-                            })?;
-                        }
-                    }
                     Event::KeyframeRequest(_) => {
                         for gstreamer in gstreamers.iter_mut() {
                             gstreamer
@@ -225,15 +220,14 @@ pub async fn run(
                                 .send(GStreamerControlMessage::RequestKeyFrame)?;
                         }
                     }
-                    #[cfg(not(feature = "vaapi"))]
                     Event::EgressBitrateEstimate(
                         BweKind::Twcc(bitrate) | BweKind::Remb(_, bitrate),
                     ) => {
-                        #[cfg(feature = "vaapi")]
-                        let bwe = (bitrate.as_u64() / 1000).clamp(4000, state.bitrate as u64 + 3000)
-                            as u32;
-                        #[cfg(not(feature = "vaapi"))]
-                        let bwe = (bitrate.as_u64() / 1000).clamp(2000, state.bitrate as u64 + 3000)
+                        if state.config.vaapi {
+                            continue;
+                        }
+                        let bwe = (bitrate.as_u64() / 1000)
+                            .clamp(2000, state.config.target_bitrate as u64 + 3000)
                             as u32;
                         let deducted = gstreamers
                             .iter()

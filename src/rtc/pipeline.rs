@@ -67,6 +67,8 @@ use tokio::sync::Notify;
 
 use anyhow::{Context, Result};
 
+use crate::Config;
+
 use super::GStreamerControlMessage;
 
 async fn get_pulseaudio_monitor_name() -> Result<String> {
@@ -97,41 +99,6 @@ async fn get_pulseaudio_monitor_name() -> Result<String> {
     }
 
     anyhow::bail!("No monitor device found");
-}
-
-#[derive(Default)]
-struct StatisticsOverlay {
-    bitrate: Option<u32>,
-    rtt: Option<f32>,
-    loss: Option<f32>,
-}
-
-impl StatisticsOverlay {
-    const fn new() -> Self {
-        StatisticsOverlay {
-            bitrate: None,
-            rtt: None,
-            loss: None,
-        }
-    }
-
-    #[cfg(feature = "textoverlay")]
-    fn render_to(&self, textoverlay: &gstreamer::Element) {
-        let mut text = String::new();
-        if let Some(bitrate) = self.bitrate {
-            text.push_str(&format!("Bitrate: {} kbit/s\n", bitrate));
-        }
-        if let Some(rtt) = self.rtt {
-            text.push_str(&format!("Round-trip: {} ms\n", rtt.round()));
-        }
-        if let Some(loss) = self.loss {
-            text.push_str(&format!("Loss: {}%", (loss * 100.0).round()));
-        }
-        textoverlay.set_property("text", text);
-    }
-
-    #[cfg(not(feature = "textoverlay"))]
-    fn render_to(&self, _textoverlay: &gstreamer::Element) {}
 }
 
 /// # Warning: LINUX ONLY
@@ -260,7 +227,7 @@ pub async fn start_audio_pipeline(
 }
 
 pub async fn start_pipeline(
-    startx: u32,
+    config: Config,
     show_mouse: bool,
     mut control_rx: UnboundedReceiver<GStreamerControlMessage>,
     buffer_tx: UnboundedSender<(Vec<u8>, u64)>,
@@ -269,7 +236,7 @@ pub async fn start_pipeline(
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     let src = ElementFactory::make("ximagesrc")
         .property("use-damage", false)
-        .property("startx", startx)
+        .property("startx", config.startx)
         .property("show-pointer", show_mouse)
         .property("blocksize", 16384u32)
         .property("remote", true)
@@ -286,17 +253,6 @@ pub async fn start_pipeline(
         .property("show-cursor", show_mouse)
         .build()?;
 
-    let textoverlay = ElementFactory::make("textoverlay")
-        .property("text", "")
-        .property_from_str("valignment", "bottom")
-        .property_from_str("halignment", "center")
-        .property("font-desc", "Sans, 3")
-        //.property("draw-outline", false)
-        //.property("draw-shadow", false)
-        .property("ypad", 3i32)
-        //.property("color", u32::from_ne_bytes([0, 0, 255, 255]))
-        .build()?;
-
     let video_caps = gstreamer::Caps::builder("video/x-raw")
         .field("framerate", gstreamer::Fraction::new(60, 1))
         .build();
@@ -304,30 +260,29 @@ pub async fn start_pipeline(
         .property("caps", &video_caps)
         .build()?;
 
-    #[cfg(feature = "vapostproc")]
-    let videoconvert = ElementFactory::make("vapostproc").property_from_str("scale-method", "fast").build()?;
+    let videoconvert = if config.vapostproc {
+        ElementFactory::make("vapostproc")
+            .property_from_str("scale-method", "fast")
+            .build()?
+    } else {
+        ElementFactory::make("videoconvert")
+            .property("n-threads", 4u32)
+            .build()?
+    };
 
-    #[cfg(not(feature = "vapostproc"))]
-    let videoconvert = ElementFactory::make("videoconvert").property("n-threads", 4u32).build()?;
-    dbg!(&videoconvert);
-    #[cfg(feature = "full-chroma")]
-    const FORMAT: &str = "Y444";
+    let format = if config.full_chroma { "Y444" } else { "NV12" };
 
-    #[cfg(not(feature = "full-chroma"))]
-    const FORMAT: &str = "NV12";
+    if config.full_chroma && config.vapostproc {
+        println!(
+            "Full-chroma is not supported with VA-API! This configuration option has been ignored."
+        );
+    }
 
-    #[cfg(all(feature = "full-chroma", feature = "vaapi"))]
-    println!(
-        "Full-chroma is not supported with VA-API! This compile-time option has been ignored."
-    );
-
-    #[cfg(not(feature = "vapostproc"))]
-    let format_caps = gstreamer::Caps::builder("video/x-raw")
-        .field("format", FORMAT)
-        .build();
-
-    #[cfg(feature = "vapostproc")]
-    let format_caps = {
+    let format_caps = if !config.vapostproc {
+        gstreamer::Caps::builder("video/x-raw")
+            .field("format", format)
+            .build()
+    } else {
         let caps_str = "video/x-raw(memory:VAMemory)";
         let caps = gstreamer::Caps::from_str(caps_str)?;
         caps
@@ -343,54 +298,56 @@ pub async fn start_pipeline(
     // #[cfg(feature = "vaapi")]
     // let conversion_queue = ElementFactory::make("queue").build()?;
 
-    #[cfg(not(feature = "vaapi"))]
-    let enc = ElementFactory::make("x264enc")
-        //.property("qos", true)
-        .property("threads", 4u32)
-        .property("aud", false)
-        .property("b-adapt", false)
-        .property("bframes", 0u32)
-        .property("insert-vui", true)
-        .property("rc-lookahead", 0)
-        .property("vbv-buf-capacity", 120u32)
-        .property("sliced-threads", true)
-        .property("byte-stream", true)
-        .property_from_str("pass", "cbr")
-        .property_from_str("speed-preset", "veryfast")
-        .property_from_str("tune", "zerolatency")
-        .property("bitrate", 3200u32)
-        .build()?;
-
-    #[cfg(feature = "vaapi")]
-    let enc = ElementFactory::make("vah264lpenc")
-        .property("aud", true)
-        .property("b-frames", 0u32)
-        .property("dct8x8", false)
-        .property("key-int-max", 1024u32)
-        .property("num-slices", 4u32)
-        .property("ref-frames", 1u32)
-        .property("target-usage", 6u32)
-        .property_from_str("mbbrc", "disabled")
-        .build()?;
+    let enc = if !config.vaapi {
+        ElementFactory::make("x264enc")
+            //.property("qos", true)
+            .property("threads", 4u32)
+            .property("aud", false)
+            .property("b-adapt", false)
+            .property("bframes", 0u32)
+            .property("insert-vui", true)
+            .property("rc-lookahead", 0)
+            .property("vbv-buf-capacity", 120u32)
+            .property("sliced-threads", true)
+            .property("byte-stream", true)
+            .property_from_str("pass", "cbr")
+            .property_from_str("speed-preset", "veryfast")
+            .property_from_str("tune", "zerolatency")
+            .property("bitrate", 3200u32)
+            .build()?
+    } else {
+        ElementFactory::make("vah264lpenc")
+            .property("aud", true)
+            .property("b-frames", 0u32)
+            .property("dct8x8", false)
+            .property("key-int-max", 1024u32)
+            .property("num-slices", 4u32)
+            .property("ref-frames", 1u32)
+            .property("target-usage", 6u32)
+            .property_from_str("mbbrc", "disabled")
+            .build()?
+    };
 
     println!("Enc: {:?}", enc);
 
-    #[cfg(feature = "full-chroma")]
-    const PROFILE: &str = "high-4:4:4";
+    let profile = if config.full_chroma {
+        "high-4:4:4"
+    } else {
+        "baseline"
+    };
 
-    #[cfg(not(feature = "full-chroma"))]
-    const PROFILE: &str = "baseline";
+    let h264_caps = if config.vaapi {
+        gstreamer::Caps::builder("video/x-h264")
+            .field("profile", "high")
+            .field("stream-format", "byte-stream")
+            .build()
+    } else {
+        gstreamer::Caps::builder("video/x-h264")
+            .field("profile", profile)
+            .field("stream-format", "byte-stream")
+            .build()
+    };
 
-    #[cfg(feature = "vaapi")]
-    let h264_caps = gstreamer::Caps::builder("video/x-h264")
-        .field("profile", "high")
-        .field("stream-format", "byte-stream")
-        .build();
-    #[cfg(not(feature = "vaapi"))]
-    let h264_caps = gstreamer::Caps::builder("video/x-h264")
-        .field("profile", PROFILE)
-        .field("stream-format", "byte-stream")
-        .build();
     let h264_capsfilter = ElementFactory::make("capsfilter")
         .property("caps", &h264_caps)
         .build()?;
@@ -461,7 +418,6 @@ pub async fn start_pipeline(
     pipeline.add_many([
         &src,
         &video_capsfilter,
-        &textoverlay,
         &videoconvert,
         &format_capsfilter,
         //&queue,
@@ -474,7 +430,6 @@ pub async fn start_pipeline(
     gstreamer::Element::link_many([
         &src,
         &video_capsfilter,
-        &textoverlay,
         &videoconvert,
         &format_capsfilter,
         //&queue,
@@ -485,8 +440,6 @@ pub async fn start_pipeline(
 
     // Set the pipeline to playing state
     pipeline.set_state(State::Playing)?;
-
-    let mut stats = StatisticsOverlay::new();
 
     while let Some(msg) = control_rx.recv().await {
         match msg {
@@ -504,24 +457,9 @@ pub async fn start_pipeline(
                 ));
             }
             GStreamerControlMessage::Bitrate(bitrate) => {
-                stats.bitrate = Some(bitrate);
-                stats.render_to(&textoverlay);
-                //#[cfg(not(feature = "vaapi"))]
-                enc.set_property("bitrate", bitrate); // video takes 80% bitrate
-                #[cfg(feature = "vaapi")]
-                enc.set_property(
-                    "cpb-size",
-                    ((bitrate as f64 + 60.0 - 1.0) / 60.0 * 1.5).floor() as u32,
-                );
-            }
-            GStreamerControlMessage::Stats { rtt, loss } => {
-                if let Some(rtt) = rtt {
-                    stats.rtt = Some(rtt);
+                if !config.vapostproc {
+                    enc.set_property("bitrate", bitrate); // video takes 80% bitrate
                 }
-                if let Some(loss) = loss {
-                    stats.loss = Some(loss);
-                }
-                stats.render_to(&textoverlay);
             }
         }
     }

@@ -1,0 +1,12 @@
+target_bitrate = 4000
+startx = 0
+port = 8080
+password = "placeholder"
+sound_forwarding = true # Linux only: other platforms will behave as if this is always false
+vaapi = false # Linux only: other platforms will behave as if this is always false
+vapostproc = false # Linux only: other platforms will behave as if this is always false
+no_bwe = false
+full_chroma = false
+tcp_upnp = true
+cert = "/path/to/cert"
+key = "/path/to/key"
