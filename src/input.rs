@@ -87,7 +87,7 @@ pub struct InputCommand {
     pub tiltY: Option<i32>,
 }
 
-#[cfg(target_os = "linux"))]
+#[cfg(target_os = "linux")]
 pub fn get_total_size(conn: &RustConnection) -> anyhow::Result<(i32, i32)> {
     let root_window = conn.setup().roots[0].root;
     let geometry = conn.get_geometry(root_window)?.reply()?;
