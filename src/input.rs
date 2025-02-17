@@ -65,9 +65,9 @@ use enigo::{
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::UnboundedReceiver;
 
-#[cfg(target_os = "linux"))]
+#[cfg(target_os = "linux")]
 use x11rb::protocol::xproto::ConnectionExt;
-#[cfg(target_os = "linux"))]
+#[cfg(target_os = "linux")]
 use x11rb::{connection::Connection, rust_connection::RustConnection};
 
 #[cfg(target_os = "linux")]
