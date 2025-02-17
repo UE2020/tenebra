@@ -65,6 +65,7 @@ use enigo::{
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::UnboundedReceiver;
 
+use x11rb::protocol::xproto::ConnectionExt;
 use x11rb::{connection::Connection, rust_connection::RustConnection};
 
 #[cfg(target_os = "linux")]
@@ -84,14 +85,10 @@ pub struct InputCommand {
     pub tiltY: Option<i32>,
 }
 
-pub fn get_total_size(conn: &RustConnection, screen_num: usize) -> anyhow::Result<(i32, i32)> {
-    // Access the default screen's configuration
-    let screen = &conn.setup().roots[screen_num];
-
-    // Retrieve the total dimensions
-    let total_width = screen.width_in_pixels;
-    let total_height = screen.height_in_pixels;
-    Ok((total_width as _, total_height as _))
+pub fn get_total_size(conn: &RustConnection) -> anyhow::Result<(i32, i32)> {
+    let root_window = conn.setup().roots[0].root;
+    let geometry = conn.get_geometry(root_window)?.reply()?;
+    Ok((geometry.width as _, geometry.height as _))
 }
 
 pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow::Result<()> {
@@ -103,7 +100,7 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
     let mut last_capslock = Instant::now();
 
     #[cfg(target_os = "linux")]
-    let (conn, screen_num) = x11rb::connect(None)?;
+    let (conn, _screen_num) = x11rb::connect(None)?;
 
     // Windows and macOS need accumulators to handle small scroll events
     #[cfg(not(target_os = "linux"))]
@@ -150,7 +147,7 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
                 if r#type != "pen" {
                     continue;
                 }
-                let size = get_total_size(&conn, screen_num)?;
+                let size = get_total_size(&conn)?;
                 multi_touch.pen(x + startx as i32, y, pressure, tilt_x, tilt_y, size);
             }
             #[cfg(target_os = "linux")]
@@ -161,7 +158,7 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
                 id: Some(id),
                 ..
             } => {
-                let size = get_total_size(&conn, screen_num)?;
+                let size = get_total_size(&conn)?;
                 match r#type.as_str() {
                     "touchstart" => multi_touch.touch_down(id, x + startx as i32, y, id, size),
                     "touchmove" => multi_touch.touch_move(id, x + startx as i32, y, size),
