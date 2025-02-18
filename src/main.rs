@@ -361,8 +361,14 @@ struct Config {
     no_bwe: bool,
     full_chroma: bool,
     tcp_upnp: bool,
+    #[serde(default = "default_vbv_buf_capacity")]
+    vbv_buf_capacity: u32,
     cert: PathBuf,
     key: PathBuf,
+}
+
+fn default_vbv_buf_capacity() -> u32 {
+    120
 }
 
 #[tokio::main]
