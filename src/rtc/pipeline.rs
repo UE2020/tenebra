@@ -457,7 +457,7 @@ pub async fn start_pipeline(
                 ));
             }
             GStreamerControlMessage::Bitrate(bitrate) => {
-                if !config.vapostproc {
+                if !config.vaapi {
                     enc.set_property("bitrate", bitrate); // video takes 80% bitrate
                 }
             }

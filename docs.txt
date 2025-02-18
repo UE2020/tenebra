@@ -1,0 +1,254 @@
+Factory Details:
+  Rank                     none (0)
+  Long-name                Intel Quick Sync Video H.264 Encoder
+  Klass                    Codec/Encoder/Video/Hardware
+  Description              Intel Quick Sync Video H.264 Encoder
+  Author                   Seungha Yang <seungha@centricular.com>
+  Documentation            https://gstreamer.freedesktop.org/documentation/qsv/qsvh264enc.html
+
+Plugin Details:
+  Name                     qsv
+  Description              Intel Quick Sync Video plugin
+  Filename                 /usr/lib/gstreamer-1.0/libgstqsv.so
+  Version                  1.24.12
+  License                  LGPL
+  Source module            gst-plugins-bad
+  Documentation            https://gstreamer.freedesktop.org/documentation/qsv/
+  Source release date      2025-01-29
+  Binary package           Arch Linux GStreamer 1.24.12-1
+  Origin URL               https://www.archlinux.org/
+
+GObject
+ +----GInitiallyUnowned
+       +----GstObject
+             +----GstElement
+                   +----GstVideoEncoder
+                         +----GstQsvEncoder
+                               +----GstQsvH264Enc
+
+Implemented Interfaces:
+  GstPreset
+
+Pad Templates:
+  SINK template: 'sink'
+    Availability: Always
+    Capabilities:
+      video/x-raw(memory:VAMemory)
+                 format: NV12
+                  width: [ 16, 4096 ]
+                 height: [ 16, 4096 ]
+      video/x-raw
+                 format: NV12
+                  width: [ 16, 4096 ]
+                 height: [ 16, 4096 ]
+  
+  SRC template: 'src'
+    Availability: Always
+    Capabilities:
+      video/x-h264
+                  width: [ 16, 4096 ]
+                 height: [ 16, 4096 ]
+          stream-format: { (string)avc, (string)byte-stream }
+              alignment: au
+                profile: { (string)high, (string)main, (string)constrained-baseline, (string)progressive-high, (string)constrained-high, (string)baseline }
+
+Element has no clocking capabilities.
+Element has no URI handling capabilities.
+
+Pads:
+  SINK: 'sink'
+    Pad Template: 'sink'
+  SRC: 'src'
+    Pad Template: 'src'
+
+Element Properties:
+
+  avbr-accuracy       : AVBR Accuracy in the unit of tenth of percent
+                        flags: readable, writable
+                        Unsigned Integer. Range: 0 - 65535 Default: 0 
+  
+  avbr-convergence    : AVBR Convergence in the unit of 100 frames
+                        flags: readable, writable
+                        Unsigned Integer. Range: 0 - 65535 Default: 0 
+  
+  b-frames            : Number of B frames between I and P frames
+                        flags: readable, writable
+                        Unsigned Integer. Range: 0 - 65535 Default: 0 
+  
+  bitrate             : Target bitrate in kbit/sec, Ignored when selected rate-control mode is constant QP variants (i.e., "cqp", "icq", and "la_icq")
+                        flags: readable, writable
+                        Unsigned Integer. Range: 0 - 2147483647 Default: 2000 
+  
+  cabac               : Enables CABAC entropy coding
+                        flags: readable, writable
+                        Enum "GstQsvCodingOption" Default: 0, "unknown"
+                           (0): unknown          - Unknown
+                           (16): on               - On
+                           (32): off              - Off
+  
+  cc-insert           : Closed Caption Insert mode. Only CEA-708 RAW format is supported for now
+                        flags: readable, writable
+                        Enum "GstQsvH264EncSeiInsertMode" Default: 0, "insert"
+                           (0): insert           - Insert SEI
+                           (1): insert-and-drop  - Insert SEI and remove corresponding meta from output buffer
+                           (2): disabled         - Disable SEI insertion
+  
+  device-path         : DRM device path
+                        flags: readable, conditionally available
+                        String. Default: "/dev/dri/renderD128"
+  
+  disable-hrd-conformance: Allow NAL HRD non-conformant stream
+                        flags: readable, writable
+                        Boolean. Default: false
+  
+  gop-size            : Number of pictures within a GOP (0: unspecified)
+                        flags: readable, writable
+                        Unsigned Integer. Range: 0 - 65535 Default: 30 
+  
+  icq-quality         : Intelligent Constant Quality for "icq" rate-control (0: default)
+                        flags: readable, writable
+                        Unsigned Integer. Range: 0 - 51 Default: 0 
+  
+  idr-interval        : IDR-frame interval in terms of I-frames. 0: every I-frame is an IDR frame, N: "N" I-frames are inserted between IDR-frames
+                        flags: readable, writable
+                        Unsigned Integer. Range: 0 - 65535 Default: 0 
+  
+  low-latency         : Enables low-latency encoding
+                        flags: readable, writable
+                        Boolean. Default: false
+  
+  max-bitrate         : Maximum bitrate in kbit/sec, Ignored when selected rate-control mode is constant QP variants (i.e., "cqp", "icq", and "la_icq")
+                        flags: readable, writable
+                        Unsigned Integer. Range: 0 - 2147483647 Default: 0 
+  
+  max-frame-size      : Maximum encoded frame size in bytes, used for VBR based bitrate control modes
+                        flags: readable, writable
+                        Unsigned Integer. Range: 0 - 4294967295 Default: 0 
+  
+  max-frame-size-i    : Maximum encoded I frame size in bytes, used for VBR based bitrate control modes
+                        flags: readable, writable
+                        Unsigned Integer. Range: 0 - 4294967295 Default: 0 
+  
+  max-frame-size-p    : Maximum encoded P and B frame size in bytes, used for VBR based bitrate control modes. "max-frame-size-i" must be non-zero, otherwise this propert will be ignored
+                        flags: readable, writable
+                        Unsigned Integer. Range: 0 - 4294967295 Default: 0 
+  
+  max-qp-b            : Maximum allowed QP value for B-frame types (0: default)
+                        flags: readable, writable
+                        Unsigned Integer. Range: 0 - 51 Default: 0 
+  
+  max-qp-i            : Maximum allowed QP value for I-frame types (0: default)
+                        flags: readable, writable
+                        Unsigned Integer. Range: 0 - 51 Default: 0 
+  
+  max-qp-p            : Maximum allowed QP value for P-frame types (0: default)
+                        flags: readable, writable
+                        Unsigned Integer. Range: 0 - 51 Default: 0 
+  
+  max-slice-size      : Maximum slice size in bytes. If this parameter is specified other controls over number of slices are ignored
+                        flags: readable, writable
+                        Unsigned Integer. Range: 0 - 4294967295 Default: 0 
+  
+  min-force-key-unit-interval: Minimum interval between force-keyunit requests in nanoseconds
+                        flags: readable, writable
+                        Unsigned Integer64. Range: 0 - 18446744073709551615 Default: 0 
+  
+  min-qp-b            : Minimum allowed QP value for B-frame types (0: default)
+                        flags: readable, writable
+                        Unsigned Integer. Range: 0 - 51 Default: 0 
+  
+  min-qp-i            : Minimum allowed QP value for I-frame types (0: default)
+                        flags: readable, writable
+                        Unsigned Integer. Range: 0 - 51 Default: 0 
+  
+  min-qp-p            : Minimum allowed QP value for P-frame types (0: default)
+                        flags: readable, writable
+                        Unsigned Integer. Range: 0 - 51 Default: 0 
+  
+  name                : The name of the object
+                        flags: readable, writable
+                        String. Default: "qsvh264enc0"
+  
+  num-slice           : Number of slices in each video frame
+                        flags: readable, writable
+                        Unsigned Integer. Range: 0 - 65535 Default: 0 
+  
+  num-slice-b         : Number of slices for B frame
+                        flags: readable, writable
+                        Unsigned Integer. Range: 0 - 65535 Default: 0 
+  
+  num-slice-i         : Number of slices for I frame
+                        flags: readable, writable
+                        Unsigned Integer. Range: 0 - 65535 Default: 0 
+  
+  num-slice-p         : Number of slices for P frame
+                        flags: readable, writable
+                        Unsigned Integer. Range: 0 - 65535 Default: 0 
+  
+  parent              : The parent of the object
+                        flags: readable, writable
+                        Object of type "GstObject"
+  
+  qos                 : Handle Quality-of-Service events from downstream
+                        flags: readable, writable
+                        Boolean. Default: false
+  
+  qp-b                : Constant quantizer for B frames (0: default)
+                        flags: readable, writable
+                        Unsigned Integer. Range: 0 - 51 Default: 0 
+  
+  qp-i                : Constant quantizer for I frames (0: default)
+                        flags: readable, writable
+                        Unsigned Integer. Range: 0 - 51 Default: 0 
+  
+  qp-p                : Constant quantizer for P frames (0: default)
+                        flags: readable, writable
+                        Unsigned Integer. Range: 0 - 51 Default: 0 
+  
+  qvbr-quality        : Quality level used for "qvbr" rate-control mode (0: default)
+                        flags: readable, writable
+                        Unsigned Integer. Range: 0 - 51 Default: 0 
+  
+  rate-control        : Rate Control Method
+                        flags: readable, writable
+                        Enum "GstQsvH264EncRateControl" Default: 2, "vbr"
+                           (1): cbr              - Constant Bitrate
+                           (2): vbr              - Variable Bitrate
+                           (3): cqp              - Constant Quantizer
+                           (4): avbr             - Average Variable Bitrate
+                           (8): la-vbr           - VBR with look ahead (Non HRD compliant)
+                           (9): icq              - Intelligent CQP
+                           (10): vcm              - Video Conferencing Mode (Non HRD compliant)
+                           (11): la-icq           - Intelligent CQP with LA (Non HRD compliant)
+                           (13): la-hrd           - HRD compliant LA
+                           (14): qvbr             - VBR with CQP
+  
+  rc-lookahead        : Number of frames to look ahead for Rate Control, used for "la_vbr", "la_icq", and "la_hrd" rate-control modes
+                        flags: readable, writable
+                        Unsigned Integer. Range: 10 - 100 Default: 10 
+  
+  rc-lookahead-ds     : Downsampling method in look-ahead rate control
+                        flags: readable, writable
+                        Enum "GstQsvH264EncRCLookAheadDS" Default: 0, "unknown"
+                           (0): unknown          - Unknown
+                           (1): off              - Do not use down sampling
+                           (2): 2x               - Down sample frames two times before estimation
+                           (3): 4x               - Down sample frames four times before estimation
+  
+  ref-frames          : Number of reference frames (0: unspecified)
+                        flags: readable, writable
+                        Unsigned Integer. Range: 0 - 16 Default: 2 
+  
+  target-usage        : 1: Best quality, 4: Balanced, 7: Best speed
+                        flags: readable, writable
+                        Unsigned Integer. Range: 1 - 7 Default: 4 
+  
+  trellis             : Trellis quantization mode
+                        flags: readable, writable
+                        Flags "GstQsvH264Trellis" Default: 0x00000000, "unknown"
+                           (0x00000000): unknown          - Unknown
+                           (0x00000001): off              - Disable for all frame types
+                           (0x00000002): i                - Enable for I frames
+                           (0x00000004): p                - Enable for P frames
+                           (0x00000008): b                - Enable for B frames
+  

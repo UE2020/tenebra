@@ -181,12 +181,6 @@ pub async fn run(
                             #[cfg(not(target_os = "linux"))]
                             continue;
                         }
-                        if state.config.vaapi {
-                            rtc.direct_api()
-                                .stream_tx_by_mid(media_added.mid, None)
-                                .context("no stream")?
-                                .set_unpaced(true);
-                        }
                         rtc.bwe()
                             .set_desired_bitrate(Bitrate::kbps(state.config.target_bitrate as u64));
                         let (control_tx, control_rx) =
@@ -223,9 +217,6 @@ pub async fn run(
                     Event::EgressBitrateEstimate(
                         BweKind::Twcc(bitrate) | BweKind::Remb(_, bitrate),
                     ) => {
-                        if state.config.vaapi {
-                            continue;
-                        }
                         let bwe = (bitrate.as_u64() / 1000)
                             .clamp(2000, state.config.target_bitrate as u64 + 3000)
                             as u32;
