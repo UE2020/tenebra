@@ -440,7 +440,7 @@ pub async fn start_pipeline(
     cfg_if::cfg_if! {
         if #[cfg(target_os = "macos")] {
             if config.full_chroma {
-                let videoconvert ElementFactory::make("videoconvert")
+                let videoconvert = ElementFactory::make("videoconvert")
                     .property("n-threads", 4u32)
                     .build()?;
 
