@@ -1,6 +1,6 @@
 [package]
 name = "tenebra"
-version = "0.2.6"
+version = "0.3.0"
 edition = "2021"
 repository = "https://github.com/UE2020/tenebra"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -28,6 +28,9 @@ tower-http = { version = "0.5.2", features = ["cors"] }
 axum-server = { version = "0.7.1", features = ["tls-rustls"] }
 toml = "0.8.20"
 dirs = "6.0.0"
+pretty_env_logger = "0.5.0"
+log = "0.4.25"
+cfg-if = "1.0.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 x11rb = "0.13.1"

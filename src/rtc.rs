@@ -55,6 +55,8 @@
  */
 
 use anyhow::anyhow;
+use log::debug;
+use log::trace;
 use std::io::ErrorKind;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -121,6 +123,8 @@ pub async fn run(
 
     let waker = Arc::new(Notify::new());
 
+    let mut current_bitrate = 4000u32 - 64u32;
+
     let ret = loop {
         if kill_rx.try_recv().is_ok() {
             break Err(anyhow!("task killed from the kill_tx"));
@@ -134,6 +138,18 @@ pub async fn run(
                     MediaKind::Audio => Codec::Opus,
                     MediaKind::Video => Codec::H264,
                 };
+
+                if needed_codec == Codec::H264 {
+                    trace!("Got H264 buffer with len={}", buf.len());
+                    let estimated_bitrate = (buf.len() as f64 / 125.0) * 60.0;
+                    trace!("Estimated send bitrate {}", estimated_bitrate);
+                    if estimated_bitrate as u32 > current_bitrate {
+                        debug!("Raising bitrate to {:.2}", estimated_bitrate);
+                        rtc.bwe()
+                            .set_current_bitrate(Bitrate::kbps(estimated_bitrate as u64));
+                    }
+                }
+
                 let writer = rtc
                     .writer(gstreamer.media.mid)
                     .context("couldn't get rtc writer")?
@@ -174,13 +190,18 @@ pub async fn run(
                     }
                     Event::MediaAdded(media_added) => {
                         let kind = media_added.kind;
-                        if kind.is_audio() {
-                            if !state.config.sound_forwarding {
-                                continue;
+                        cfg_if::cfg_if! {
+                            if #[cfg(target_os = "linux")] {
+                                if kind.is_audio() && !state.config.sound_forwarding {
+                                    continue
+                                }
+                            } else {
+                                if kind.is_audio() {
+                                    continue
+                                }
                             }
-                            #[cfg(not(target_os = "linux"))]
-                            continue;
                         }
+
                         rtc.bwe()
                             .set_desired_bitrate(Bitrate::kbps(state.config.target_bitrate as u64));
                         let (control_tx, control_rx) =
@@ -231,6 +252,8 @@ pub async fn run(
                                 .send(GStreamerControlMessage::Bitrate(bwe - deducted as u32))?;
                         }
                         rtc.bwe().set_current_bitrate(Bitrate::kbps(bwe as _));
+                        debug!("Set current bitrate to {}", bwe);
+                        current_bitrate = bwe as _;
                     }
                     Event::ChannelData(ChannelData { data, .. }) => {
                         let msg_str = String::from_utf8(data)?;
@@ -271,7 +294,7 @@ pub async fn run(
                         proto: Protocol::Tcp,
                         source: addr,
                         destination: tcp_addr,
-                        contents: (&buf).as_slice().try_into()?,
+                        contents: buf.as_slice().try_into()?,
                     },
                 )
                 }

@@ -116,7 +116,7 @@ pub async fn start_audio_pipeline(
     let src_capsfilter = ElementFactory::make("capsfilter")
         .property(
             "caps",
-            &gstreamer::Caps::builder("audio/x-raw")
+            gstreamer::Caps::builder("audio/x-raw")
                 .field("channels", 2)
                 .build(),
         )
@@ -211,12 +211,9 @@ pub async fn start_audio_pipeline(
     pipeline.set_state(State::Playing)?;
     println!("Audio is playing!");
     while let Some(msg) = control_rx.recv().await {
-        match msg {
-            GStreamerControlMessage::Stop => {
-                println!("GStreamer task received termination signal!");
-                break;
-            }
-            _ => {}
+        if let GStreamerControlMessage::Stop = msg {
+            println!("GStreamer task received termination signal!");
+            break;
         }
     }
 
@@ -284,8 +281,7 @@ pub async fn start_pipeline(
             .build()
     } else {
         let caps_str = "video/x-raw(memory:VAMemory)";
-        let caps = gstreamer::Caps::from_str(caps_str)?;
-        caps
+        gstreamer::Caps::from_str(caps_str)?
     };
 
     println!("Format caps: {}", format_caps);
@@ -316,7 +312,7 @@ pub async fn start_pipeline(
             .property("bitrate", 4000u32 - 64u32)
             .build()?
     } else {
-        ElementFactory::make("vah264lpenc")
+        ElementFactory::make("vah264enc")
             .property("aud", true)
             .property("b-frames", 0u32)
             .property("dct8x8", false)
@@ -324,7 +320,13 @@ pub async fn start_pipeline(
             .property("num-slices", 4u32)
             .property("ref-frames", 1u32)
             .property("target-usage", 6u32)
-            .property_from_str("mbbrc", "disabled")
+            .property_from_str("rate-control", "cbr")
+            .property("bitrate", 4000u32 - 64u32)
+            .property(
+                "cpb-size",
+                ((4000u32 - 64u32) * config.vbv_buf_capacity) / 1000,
+            )
+            .property_from_str("mbbrc", "enabled")
             .build()?
     };
 
@@ -457,8 +459,15 @@ pub async fn start_pipeline(
                 ));
             }
             GStreamerControlMessage::Bitrate(bitrate) => {
-                if !config.vaapi {
-                    enc.set_property("bitrate", bitrate); // video takes 80% bitrate
+                if config.vaapi {
+                    // VA-API always overruns the set bitrate, so only give it 65% of the actual bitrate
+                    enc.set_property("bitrate", bitrate);
+                    enc.set_property(
+                        "cpb-size",
+                        ((4000u32 - 64u32) * config.vbv_buf_capacity) / 1000,
+                    );
+                } else {
+                    enc.set_property("bitrate", bitrate);
                 }
             }
         }

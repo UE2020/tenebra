@@ -216,10 +216,11 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
                 r#type,
                 id: Some(id),
                 ..
-            } => match r#type.as_str() {
-                "touchend" => multi_touch.touch_up(id),
-                _ => {}
-            },
+            } => {
+                if r#type.as_str() == "touchend" {
+                    multi_touch.touch_up(id)
+                }
+            }
             InputCommand {
                 r#type,
                 button: Some(button),

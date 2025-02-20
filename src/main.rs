@@ -241,7 +241,7 @@ async fn offer(
     // and get the corresponding answer.
     let desc_data = BASE64_STANDARD.decode(payload.offer.clone())?;
     let desc_data = std::str::from_utf8(&desc_data)?;
-    let their_offer = serde_json::from_str::<SdpOffer>(&desc_data)?;
+    let their_offer = serde_json::from_str::<SdpOffer>(desc_data)?;
     let answer = rtc.sdp_api().accept_offer(their_offer)?;
     let json_str = serde_json::to_string(&answer)?;
     let b64 = BASE64_STANDARD.encode(&json_str);
@@ -330,7 +330,7 @@ async fn home() -> impl IntoResponse {
     let s = System::new_with_specifics(RefreshKind::new().with_cpu(CpuRefreshKind::everything()));
     let cpu_names = s
         .cpus()
-        .into_iter()
+        .iter()
         .map(|cpu| format!("{}: {}", cpu.name(), cpu.brand()))
         .collect::<Vec<_>>();
     let template = HomeTemplate {
@@ -377,6 +377,8 @@ async fn main() -> Result<()> {
     if stun::is_symmetric_nat().await? {
         bail!("You are behind a symmetric NAT. This configuration prevents STUN binding requests from establishing a proper connection. Please adjust your network settings or consult your network administrator.");
     }
+
+    pretty_env_logger::init();
 
     // Initialize GStreamer
     gstreamer::init().unwrap();
