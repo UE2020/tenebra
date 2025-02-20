@@ -250,44 +250,65 @@ pub async fn start_pipeline(
         .property("show-cursor", show_mouse)
         .build()?;
 
-    let video_caps = gstreamer::Caps::builder("video/x-raw")
-        .field("framerate", gstreamer::Fraction::new(60, 1))
-        .build();
+    cfg_if::cfg_if! {
+        if #[cfg(target_os = "macos")] {
+            let video_caps = if !config.full_chroma {
+                gstreamer::Caps::builder("video/x-raw")
+                    .field("framerate", gstreamer::Fraction::new(60, 1))
+                    .field("format", "NV12")
+                    .build()
+            } else {
+                gstreamer::Caps::builder("video/x-raw")
+                    .field("framerate", gstreamer::Fraction::new(60, 1))
+                    .field("format", "BGRA")
+                    .build()
+            }
+        } else {
+            let video_caps = gstreamer::Caps::builder("video/x-raw")
+                .field("framerate", gstreamer::Fraction::new(60, 1))
+                .build();
+        }
+    }
+
     let video_capsfilter = ElementFactory::make("capsfilter")
         .property("caps", &video_caps)
         .build()?;
 
-    let videoconvert = if config.vapostproc {
-        ElementFactory::make("vapostproc")
-            .property_from_str("scale-method", "fast")
-            .build()?
-    } else {
-        ElementFactory::make("videoconvert")
-            .property("n-threads", 4u32)
-            .build()?
-    };
+    cfg_if::cfg_if! {
+        if #[cfg(not(target_os = "macos"))] {
+            let videoconvert = if config.vapostproc {
+                ElementFactory::make("vapostproc")
+                    .property_from_str("scale-method", "fast")
+                    .build()?
+            } else {
+                ElementFactory::make("videoconvert")
+                    .property("n-threads", 4u32)
+                    .build()?
+            };
 
-    let format = if config.full_chroma { "Y444" } else { "NV12" };
+            let format = if config.full_chroma { "Y444" } else { "NV12" };
 
-    if config.full_chroma && config.vapostproc {
-        println!(
-            "Full-chroma is not supported with VA-API! This configuration option has been ignored."
-        );
+            if config.full_chroma && config.vapostproc {
+                println!(
+                    "Full-chroma is not supported with VA-API! This configuration option has been ignored."
+                );
+            }
+
+            let format_caps = if !config.vapostproc {
+                gstreamer::Caps::builder("video/x-raw")
+                    .field("format", format)
+                    .build()
+            } else {
+                let caps_str = "video/x-raw(memory:VAMemory)";
+                gstreamer::Caps::from_str(caps_str)?
+            };
+
+            println!("Format caps: {}", format_caps);
+            let format_capsfilter = ElementFactory::make("capsfilter")
+                .property("caps", &format_caps)
+                .build()?;
+        }
     }
-
-    let format_caps = if !config.vapostproc {
-        gstreamer::Caps::builder("video/x-raw")
-            .field("format", format)
-            .build()
-    } else {
-        let caps_str = "video/x-raw(memory:VAMemory)";
-        gstreamer::Caps::from_str(caps_str)?
-    };
-
-    println!("Format caps: {}", format_caps);
-    let format_capsfilter = ElementFactory::make("capsfilter")
-        .property("caps", &format_caps)
-        .build()?;
 
     // this makes the stream smoother on VAAPI, but on x264enc it causes severe latency
     // especially when the CPU is under load (such as when playing minecraft)
@@ -416,29 +437,53 @@ pub async fn start_pipeline(
     // Create the pipeline
     let pipeline = Pipeline::default();
 
-    // Add elements to the pipeline
-    pipeline.add_many([
-        &src,
-        &video_capsfilter,
-        &videoconvert,
-        &format_capsfilter,
-        //&queue,
-        &enc,
-        &h264_capsfilter,
-        appsink.upcast_ref(),
-    ])?;
+    cfg_if::cfg_if! {
+        if #[cfg(target_os = "macos")] {
+            // Add elements to the pipeline
+            pipeline.add_many([
+                &src,
+                &video_capsfilter,
+                //&queue,
+                &enc,
+                &h264_capsfilter,
+                appsink.upcast_ref(),
+            ])?;
 
-    // Link the elements
-    gstreamer::Element::link_many([
-        &src,
-        &video_capsfilter,
-        &videoconvert,
-        &format_capsfilter,
-        //&queue,
-        &enc,
-        &h264_capsfilter,
-        appsink.upcast_ref(),
-    ])?;
+            // Link the elements
+            gstreamer::Element::link_many([
+                &src,
+                &video_capsfilter,
+                //&queue,
+                &enc,
+                &h264_capsfilter,
+                appsink.upcast_ref(),
+            ])?;
+        } else {
+            // Add elements to the pipeline
+            pipeline.add_many([
+                &src,
+                &video_capsfilter,
+                &videoconvert,
+                &format_capsfilter,
+                //&queue,
+                &enc,
+                &h264_capsfilter,
+                appsink.upcast_ref(),
+            ])?;
+
+            // Link the elements
+            gstreamer::Element::link_many([
+                &src,
+                &video_capsfilter,
+                &videoconvert,
+                &format_capsfilter,
+                //&queue,
+                &enc,
+                &h264_capsfilter,
+                appsink.upcast_ref(),
+            ])?;
+        }
+    }
 
     // Set the pipeline to playing state
     pipeline.set_state(State::Playing)?;
