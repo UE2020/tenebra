@@ -262,7 +262,7 @@ pub async fn start_pipeline(
                     .field("framerate", gstreamer::Fraction::new(60, 1))
                     .field("format", "BGRA")
                     .build()
-            }
+            };
         } else {
             let video_caps = gstreamer::Caps::builder("video/x-raw")
                 .field("framerate", gstreamer::Fraction::new(60, 1))
