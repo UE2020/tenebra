@@ -356,6 +356,7 @@ struct Config {
     port: u16,
     password: String,
     sound_forwarding: bool,
+    #[serde(alias = "hwencode")]
     vaapi: bool,
     vapostproc: bool,
     no_bwe: bool,

@@ -121,7 +121,7 @@ pub async fn start_audio_pipeline(
                 .build(),
         )
         .build()?;
-    let audioconvert = ElementFactory::make("audioconvert").build()?;
+
     let opusenc = ElementFactory::make("opusenc").build()?;
 
     let opus_caps = gstreamer::Caps::builder("audio/x-opus").build();
@@ -188,23 +188,11 @@ pub async fn start_audio_pipeline(
     println!("Made pipeline");
 
     // Add elements to the pipeline
-    pipeline.add_many([
-        &src,
-        &src_capsfilter,
-        &audioconvert,
-        &opusenc,
-        appsink.upcast_ref(),
-    ])?;
+    pipeline.add_many([&src, &src_capsfilter, &opusenc, appsink.upcast_ref()])?;
     println!("Audio is adding!");
 
     // Link the elements
-    gstreamer::Element::link_many([
-        &src,
-        &src_capsfilter,
-        &audioconvert,
-        &opusenc,
-        appsink.upcast_ref(),
-    ])?;
+    gstreamer::Element::link_many([&src, &src_capsfilter, &opusenc, appsink.upcast_ref()])?;
     println!("Audio is linking!");
 
     // Set the pipeline to playing state
@@ -333,22 +321,35 @@ pub async fn start_pipeline(
             .property("bitrate", 4000u32 - 64u32)
             .build()?
     } else {
-        ElementFactory::make("vah264enc")
-            .property("aud", true)
-            .property("b-frames", 0u32)
-            .property("dct8x8", false)
-            .property("key-int-max", 1024u32)
-            .property("num-slices", 4u32)
-            .property("ref-frames", 1u32)
-            .property("target-usage", 6u32)
-            .property_from_str("rate-control", "cbr")
-            .property("bitrate", 4000u32 - 64u32)
-            .property(
-                "cpb-size",
-                ((4000u32 - 64u32) * config.vbv_buf_capacity) / 1000,
-            )
-            .property_from_str("mbbrc", "enabled")
-            .build()?
+        cfg_if::cfg_if! {
+            if #[cfg(target_os = "linux")] {
+                ElementFactory::make("vah264enc")
+                    .property("aud", true)
+                    .property("b-frames", 0u32)
+                    .property("dct8x8", false)
+                    .property("key-int-max", 1024u32)
+                    .property("num-slices", 4u32)
+                    .property("ref-frames", 1u32)
+                    .property("target-usage", 6u32)
+                    .property_from_str("rate-control", "cbr")
+                    .property("bitrate", 4000u32 - 64u32)
+                    .property(
+                        "cpb-size",
+                        ((4000u32 - 64u32) * config.vbv_buf_capacity) / 1000,
+                    )
+                    .property_from_str("mbbrc", "enabled")
+                    .build()?
+            } else if #[cfg(target_os = "macos")] {
+                ElementFactory::make("vtenc_h264")
+                    .property("allow-frame-reordering", false)
+                    .property("bitrate", 4000u32 - 64u32)
+                    .property_from_str("rate-control", "cbr")
+                    .property("realtime", true)
+                    .build()?
+            } else {
+                bail!("Hardware accelerated encoding is only supported on macOS and Linux.");
+            }
+        }
     };
 
     println!("Enc: {:?}", enc);
@@ -359,11 +360,21 @@ pub async fn start_pipeline(
         "baseline"
     };
 
-    let h264_caps = if config.vaapi {
-        gstreamer::Caps::builder("video/x-h264")
-            .field("profile", "high")
-            .field("stream-format", "byte-stream")
-            .build()
+    let final_caps = if config.vaapi {
+        cfg_if::cfg_if! {
+            if #[cfg(target_os = "macos")] {
+                gstreamer::Caps::builder("video/x-h264")
+                    .field("stream-format", "avc")
+                    .build()
+            } else if #[cfg(target_os = "linux")] {
+                gstreamer::Caps::builder("video/x-h264")
+                    .field("profile", "high")
+                    .field("stream-format", "byte-stream")
+                    .build()
+            } else {
+                bail!("Hardware accelerated encoding is only supported on macOS and Linux.");
+            }
+        }
     } else {
         gstreamer::Caps::builder("video/x-h264")
             .field("profile", profile)
@@ -372,15 +383,27 @@ pub async fn start_pipeline(
     };
 
     let h264_capsfilter = ElementFactory::make("capsfilter")
-        .property("caps", &h264_caps)
+        .property("caps", &final_caps)
         .build()?;
+
+    cfg_if::cfg_if! {
+        if #[cfg(target_os = "macos")] {
+            let parse = ElementFactory::make("h264parse").property("config-interval", -1).build()?;
+            let final_caps = gstreamer::Caps::builder("video/x-h264")
+                .field("stream-format", "byte-stream")
+                .build();
+            let parse_capsfilter = ElementFactory::make("capsfilter")
+                .property("caps", &final_caps)
+                .build()?;
+        }
+    }
 
     let appsink = gstreamer_app::AppSink::builder()
         // Tell the appsink what format we want. It will then be the audiotestsrc's job to
         // provide the format we request.
         // This can be set after linking the two objects, because format negotiation between
         // both elements will happen during pre-rolling of the pipeline.
-        .caps(&h264_caps)
+        .caps(&final_caps)
         //.drop(true)
         .build();
 
@@ -474,7 +497,7 @@ pub async fn start_pipeline(
                     &h264_capsfilter,
                     appsink.upcast_ref(),
                 ])?;
-            } else {
+            } else if !config.vaapi {
                 // Add elements to the pipeline
                 pipeline.add_many([
                     &src,
@@ -492,6 +515,30 @@ pub async fn start_pipeline(
                     //&queue,
                     &enc,
                     &h264_capsfilter,
+                    appsink.upcast_ref(),
+                ])?;
+            } else {
+                // Add elements to the pipeline
+                pipeline.add_many([
+                    &src,
+                    &video_capsfilter,
+                    //&queue,
+                    &enc,
+                    &h264_capsfilter,
+                    &parse,
+                    &parse_capsfilter,
+                    appsink.upcast_ref(),
+                ])?;
+
+                // Link the elements
+                gstreamer::Element::link_many([
+                    &src,
+                    &video_capsfilter,
+                    //&queue,
+                    &enc,
+                    &h264_capsfilter,
+                    &parse,
+                    &parse_capsfilter,
                     appsink.upcast_ref(),
                 ])?;
             }
