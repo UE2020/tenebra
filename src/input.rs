@@ -132,7 +132,6 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
                     match pressure > 0.0 {
                         true => Press,
                         false => Release,
-                        _ => continue,
                     },
                 )?;
                 enigo.move_mouse(x + startx as i32, y, Coordinate::Abs)?;
