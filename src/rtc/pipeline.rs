@@ -343,7 +343,7 @@ pub async fn start_pipeline(
                 ElementFactory::make("vtenc_h264")
                     .property("allow-frame-reordering", false)
                     .property("bitrate", 4000u32 - 64u32)
-                    .property_from_str("rate-control", "cbr")
+                    .property("quality", 0.0f64)
                     .property("realtime", true)
                     .build()?
             } else {
