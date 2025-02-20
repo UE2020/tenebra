@@ -439,25 +439,62 @@ pub async fn start_pipeline(
 
     cfg_if::cfg_if! {
         if #[cfg(target_os = "macos")] {
-            // Add elements to the pipeline
-            pipeline.add_many([
-                &src,
-                &video_capsfilter,
-                //&queue,
-                &enc,
-                &h264_capsfilter,
-                appsink.upcast_ref(),
-            ])?;
+            if config.full_chroma {
+                let videoconvert ElementFactory::make("videoconvert")
+                    .property("n-threads", 4u32)
+                    .build()?;
 
-            // Link the elements
-            gstreamer::Element::link_many([
-                &src,
-                &video_capsfilter,
-                //&queue,
-                &enc,
-                &h264_capsfilter,
-                appsink.upcast_ref(),
-            ])?;
+                let format_capsfilter = ElementFactory::make("capsfilter")
+                    .property(
+                        "caps",
+                        gstreamer::Caps::builder("video/x-raw")
+                            .field("format", "Y444")
+                            .build()
+                    )
+                    .build()?;
+
+                // Add elements to the pipeline
+                pipeline.add_many([
+                    &src,
+                    &video_capsfilter,
+                    &videoconvert,
+                    &format_capsfilter,
+                    &enc,
+                    &h264_capsfilter,
+                    appsink.upcast_ref(),
+                ])?;
+
+                // Link the elements
+                gstreamer::Element::link_many([
+                    &src,
+                    &video_capsfilter,
+                    &videoconvert,
+                    &format_capsfilter,
+                    &enc,
+                    &h264_capsfilter,
+                    appsink.upcast_ref(),
+                ])?;
+            } else {
+                // Add elements to the pipeline
+                pipeline.add_many([
+                    &src,
+                    &video_capsfilter,
+                    //&queue,
+                    &enc,
+                    &h264_capsfilter,
+                    appsink.upcast_ref(),
+                ])?;
+
+                // Link the elements
+                gstreamer::Element::link_many([
+                    &src,
+                    &video_capsfilter,
+                    //&queue,
+                    &enc,
+                    &h264_capsfilter,
+                    appsink.upcast_ref(),
+                ])?;
+            }
         } else {
             // Add elements to the pipeline
             pipeline.add_many([
