@@ -580,12 +580,16 @@ pub async fn start_pipeline(
             }
             GStreamerControlMessage::RequestKeyFrame => {
                 println!("Forcing keyframe");
-                let force_keyframe_event = gstreamer::Structure::builder("GstForceKeyUnit").build();
 
-                // Send the event to the encoder element
-                enc.send_event(gstreamer::event::CustomDownstream::new(
-                    force_keyframe_event,
-                ));
+                if !(cfg!(target_os = "macos") && config.vaapi) {
+                    let force_keyframe_event =
+                        gstreamer::Structure::builder("GstForceKeyUnit").build();
+
+                    // Send the event to the encoder element
+                    enc.send_event(gstreamer::event::CustomDownstream::new(
+                        force_keyframe_event,
+                    ));
+                }
             }
             GStreamerControlMessage::Bitrate(bitrate) => {
                 if config.vaapi {
