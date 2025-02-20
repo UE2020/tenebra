@@ -591,6 +591,7 @@ pub async fn start_pipeline(
                 if config.vaapi {
                     // VA-API always overruns the set bitrate, so only give it 65% of the actual bitrate
                     enc.set_property("bitrate", bitrate);
+                    #[cfg(not(target_os = "macos"))]
                     enc.set_property(
                         "cpb-size",
                         ((4000u32 - 64u32) * config.vbv_buf_capacity) / 1000,
