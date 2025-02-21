@@ -55,8 +55,7 @@
  */
 
 use anyhow::anyhow;
-use log::debug;
-use log::trace;
+use log::*;
 use std::io::ErrorKind;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -123,8 +122,6 @@ pub async fn run(
 
     let waker = Arc::new(Notify::new());
 
-    let mut current_bitrate = 4000u32 - 64u32;
-
     let ret = loop {
         if kill_rx.try_recv().is_ok() {
             break Err(anyhow!("task killed from the kill_tx"));
@@ -143,11 +140,11 @@ pub async fn run(
                     trace!("Got H264 buffer with len={}", buf.len());
                     let estimated_bitrate = (buf.len() as f64 / 125.0) * 60.0;
                     trace!("Estimated send bitrate {}", estimated_bitrate);
-                    if estimated_bitrate as u32 > current_bitrate {
-                        debug!("Raising bitrate to {:.2}", estimated_bitrate);
-                        rtc.bwe()
-                            .set_current_bitrate(Bitrate::kbps(estimated_bitrate as u64));
-                    }
+                    // if estimated_bitrate as u32 > current_bitrate {
+                    //     debug!("Raising bitrate to {:.2}", estimated_bitrate);
+                    //     rtc.bwe()
+                    //         .set_current_bitrate(Bitrate::kbps(estimated_bitrate as u64));
+                    // }
                 }
 
                 let writer = rtc
@@ -176,7 +173,7 @@ pub async fn run(
                     Protocol::Udp => {
                         udp_socket.send_to(&v.contents, v.destination).await.ok();
                     }
-                    p => println!("Unimplemented protocol: {}", p),
+                    p => warn!("Unimplemented protocol: {}", p),
                 }
 
                 continue;
@@ -253,7 +250,6 @@ pub async fn run(
                         }
                         rtc.bwe().set_current_bitrate(Bitrate::kbps(bwe as _));
                         debug!("Set current bitrate to {}", bwe);
-                        current_bitrate = bwe as _;
                     }
                     Event::ChannelData(ChannelData { data, .. }) => {
                         let msg_str = String::from_utf8(data)?;
@@ -261,9 +257,9 @@ pub async fn run(
                         state.input_tx.send(cmd)?;
                     }
                     Event::IceConnectionStateChange(connection_state) => {
-                        println!("New state: {:?}", connection_state);
+                        info!("New state: {:?}", connection_state);
                         if connection_state == IceConnectionState::Connected {
-                            println!("ICE Connection state is now CONNECTED. Waiting for media to be added...");
+                            info!("ICE Connection state is now CONNECTED. Waiting for media to be added...");
                         }
                     }
                     _ => {}
@@ -318,7 +314,7 @@ pub async fn run(
                     Err(e) => match e.kind() {
                         ErrorKind::ConnectionReset => continue,
                         _ => {
-                            println!("webrtc network error {:?}", e);
+                            error!("webrtc network error {:?}", e);
                             break Err(e.into());
                         }
                     }

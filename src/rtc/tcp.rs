@@ -12,6 +12,8 @@ use tokio::{
     },
 };
 
+use log::*;
+
 pub struct Listener {
     tx: UnboundedSender<(Vec<u8>, SocketAddr)>,
     rx: UnboundedReceiver<(Vec<u8>, SocketAddr)>,
@@ -32,7 +34,7 @@ impl Listener {
                 tokio::select! {
                     // this will stop accepting when task_rx dies
                     Ok((socket, peer_addr)) = listener.accept() => {
-                        println!("Accepted TCP connection from {peer_addr}");
+                        info!("Accepted TCP connection from {peer_addr}");
                         let (reader, writer) = socket.into_split();
                         let (close_tx, mut close_rx) = channel(1);
                         map.lock().await.insert(peer_addr, (writer, close_tx));
@@ -41,7 +43,7 @@ impl Listener {
                         tokio::spawn(async move {
                             tokio::select! {
                                 Err(e) = Self::handle_read(task_tx, reader) => {
-                                    println!("Failed to read from {peer_addr} because of: {e}");
+                                    error!("Failed to read from {peer_addr} because of: {e}");
                                     map_clone.lock().await.remove(&peer_addr);
                                 }
                                 _ = close_rx.recv() => {}
@@ -54,7 +56,7 @@ impl Listener {
                                 let mut map = map.lock().await;
                                 if let Some((socket, close_tx)) =  map.get_mut(&addr) {
                                     if let Err(e) = Self::frame_and_send(socket, &data).await {
-                                        println!("Closing {addr} because of send error {e}");
+                                        error!("Closing {addr} because of send error {e}");
                                         close_tx.send(()).await.ok();
                                         map.remove(&addr);
                                     }
@@ -63,9 +65,9 @@ impl Listener {
                             None => {
                                 // close every socket
                                 let map = map.lock().await;
-                                println!("Closing {} sockets.", map.len());
+                                info!("Closing {} sockets.", map.len());
                                 for (addr, (_, close_tx)) in map.iter() {
-                                    println!("Closing socket {addr}");
+                                    info!("Closing socket {addr}");
                                     close_tx.send(()).await.ok();
                                 }
 

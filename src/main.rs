@@ -55,11 +55,14 @@
  */
 
 use std::{
+    fmt::Display,
     net::SocketAddr,
     path::PathBuf,
     sync::{Arc, Mutex},
     time::Duration,
 };
+
+use log::*;
 
 use input::{do_input, InputCommand};
 use local_ip_address::local_ip;
@@ -70,11 +73,10 @@ use tokio::{
 
 use anyhow::{bail, Context, Result};
 
-use askama::Template;
 use axum::{
     extract::State,
     http::StatusCode,
-    response::{Html, IntoResponse, Response},
+    response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
@@ -132,12 +134,11 @@ where
     }
 }
 
-#[axum_macros::debug_handler]
 async fn offer(
     State(state): State<AppState>,
     Json(payload): Json<CreateOffer>,
 ) -> Result<(StatusCode, Json<ResponseOffer>), AppError> {
-    println!("Received offer");
+    info!("Received offer");
     if payload.password != state.config.password {
         return Ok((
             StatusCode::UNAUTHORIZED,
@@ -181,11 +182,11 @@ async fn offer(
         str0m::net::Protocol::Udp,
     )?);
 
-    println!("Local socket addr: {}", local_socket_addr);
+    info!("Local socket addr: {}", local_socket_addr);
 
     // add a remote candidate too
     let stun_addr = retry!(stun::get_addr(&socket, "stun.l.google.com:19302").await)?;
-    println!("Our public IP is: {stun_addr}");
+    info!("Our public IP is: {stun_addr}");
     rtc.add_local_candidate(Candidate::server_reflexive(
         stun_addr,
         local_socket_addr,
@@ -201,7 +202,7 @@ async fn offer(
 
     let gateway_and_port = if state.config.tcp_upnp {
         if let Ok(gateway) = igd_next::aio::tokio::search_gateway(Default::default()).await {
-            println!("Successfully obtained gateway");
+            info!("Successfully obtained gateway");
 
             let port = gateway
                 .add_any_port(
@@ -216,7 +217,7 @@ async fn offer(
 
             let global_ip = gateway.get_external_ip().await.unwrap();
             let global_addr = SocketAddr::new(global_ip, port);
-            println!("TCP server has been opened at {} globally", global_addr);
+            info!("TCP server has been opened at {} globally", global_addr);
             rtc.add_local_candidate(Candidate::server_reflexive(
                 global_addr,
                 tcp_local_socket_addr,
@@ -246,7 +247,7 @@ async fn offer(
     let json_str = serde_json::to_string(&answer)?;
     let b64 = BASE64_STANDARD.encode(&json_str);
 
-    println!("Killing last session");
+    info!("Killing last session");
     // kill last session and
     let kill_rx = {
         let mut sender = state.kill_switch.lock().unwrap();
@@ -271,11 +272,11 @@ async fn offer(
         )
         .await
         {
-            eprintln!("Run task exited: {e:?}");
+            info!("Run task exited: {e:?}");
         }
 
         if let Some((gateway, port)) = gateway_and_port {
-            println!("Removing port mapping {}.", port);
+            info!("Removing port mapping {}.", port);
             gateway
                 .remove_port(igd_next::PortMappingProtocol::TCP, port)
                 .await
@@ -294,51 +295,12 @@ async fn offer(
     Ok((StatusCode::OK, Json(ResponseOffer::Offer(b64))))
 }
 
-#[derive(Template)]
-#[template(path = "home.html")]
-struct HomeTemplate {
-    version: String,
-    plugins: Vec<String>,
-    cpu_names: Vec<String>,
-}
-
-struct HtmlTemplate<T>(T);
-
-impl<T> IntoResponse for HtmlTemplate<T>
-where
-    T: Template,
-{
-    fn into_response(self) -> Response {
-        match self.0.render() {
-            Ok(html) => Html(html).into_response(),
-            Err(err) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to render template. Error: {err}"),
-            )
-                .into_response(),
-        }
-    }
-}
-async fn home() -> impl IntoResponse {
-    let registry = gstreamer::Registry::get();
-    let plugins = registry
-        .plugins()
-        .into_iter()
-        .map(|plugin| plugin.plugin_name().to_string())
-        .collect::<Vec<_>>();
-    use sysinfo::{CpuRefreshKind, RefreshKind, System};
-    let s = System::new_with_specifics(RefreshKind::new().with_cpu(CpuRefreshKind::everything()));
-    let cpu_names = s
-        .cpus()
-        .iter()
-        .map(|cpu| format!("{}: {}", cpu.name(), cpu.brand()))
-        .collect::<Vec<_>>();
-    let template = HomeTemplate {
-        version: gstreamer::version_string().to_string(),
-        plugins,
-        cpu_names,
-    };
-    HtmlTemplate(template)
+async fn home(State(state): State<AppState>) -> String {
+    let mut out = String::new();
+    out.push_str("This is a Telewindow server powered by the Tenebra project. https://github.com/UE2020/tenebra/\n\n");
+    out.push_str(&format!("{}\n", state.config));
+    out.push_str(include_str!("notice.txt"));
+    out
 }
 
 #[derive(Debug, Clone)]
@@ -366,6 +328,32 @@ struct Config {
     vbv_buf_capacity: u32,
     cert: PathBuf,
     key: PathBuf,
+}
+
+impl Display for Config {
+    #[rustfmt::skip]
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        writeln!(f, "Server configuration")?;
+        writeln!(f, "\tTarget bitrate:                    {} Kbit/s", self.target_bitrate)?;
+        writeln!(f, "\tStart x-coordinate:                {}", self.startx)?;
+        writeln!(f, "\tPort:                              {}", self.port)?;
+        writeln!(f, "\tSound forwarding:                  {}", bool_to_str(self.sound_forwarding))?;
+        writeln!(f, "\tHardware accelerated encoding:     {}", bool_to_str(self.vaapi))?;
+        writeln!(f, "\tVA-API format conversion:          {}", bool_to_str(self.vapostproc))?;
+        writeln!(f, "\tBandwidth estimation:              {}", bool_to_str(!self.no_bwe))?;
+        writeln!(f, "\tFull color encoding:               {}", bool_to_str(self.full_chroma))?;
+        writeln!(f, "\tAutomatic ICE-TCP UPnP forwarding: {}", bool_to_str(self.tcp_upnp))?;
+        writeln!(f, "\tVBV Buffer capacity:               {} ms", self.vbv_buf_capacity)?;
+
+        Ok(())
+    }
+}
+
+fn bool_to_str(b: bool) -> &'static str {
+    match b {
+        true => "on",
+        false => "off",
+    }
 }
 
 fn default_vbv_buf_capacity() -> u32 {
@@ -396,6 +384,8 @@ async fn main() -> Result<()> {
 
     // read the config
     let config: Config = toml::from_str(&std::fs::read_to_string(config_path)?)?;
+
+    println!("{}", config);
 
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<InputCommand>();
     let ports = Arc::new(Mutex::new(Vec::new()));
@@ -461,7 +451,7 @@ async fn main() -> Result<()> {
                     std::process::exit(0);
                 });
             }
-            Err(e) => println!("Error obtaining UPnP gateway: {}", e),
+            Err(e) => error!("Error obtaining UPnP gateway: {}", e),
         }
     }
 

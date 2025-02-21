@@ -67,6 +67,8 @@ use tokio::sync::Notify;
 
 use anyhow::{Context, Result};
 
+use log::*;
+
 use crate::Config;
 
 use super::GStreamerControlMessage;
@@ -109,7 +111,7 @@ pub async fn start_audio_pipeline(
 ) -> anyhow::Result<()> {
     // gst-launch-1.0 -v pulsesrc device=alsa_output.pci-0000_00_1f.3.analog-stereo.monitor ! audioconvert ! vorbisenc ! oggmux ! filesink location=alsasrc.ogg
     let monitor_device_name = get_pulseaudio_monitor_name().await?;
-    println!("Picked audio monitor device name: {}", monitor_device_name);
+    info!("Picked audio monitor device name: {}", monitor_device_name);
     let src = ElementFactory::make("pulsesrc")
         .property("device", &monitor_device_name)
         .build()?;
@@ -185,22 +187,18 @@ pub async fn start_audio_pipeline(
 
     // Create the pipeline
     let pipeline = Pipeline::default();
-    println!("Made pipeline");
 
     // Add elements to the pipeline
     pipeline.add_many([&src, &src_capsfilter, &opusenc, appsink.upcast_ref()])?;
-    println!("Audio is adding!");
 
     // Link the elements
     gstreamer::Element::link_many([&src, &src_capsfilter, &opusenc, appsink.upcast_ref()])?;
-    println!("Audio is linking!");
 
     // Set the pipeline to playing state
     pipeline.set_state(State::Playing)?;
-    println!("Audio is playing!");
     while let Some(msg) = control_rx.recv().await {
         if let GStreamerControlMessage::Stop = msg {
-            println!("GStreamer task received termination signal!");
+            info!("GStreamer task received termination signal!");
             break;
         }
     }
@@ -277,7 +275,7 @@ pub async fn start_pipeline(
             let format = if config.full_chroma { "Y444" } else { "NV12" };
 
             if config.full_chroma && config.vapostproc {
-                println!(
+                warn!(
                     "Full-chroma is not supported with VA-API! This configuration option has been ignored."
                 );
             }
@@ -291,7 +289,7 @@ pub async fn start_pipeline(
                 gstreamer::Caps::from_str(caps_str)?
             };
 
-            println!("Format caps: {}", format_caps);
+            info!("Format caps: {}", format_caps);
             let format_capsfilter = ElementFactory::make("capsfilter")
                 .property("caps", &format_caps)
                 .build()?;
@@ -343,7 +341,6 @@ pub async fn start_pipeline(
                 ElementFactory::make("vtenc_h264")
                     .property("allow-frame-reordering", false)
                     .property("bitrate", 4000u32 - 64u32)
-                    .property("quality", 0.0f64)
                     .property("realtime", true)
                     .build()?
             } else {
@@ -352,7 +349,7 @@ pub async fn start_pipeline(
         }
     };
 
-    println!("Enc: {:?}", enc);
+    info!("Enc: {:?}", enc);
 
     let profile = if config.full_chroma {
         "high-4:4:4"
@@ -575,11 +572,11 @@ pub async fn start_pipeline(
     while let Some(msg) = control_rx.recv().await {
         match msg {
             GStreamerControlMessage::Stop => {
-                println!("GStreamer task received termination signal!");
+                info!("GStreamer task received termination signal!");
                 break;
             }
             GStreamerControlMessage::RequestKeyFrame => {
-                println!("Forcing keyframe");
+                info!("Forcing keyframe");
 
                 if !(cfg!(target_os = "macos") && config.vaapi) {
                     let force_keyframe_event =
