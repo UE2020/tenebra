@@ -249,16 +249,13 @@ async fn offer(
 
     info!("Killing last session");
     // kill last session and
-    let kill_rx = {
-        let mut sender = state.kill_switch.lock().unwrap();
-        if let Some(sender) = sender.as_mut() {
-            sender.send(()).ok();
-        };
-        let (kill_tx, kill_rx) = unbounded_channel();
-        *sender = Some(kill_tx);
-        kill_rx
+    let mut sender = state.kill_switch.lock().unwrap();
+    if let Some(sender) = sender.as_mut() {
+        sender.send(()).ok();
     };
-
+    let (kill_tx, kill_rx) = unbounded_channel();
+    *sender = Some(kill_tx);
+    let state_cloned = state.clone();
     spawn(async move {
         if let Err(e) = rtc::run(
             rtc,
@@ -266,7 +263,7 @@ async fn offer(
             tcp,
             local_socket_addr,
             tcp_local_socket_addr,
-            state.clone(),
+            state_cloned,
             payload,
             kill_rx,
         )
@@ -367,7 +364,7 @@ async fn main() -> Result<()> {
         bail!("You are behind a symmetric NAT. This configuration prevents STUN binding requests from establishing a proper connection. Please adjust your network settings or consult your network administrator.");
     }
 
-    pretty_env_logger::init();
+    pretty_env_logger::init_timed();
 
     // Initialize GStreamer
     gstreamer::init().unwrap();
