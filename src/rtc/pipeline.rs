@@ -590,7 +590,11 @@ pub async fn start_pipeline(
             }
             GStreamerControlMessage::Bitrate(bitrate) => {
                 if config.vaapi {
-                    // VA-API always overruns the set bitrate, so only give it 65% of the actual bitrate
+                    // Setting bitrate on macOS causes it vtenc_h264 to DEADLOCK
+                    // YET ANOTHER ASTOUNDINGLY BROKEN PIECE OF SOFTWARE
+                    // WRITTEM BY THE """DEVELOPERS""" AT APPLE INC
+                    // MANY SUCH CASES!
+                    #[cfg(not(target_os = "macos"))]
                     enc.set_property("bitrate", bitrate);
                     #[cfg(not(target_os = "macos"))]
                     enc.set_property(
