@@ -4,7 +4,7 @@
 
 # Tenebra
 
-Tenebra is a remote desktop server based on modern video streaming technology written in Rust (you will need a Rust compiler to compile it). Connect to Tenebra with a [compatible client](https://github.com/BlueCannonBall/lux) to view and control another machine's screen.
+Tenebra is a remote desktop server based on modern video streaming technology written in Rust. Connect to Tenebra with a [compatible client](https://github.com/BlueCannonBall/lux) to view and control another machine's screen.
 
 ## Platform Support
 
@@ -13,41 +13,38 @@ Tenebra is a remote desktop server based on modern video streaming technology wr
 | Linux/X11 | Excellent |
 | Mac | Almost excellent (the mouse cursor doesn't automatically appear when the cursor moves, so client-side mouse is a requirement) |
 | Windows | Okay (performance may be poor) |
-| Linux/Wayland | None; pipewiresrc is too slow |
+| Linux/Wayland | None; [pipewiresrc](https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/4035) [is](https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/4137) [too](https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/3149) [slow](https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/3910) |
 
 ## Usage
 
-Tenebra uses GStreamer to encode an RTP H.264 stream, so GStreamer's runtime utilities must be installed on your system for Tenebra to work. GStreamer should be available using your package manager. On macOS, reference the hyperlink below.
+Tenebra uses GStreamer to record the screen in a cross-platform way, and to encode H.264 samples, so GStreamer's runtime utilities must be installed on your system for Tenebra to work. On Linux, GStreamer should be available using your package manager. On macOS and Windows, see the hyperlink below.
 
-[GStreamer Installs](https://gstreamer.freedesktop.org/download/) <- install the development and runtime libraries
+[GStreamer Installs](https://gstreamer.freedesktop.org/download/)
 
-**You need an SSL certificate to run tenebra. Before building, obtain an SSL cert and place `cert.pem` and `key.pem` in the root directory.**
+To use a Github release, you only need the runtime package. To build Tenebra, you need to install both the development and the runtime packages.
 
 After the server is built with `cargo build --release`, you may run it:
 ```
-./target/release/tenebra "password" 8080 4000
-                           ^         ^    ^
-                           |         |    ---|
-                     <password>   <port>  <bitrate (optional)>
+./target/release/tenebra
 ```
 
-## Using UPnP
+However, Tenebra reads from a config file which must be populated before running Tenebra. If it is not populated, Tenebra will fail before copying the default config file to the config file directory.
 
-Tenebra can portforward its built-in signalling server automatically using the UPnP (Universal Plug N Play) protocol. This can be achieved by compiling with the `upnp` feature flag. Do not use UPnP if you have already added a manual portforwarding rule.
+* On **Linux** the config file is at `$XDG_CONFIG_HOME`/tenebra/config.toml or `$HOME`/.config/tenebra/config.toml (e.g. /home/alice/.config/tenebra/config.toml)
+* On **Windows** the config file is at `{FOLDERID_RoamingAppData}` (e.g. C:\Users\Alice\AppData\Roaming)
+* On **macOS** the config file is at `$HOME`/Library/Application Support (e.g. /Users/Alice/Library/Application Support)
 
-### Common issues
+[See the default config file.](src/default.toml)
 
-#### UPnP portforwarding rule disappeares after a while
+## Using Hardware Accelerated Encoding (macOS & Linux only)
 
-Some routers automatically clean up unused UPnP portforwarding rules. In this case, this is harmful because Tenebra cleans up its own rules when it's stopped, and because the signalling server may run for a very long time without receiving any requests. On my Verizon Fios router I was able to disable this functionality by unticking the box under "Advanced" > "Universal Plug and Play" > "Enable Automatic Cleanup of Old Unused UPnP Services".
+### VA-API
 
-#### UPnP portforwarding rule exists, but does not work
+On Linux, [VA-API](https://en.wikipedia.org/wiki/Video_Acceleration_API) can be used to perform hardware accelerated H.264 encoding. This can be enabled by setting the `hwencode` property in the config.toml to `true`. The `va` GStreamer plugin (NOT the `vaapi` plugin - this one is broken) must be installed and USABLE. If your system supports the `vapostproc` GStreamer element, you may enable the `vapostproc` option as well.
 
-The UPnP portforwarding rule is overrided by any existing manual rule for the signalling server's port. Remove any conflicting manually added rules, or just disable the `upnp` feature flag to stop using UPnP.
+## VideoToolbox
 
-## Using VA-API
-
-On Linux, VA-API can be used to perform hardware accelerated H.264 encoding. This can be enabled by compiling with the `vaapi` feature flag. The `va` GStreamer plugin (NOT the `vaapi` plugin - this one is broken) must be installed and usable. If your system supports the `vapostproc` GStreamer element, you may enable the `vapostproc` feature flag as well.
+On macOS, [VideoToolbox](https://developer.apple.com/documentation/videotoolbox) can be used to perform hardware accelerated H.264 encoding. This can be enabled by setting the `hwencode` property in the config.toml to `true`. The `vtenc_h264` GStreamer element must be installed and USABLE.
 
 ## Touch input
 
