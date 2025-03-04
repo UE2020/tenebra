@@ -18,7 +18,8 @@ local-ip-address = "0.6.3"
 rand = "0.8.5"
 serde = "1.0.210"
 serde_json = "1.0.128"
-str0m = { git = "https://github.com/UE2020/str0m.git", branch = "main" }
+#str0m = { git = "https://github.com/UE2020/str0m.git", branch = "main" }
+str0m = "0.7.0"
 stun_codec = "0.3.5"
 tokio = { version = "1.40.0", features = ["full"] }
 tower-http = { version = "0.5.2", features = ["cors"] }

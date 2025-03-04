@@ -1961,7 +1961,8 @@ checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
 [[package]]
 name = "str0m"
 version = "0.7.0"
-source = "git+https://github.com/UE2020/str0m.git?branch=main#b6492a0f3aa5b065c36d7a8ea79bf7271f119170"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b85058b6dca67818698a745d12e16884b17d5c31cc20377a4413bf492ca0142"
 dependencies = [
  "combine",
  "crc",
