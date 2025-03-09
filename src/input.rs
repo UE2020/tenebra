@@ -127,7 +127,8 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
                 }
                 cfg_if::cfg_if! {
                     if #[cfg(target_os = "linux")] {
-
+                        let size = get_total_size(&conn)?;
+                        multi_touch.pen(x + startx as i32, y, pressure, tilt_x, tilt_y, size);
                     } else {
                         // non-Linux compat implementation
                         enigo.button(
