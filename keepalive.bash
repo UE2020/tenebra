@@ -6,7 +6,7 @@ while true; do
     if ! ping -c 1 -W 2 8.8.8.8 &> /dev/null; then
         echo "$(date): Network unreachable. Restarting Wi-Fi..."
         nmcli radio wifi off
-        sleep 2
+        #sleep 2
         nmcli radio wifi on
 	sleep 20
     fi

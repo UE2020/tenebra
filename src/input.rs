@@ -113,30 +113,6 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
     let mut multi_touch = touch::MultiTouchSimulator::new();
     while let Some(msg) = rx.blocking_recv() {
         match msg {
-            // Windows and macOS compat implementation
-            #[cfg(not(target_os = "linux"))]
-            InputCommand {
-                r#type,
-                x: Some(x),
-                y: Some(y),
-                pressure: Some(pressure),
-                tiltX: Some(_tilt_x),
-                tiltY: Some(_tilt_y),
-                ..
-            } => {
-                if r#type != "pen" {
-                    continue;
-                }
-                enigo.button(
-                    Button::Left,
-                    match pressure > 0.0 {
-                        true => Press,
-                        false => Release,
-                    },
-                )?;
-                enigo.move_mouse(x + startx as i32, y, Coordinate::Abs)?;
-            }
-            #[cfg(target_os = "linux")]
             InputCommand {
                 r#type,
                 x: Some(x),
@@ -149,8 +125,21 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
                 if r#type != "pen" {
                     continue;
                 }
-                let size = get_total_size(&conn)?;
-                multi_touch.pen(x + startx as i32, y, pressure, tilt_x, tilt_y, size);
+                cfg_if::cfg_if! {
+                    if #[cfg(target_os = "linux")] {
+
+                    } else {
+                        // non-Linux compat implementation
+                        enigo.button(
+                            Button::Left,
+                            match pressure > 0.0 {
+                                true => Press,
+                                false => Release,
+                            },
+                        )?;
+                        enigo.move_mouse(x + startx as i32, y, Coordinate::Abs)?;
+                    }
+                }
             }
             #[cfg(target_os = "linux")]
             InputCommand {

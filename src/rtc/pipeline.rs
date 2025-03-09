@@ -124,7 +124,9 @@ pub async fn start_audio_pipeline(
         )
         .build()?;
 
-    let opusenc = ElementFactory::make("opusenc").build()?;
+    let opusenc = ElementFactory::make("opusenc")
+        .property("perfect-timestamp", true)
+        .build()?;
 
     let opus_caps = gstreamer::Caps::builder("audio/x-opus").build();
 
