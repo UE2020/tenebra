@@ -243,12 +243,12 @@ void scroll_vertically(MultiTouchSimulator* simulator, int value) {
 void scroll_horizontally(MultiTouchSimulator* simulator, int value) {
     if (value) {
         simulator->wheel_x += value;
-        emit_event(simulator->scroll_fd, EV_REL, REL_HWHEEL_HI_RES, value);
         if (abs(simulator->wheel_x) >= 120) {
+            emit_event(simulator->scroll_fd, EV_REL, REL_HWHEEL_HI_RES, simulator->wheel_x / 120 * 120);
             emit_event(simulator->scroll_fd, EV_REL, REL_HWHEEL, simulator->wheel_x / 120);
+            emit_event(simulator->scroll_fd, EV_SYN, SYN_REPORT, 0);
             simulator->wheel_x = simulator->wheel_x % 120;
         }
-        emit_event(simulator->scroll_fd, EV_SYN, SYN_REPORT, 0);
     }
 }
 
