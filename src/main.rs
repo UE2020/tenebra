@@ -312,6 +312,7 @@ pub struct AppState {
 struct Config {
     target_bitrate: u32,
     startx: u32,
+    endy: Option<u32>,
     port: u16,
     password: String,
     sound_forwarding: bool,
@@ -333,6 +334,7 @@ impl Display for Config {
         writeln!(f, "Server configuration")?;
         writeln!(f, "\tTarget bitrate:                    {} Kbit/s", self.target_bitrate)?;
         writeln!(f, "\tStart x-coordinate:                {}", self.startx)?;
+        writeln!(f, "\tEnd y-coordinate:                  {:?}", self.endy)?;
         writeln!(f, "\tPort:                              {}", self.port)?;
         writeln!(f, "\tSound forwarding:                  {}", bool_to_str(self.sound_forwarding))?;
         writeln!(f, "\tHardware accelerated encoding:     {}", bool_to_str(self.vaapi))?;
