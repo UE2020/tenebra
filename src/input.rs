@@ -131,6 +131,7 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
                         multi_touch.pen(x + startx as i32, y, pressure, tilt_x, tilt_y, size);
                     } else {
                         // non-Linux compat implementation
+                        enigo.move_mouse(x + startx as i32, y, Coordinate::Abs)?;
                         enigo.button(
                             Button::Left,
                             match pressure > 0.0 {
@@ -138,7 +139,6 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
                                 false => Release,
                             },
                         )?;
-                        enigo.move_mouse(x + startx as i32, y, Coordinate::Abs)?;
                     }
                 }
             }
