@@ -317,7 +317,7 @@ pub async fn start_pipeline(
             //.property("sliced-threads", true)
             //.property("byte-stream", true)
             //.property_from_str("pass", "cbr")
-            .property_from_str("speed-preset", "ultrafast")
+            .property_from_str("speed-preset", "superfast")
             .property_from_str("tune", "zerolatency")
             .property("bitrate", 4000u32 - 64u32)
             .property("key-int-max", 2560u32)

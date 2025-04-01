@@ -136,17 +136,6 @@ pub async fn run(
                     MediaKind::Video => Codec::H264,
                 };
 
-                if needed_codec == Codec::H264 {
-                    trace!("Got H264 buffer with len={}", buf.len());
-                    let estimated_bitrate = (buf.len() as f64 / 125.0) * 60.0;
-                    trace!("Estimated send bitrate {}", estimated_bitrate);
-                    // if estimated_bitrate as u32 > current_bitrate {
-                    //     debug!("Raising bitrate to {:.2}", estimated_bitrate);
-                    //     rtc.bwe()
-                    //         .set_current_bitrate(Bitrate::kbps(estimated_bitrate as u64));
-                    // }
-                }
-
                 let writer = rtc
                     .writer(gstreamer.media.mid)
                     .context("couldn't get rtc writer")?
@@ -236,7 +225,7 @@ pub async fn run(
                         BweKind::Twcc(bitrate) | BweKind::Remb(_, bitrate),
                     ) => {
                         let bwe = (bitrate.as_u64() / 1000)
-                            .clamp(2000, state.config.target_bitrate as u64 + 3000)
+                            .clamp(500, state.config.target_bitrate as u64 + 3000)
                             as u32;
                         let deducted = gstreamers
                             .iter()
