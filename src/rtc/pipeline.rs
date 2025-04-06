@@ -222,6 +222,8 @@ pub async fn start_pipeline(
     let src = ElementFactory::make("ximagesrc")
         .property("use-damage", false)
         .property("startx", config.startx)
+        .property("starty", config.starty)
+        .property_if_some("endx", config.endx)
         .property_if_some("endy", config.endy)
         .property("show-pointer", show_mouse)
         .property("blocksize", 16384u32)

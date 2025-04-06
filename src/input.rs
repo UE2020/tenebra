@@ -94,7 +94,11 @@ pub fn get_total_size(conn: &RustConnection) -> anyhow::Result<(i32, i32)> {
     Ok((geometry.width as _, geometry.height as _))
 }
 
-pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow::Result<()> {
+pub fn do_input(
+    mut rx: UnboundedReceiver<InputCommand>,
+    startx: u32,
+    starty: u32,
+) -> anyhow::Result<()> {
     let mut enigo = Enigo::new(&Settings {
         linux_delay: 1,
         ..Default::default()
@@ -128,10 +132,10 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
                 cfg_if::cfg_if! {
                     if #[cfg(target_os = "linux")] {
                         let size = get_total_size(&conn)?;
-                        multi_touch.pen(x + startx as i32, y, pressure, tilt_x, tilt_y, size);
+                        multi_touch.pen(x + startx as i32, y + starty as i32, pressure, tilt_x, tilt_y, size);
                     } else {
                         // non-Linux compat implementation
-                        enigo.move_mouse(x + startx as i32, y, Coordinate::Abs)?;
+                        enigo.move_mouse(x + startx as i32, y + starty as i32, Coordinate::Abs)?;
                         enigo.button(
                             Button::Left,
                             match pressure > 0.0 {
@@ -152,8 +156,12 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
             } => {
                 let size = get_total_size(&conn)?;
                 match r#type.as_str() {
-                    "touchstart" => multi_touch.touch_down(id, x + startx as i32, y, id, size),
-                    "touchmove" => multi_touch.touch_move(id, x + startx as i32, y, size),
+                    "touchstart" => {
+                        multi_touch.touch_down(id, x + startx as i32, y + starty as i32, id, size)
+                    }
+                    "touchmove" => {
+                        multi_touch.touch_move(id, x + startx as i32, y + starty as i32, size)
+                    }
                     _ => {}
                 }
             }
@@ -164,7 +172,9 @@ pub fn do_input(mut rx: UnboundedReceiver<InputCommand>, startx: u32) -> anyhow:
                 ..
             } => match r#type.as_str() {
                 "mousemove" => enigo.move_mouse(x, y, Coordinate::Rel)?,
-                "mousemoveabs" => enigo.move_mouse(x + startx as i32, y, Coordinate::Abs)?,
+                "mousemoveabs" => {
+                    enigo.move_mouse(x + startx as i32, y + starty as i32, Coordinate::Abs)?
+                }
                 #[cfg(target_os = "windows")]
                 "wheel" => {
                     wheel_x += x;

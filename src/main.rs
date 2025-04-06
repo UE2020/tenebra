@@ -312,6 +312,9 @@ pub struct AppState {
 struct Config {
     target_bitrate: u32,
     startx: u32,
+    #[serde(default)]
+    starty: u32,
+    endx: Option<u32>,
     endy: Option<u32>,
     port: u16,
     password: String,
@@ -334,6 +337,8 @@ impl Display for Config {
         writeln!(f, "Server configuration")?;
         writeln!(f, "\tTarget bitrate:                    {} Kbit/s", self.target_bitrate)?;
         writeln!(f, "\tStart x-coordinate:                {}", self.startx)?;
+        writeln!(f, "\tStart y-coordinate:                {}", self.starty)?;
+        writeln!(f, "\tEnd x-coordinate:                  {:?}", self.endx)?;
         writeln!(f, "\tEnd y-coordinate:                  {:?}", self.endy)?;
         writeln!(f, "\tPort:                              {}", self.port)?;
         writeln!(f, "\tSound forwarding:                  {}", bool_to_str(self.sound_forwarding))?;
@@ -455,10 +460,10 @@ async fn main() -> Result<()> {
     }
 
     #[cfg(target_os = "linux")]
-    tokio::task::spawn_blocking(move || do_input(rx, config.startx)).await??;
+    tokio::task::spawn_blocking(move || do_input(rx, config.startx, config.starty)).await??;
 
     #[cfg(not(target_os = "linux"))]
-    tokio::task::block_in_place(move || do_input(rx, config.startx))?;
+    tokio::task::block_in_place(move || do_input(rx, config.startx, config.starty))?;
 
     Ok(())
 }
