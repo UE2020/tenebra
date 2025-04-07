@@ -352,9 +352,10 @@ pub fn do_input(
                     #[cfg(not(target_os = "macos"))]
                     "Insert" => Key::Insert,
                     "Delete" => Key::Delete,
-                    "VolumeMute" | "AudioVolumeMute" => Key::VolumeMute, // VolumeMute on Firefox, AudioVolumeMute on Chromium
-                    "VolumeDown" | "AudioVolumeDown" => Key::VolumeDown, // VolumeDown on Firefox, AudioVolumeDown on Chromium
-                    "VolumeUp" | "AudioVolumeUp" => Key::VolumeUp, // VolumeUp on Firefox, AudioVolumeUp on Chromium
+                    // We don't want to pass these through
+                    // "VolumeMute" | "AudioVolumeMute" => Key::VolumeMute, // VolumeMute on Firefox, AudioVolumeMute on Chromium
+                    // "VolumeDown" | "AudioVolumeDown" => Key::VolumeDown, // VolumeDown on Firefox, AudioVolumeDown on Chromium
+                    // "VolumeUp" | "AudioVolumeUp" => Key::VolumeUp, // VolumeUp on Firefox, AudioVolumeUp on Chromium
                     "NumpadEqual" => Key::Unicode('='),
                     #[cfg(not(target_os = "macos"))]
                     "Pause" => Key::Pause,
