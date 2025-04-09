@@ -117,6 +117,12 @@ impl MultiTouchSimulator {
             unsafe { bindings::pen(self.ptr, x as i32, y as i32, pressure, tilt_x, tilt_y) }
         }
     }
+
+    pub fn relative_mouse(&mut self, x: i32, y: i32) {
+        if !self.ptr.is_null() {
+            unsafe { bindings::move_mouse_relative(self.ptr, x, y) }
+        }
+    }
 }
 
 impl Drop for MultiTouchSimulator {

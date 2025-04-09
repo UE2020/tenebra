@@ -171,7 +171,15 @@ pub fn do_input(
                 y: Some(y),
                 ..
             } => match r#type.as_str() {
-                "mousemove" => enigo.move_mouse(x, y, Coordinate::Rel)?,
+                "mousemove" => {
+                    cfg_if::cfg_if! {
+                        if #[cfg(target_os = "linux")] {
+                            multi_touch.relative_mouse(x, y);
+                        } else {
+                            enigo.move_mouse(x, y, Coordinate::Rel)?
+                        }
+                    }
+                }
                 "mousemoveabs" => {
                     enigo.move_mouse(x + startx as i32, y + starty as i32, Coordinate::Abs)?
                 }

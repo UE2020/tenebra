@@ -1,4 +1,5 @@
 #include <fcntl.h>
+#include <linux/input-event-codes.h>
 #include <linux/uinput.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,7 +8,7 @@
 
 typedef struct {
     int touch_fd;
-    int scroll_fd;
+    int mouse_fd;
     int pen_fd;
     int wheel_x;
     int wheel_y;
@@ -57,25 +58,27 @@ int setup_devices(MultiTouchSimulator* simulator) {
     {
         struct uinput_user_dev uidev = {0};
 
-        strncpy(uidev.name, "Tenebra Scroll Device", UINPUT_MAX_NAME_SIZE);
+        strncpy(uidev.name, "Tenebra Mouse Device", UINPUT_MAX_NAME_SIZE);
         uidev.id.bustype = BUS_USB;
         uidev.id.vendor = 0x1234;
         uidev.id.product = 0x5678;
         uidev.id.version = 1;
 
-        ioctl(simulator->scroll_fd, UI_SET_EVBIT, EV_REL);
-        ioctl(simulator->scroll_fd, UI_SET_RELBIT, REL_WHEEL);
-        ioctl(simulator->scroll_fd, UI_SET_RELBIT, REL_HWHEEL);
-        ioctl(simulator->scroll_fd, UI_SET_RELBIT, REL_WHEEL_HI_RES);
-        ioctl(simulator->scroll_fd, UI_SET_RELBIT, REL_HWHEEL_HI_RES);
-        ioctl(simulator->scroll_fd, UI_SET_EVBIT, EV_SYN);
+        ioctl(simulator->mouse_fd, UI_SET_EVBIT, EV_REL);
+        ioctl(simulator->mouse_fd, UI_SET_RELBIT, REL_X);
+        ioctl(simulator->mouse_fd, UI_SET_RELBIT, REL_Y);
+        ioctl(simulator->mouse_fd, UI_SET_RELBIT, REL_WHEEL);
+        ioctl(simulator->mouse_fd, UI_SET_RELBIT, REL_HWHEEL);
+        ioctl(simulator->mouse_fd, UI_SET_RELBIT, REL_WHEEL_HI_RES);
+        ioctl(simulator->mouse_fd, UI_SET_RELBIT, REL_HWHEEL_HI_RES);
+        ioctl(simulator->mouse_fd, UI_SET_EVBIT, EV_SYN);
 
-        if (write(simulator->scroll_fd, &uidev, sizeof(uidev)) == -1) {
+        if (write(simulator->mouse_fd, &uidev, sizeof(uidev)) == -1) {
             perror("Error setting up device");
             return -1;
         }
 
-        if (ioctl(simulator->scroll_fd, UI_DEV_CREATE) == -1) {
+        if (ioctl(simulator->mouse_fd, UI_DEV_CREATE) == -1) {
             perror("Error creating uinput device");
             return -1;
         }
@@ -151,8 +154,8 @@ MultiTouchSimulator* create_simulator() {
         free(simulator);
         return NULL;
     }
-    simulator->scroll_fd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
-    if (simulator->scroll_fd == -1) {
+    simulator->mouse_fd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
+    if (simulator->mouse_fd == -1) {
         perror("Error opening /dev/uinput");
         close(simulator->touch_fd);
         free(simulator);
@@ -162,14 +165,14 @@ MultiTouchSimulator* create_simulator() {
     if (simulator->pen_fd == -1) {
         perror("Error opening /dev/uinput");
         close(simulator->touch_fd);
-        close(simulator->scroll_fd);
+        close(simulator->mouse_fd);
         free(simulator);
         return NULL;
     }
 
     if (setup_devices(simulator)) {
         close(simulator->touch_fd);
-        close(simulator->scroll_fd);
+        close(simulator->mouse_fd);
         close(simulator->pen_fd);
         free(simulator);
         return NULL;
@@ -185,10 +188,10 @@ MultiTouchSimulator* create_simulator() {
 void destroy_simulator(MultiTouchSimulator* simulator) {
     if (simulator) {
         ioctl(simulator->touch_fd, UI_DEV_DESTROY);
-        ioctl(simulator->scroll_fd, UI_DEV_DESTROY);
+        ioctl(simulator->mouse_fd, UI_DEV_DESTROY);
         ioctl(simulator->pen_fd, UI_DEV_DESTROY);
         close(simulator->touch_fd);
-        close(simulator->scroll_fd);
+        close(simulator->mouse_fd);
         close(simulator->pen_fd);
     }
     free(simulator);
@@ -228,15 +231,21 @@ void touch_up(MultiTouchSimulator* simulator, int slot) {
     emit_event(simulator->touch_fd, EV_SYN, SYN_REPORT, 0);
 }
 
+void move_mouse_relative(MultiTouchSimulator* simulator, int x, int y) {
+    if (x) emit_event(simulator->mouse_fd, EV_REL, REL_X, x);
+    if (y) emit_event(simulator->mouse_fd, EV_REL, REL_Y, y);
+    emit_event(simulator->mouse_fd, EV_SYN, SYN_REPORT, 0);
+}
+
 void scroll_vertically(MultiTouchSimulator* simulator, int value) {
     if (value) {
         simulator->wheel_y += value;
-        emit_event(simulator->scroll_fd, EV_REL, REL_WHEEL_HI_RES, -value);
+        emit_event(simulator->mouse_fd, EV_REL, REL_WHEEL_HI_RES, -value);
         if (abs(simulator->wheel_y) >= 120) {
-            emit_event(simulator->scroll_fd, EV_REL, REL_WHEEL, -simulator->wheel_y / 120);
+            emit_event(simulator->mouse_fd, EV_REL, REL_WHEEL, -simulator->wheel_y / 120);
             simulator->wheel_y = simulator->wheel_y % 120;
         }
-        emit_event(simulator->scroll_fd, EV_SYN, SYN_REPORT, 0);
+        emit_event(simulator->mouse_fd, EV_SYN, SYN_REPORT, 0);
     }
 }
 
@@ -244,9 +253,9 @@ void scroll_horizontally(MultiTouchSimulator* simulator, int value) {
     if (value) {
         simulator->wheel_x += value;
         if (abs(simulator->wheel_x) >= 120) {
-            emit_event(simulator->scroll_fd, EV_REL, REL_HWHEEL_HI_RES, simulator->wheel_x / 120 * 120);
-            emit_event(simulator->scroll_fd, EV_REL, REL_HWHEEL, simulator->wheel_x / 120);
-            emit_event(simulator->scroll_fd, EV_SYN, SYN_REPORT, 0);
+            emit_event(simulator->mouse_fd, EV_REL, REL_HWHEEL_HI_RES, simulator->wheel_x / 120 * 120);
+            emit_event(simulator->mouse_fd, EV_REL, REL_HWHEEL, simulator->wheel_x / 120);
+            emit_event(simulator->mouse_fd, EV_SYN, SYN_REPORT, 0);
             simulator->wheel_x = simulator->wheel_x % 120;
         }
     }
