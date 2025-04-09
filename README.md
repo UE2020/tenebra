@@ -42,7 +42,7 @@ However, Tenebra reads from a config file which must be populated before running
 
 On Linux, [VA-API](https://en.wikipedia.org/wiki/Video_Acceleration_API) can be used to perform hardware accelerated H.264 encoding. This can be enabled by setting the `hwencode` property in the config.toml to `true`. The `va` GStreamer plugin (NOT the `vaapi` plugin - this one is broken) must be installed and USABLE. If your system supports the `vapostproc` GStreamer element, you may enable the `vapostproc` option as well.
 
-## VideoToolbox
+### VideoToolbox
 
 On macOS, [VideoToolbox](https://developer.apple.com/documentation/videotoolbox) can be used to perform hardware accelerated H.264 encoding. This can be enabled by setting the `hwencode` property in the config.toml to `true`. The `vtenc_h264` GStreamer element must be installed and USABLE.
 
