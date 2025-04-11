@@ -35,6 +35,7 @@ impl Listener {
                     // this will stop accepting when task_rx dies
                     Ok((socket, peer_addr)) = listener.accept() => {
                         info!("Accepted TCP connection from {peer_addr}");
+                        socket.set_nodelay(true).ok();
                         let (reader, writer) = socket.into_split();
                         let (close_tx, mut close_rx) = channel(1);
                         map.lock().await.insert(peer_addr, (writer, close_tx));
@@ -83,8 +84,10 @@ impl Listener {
     }
 
     async fn frame_and_send(socket: &mut OwnedWriteHalf, data: &[u8]) -> anyhow::Result<()> {
-        socket.write_u16(data.len() as u16).await?;
-        socket.write_all(data).await?;
+        let mut buf = Vec::with_capacity(2 + data.len());
+        buf.extend_from_slice(&(data.len() as u16).to_be_bytes());
+        buf.extend_from_slice(data);
+        socket.write_all(&buf).await?;
         Ok(())
     }
 
