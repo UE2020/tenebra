@@ -36,6 +36,10 @@ However, Tenebra reads from a config file which must be populated before running
 
 [See the default config file.](src/default.toml)
 
+Alternatively, use [Tenebra GTK](https://github.com/BlueCannonBall/tenebra-gtk) to configure Tenebra in a user-friendly way:
+
+![image](https://github.com/user-attachments/assets/be8aa60a-b19e-4b1a-82cb-d41e613cf82c)
+
 ## Using Hardware Accelerated Encoding (macOS & Linux only)
 
 ### VA-API
