@@ -136,7 +136,8 @@ pub async fn start_audio_pipeline(
         // This can be set after linking the two objects, because format negotiation between
         // both elements will happen during pre-rolling of the pipeline.
         .caps(&opus_caps)
-        //.drop(true)
+        .drop(true)
+        .max_buffers(1)
         .build();
 
     // appsink callback - send rtp packets to the streaming thread
@@ -308,17 +309,9 @@ pub async fn start_pipeline(
 
     let enc = if !config.vaapi {
         ElementFactory::make("x264enc")
-            //.property("qos", true)
             .property("threads", 4u32)
-            //.property("aud", true)
             .property("b-adapt", false)
-            //.property("bframes", 0u32)
-            //.property("insert-vui", true)
-            //.property("rc-lookahead", 0)
             .property("vbv-buf-capacity", config.vbv_buf_capacity)
-            //.property("sliced-threads", true)
-            //.property("byte-stream", true)
-            //.property_from_str("pass", "cbr")
             .property_from_str("speed-preset", "superfast")
             .property_from_str("tune", "zerolatency")
             .property("bitrate", 4000u32 - 64u32)
@@ -407,7 +400,8 @@ pub async fn start_pipeline(
         // This can be set after linking the two objects, because format negotiation between
         // both elements will happen during pre-rolling of the pipeline.
         .caps(&final_caps)
-        //.drop(true)
+        .drop(true)
+        .max_buffers(1)
         .build();
 
     // appsink callback - send rtp packets to the streaming thread
