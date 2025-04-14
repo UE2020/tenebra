@@ -14,6 +14,8 @@ use tokio::{
 
 use log::*;
 
+// Dropping the Listener will end its internal task, because the internal task is always receiving from this tx
+// so if this tx is dropped, the internal task will stop receiving messages and will break and exit
 pub struct Listener {
     tx: UnboundedSender<(Vec<u8>, SocketAddr)>,
     rx: UnboundedReceiver<(Vec<u8>, SocketAddr)>,
@@ -37,7 +39,7 @@ impl Listener {
                         info!("Accepted TCP connection from {peer_addr}");
                         socket.set_nodelay(true).ok();
                         let (reader, writer) = socket.into_split();
-                        let (close_tx, mut close_rx) = channel(1);
+                        let (close_tx, mut close_rx) = unbounded_channel();
                         map.lock().await.insert(peer_addr, (writer, close_tx));
                         let task_tx = task_tx.clone();
                         let map_clone = map.clone();
@@ -58,7 +60,7 @@ impl Listener {
                                 if let Some((socket, close_tx)) =  map.get_mut(&addr) {
                                     if let Err(e) = Self::frame_and_send(socket, &data).await {
                                         error!("Closing {addr} because of send error {e}");
-                                        close_tx.send(()).await.ok();
+                                        close_tx.send(()).ok();
                                         map.remove(&addr);
                                     }
                                 }
@@ -69,7 +71,7 @@ impl Listener {
                                 info!("Closing {} sockets.", map.len());
                                 for (addr, (_, close_tx)) in map.iter() {
                                     info!("Closing socket {addr}");
-                                    close_tx.send(()).await.ok();
+                                    close_tx.send(()).ok();
                                 }
 
                                 break;
