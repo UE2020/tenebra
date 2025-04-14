@@ -7,7 +7,7 @@ use tokio::{
         TcpListener,
     },
     sync::{
-        mpsc::{channel, unbounded_channel, UnboundedReceiver, UnboundedSender},
+        mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
         Mutex,
     },
 };
