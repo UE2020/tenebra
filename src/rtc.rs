@@ -243,6 +243,7 @@ pub async fn run(
                     Event::ChannelData(ChannelData { data, .. }) => {
                         let msg_str = String::from_utf8(data)?;
                         let cmd: InputCommand = serde_json::from_str(&msg_str)?;
+                        trace!("Input command: {:#?}", cmd);
                         state.input_tx.send(cmd)?;
                     }
                     Event::IceConnectionStateChange(connection_state) => {
