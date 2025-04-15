@@ -452,7 +452,7 @@ pub async fn start_pipeline(
             .build(),
     );
 
-    //let queue = ElementFactory::make("queue").property("max-size-buffers", 1u32).property("max-size-time", 0u64).property("max-size-bytes", 0u32).property_from_str("leaky", "downstream").build()?;
+    let queue = ElementFactory::make("queue").property("max-size-buffers", 1u32).property("max-size-time", 0u64).property("max-size-bytes", 0u32).property_from_str("leaky", "downstream").build()?;
 
     // Create the pipeline
     let pipeline = Pipeline::default();
@@ -476,7 +476,7 @@ pub async fn start_pipeline(
                 // Add elements to the pipeline
                 pipeline.add_many([
                     &src,
-                    &video_capsfilter,
+                    &video_capsfilter, &queue,
                     &videoconvert,
                     &format_capsfilter,
                     &enc,
@@ -487,7 +487,7 @@ pub async fn start_pipeline(
                 // Link the elements
                 gstreamer::Element::link_many([
                     &src,
-                    &video_capsfilter,
+                    &video_capsfilter, &queue,
                     &videoconvert,
                     &format_capsfilter,
                     &enc,
@@ -498,7 +498,7 @@ pub async fn start_pipeline(
                 // Add elements to the pipeline
                 pipeline.add_many([
                     &src,
-                    &video_capsfilter,
+                    &video_capsfilter, &queue,
                     //&queue,
                     &enc,
                     &h264_capsfilter,
@@ -508,7 +508,7 @@ pub async fn start_pipeline(
                 // Link the elements
                 gstreamer::Element::link_many([
                     &src,
-                    &video_capsfilter,
+                    &video_capsfilter, &queue,
                     //&queue,
                     &enc,
                     &h264_capsfilter,
@@ -518,7 +518,7 @@ pub async fn start_pipeline(
                 // Add elements to the pipeline
                 pipeline.add_many([
                     &src,
-                    &video_capsfilter,
+                    &video_capsfilter, &queue,
                     //&queue,
                     &enc,
                     &h264_capsfilter,
@@ -530,7 +530,7 @@ pub async fn start_pipeline(
                 // Link the elements
                 gstreamer::Element::link_many([
                     &src,
-                    &video_capsfilter,
+                    &video_capsfilter, &queue,
                     //&queue,
                     &enc,
                     &h264_capsfilter,
@@ -543,7 +543,7 @@ pub async fn start_pipeline(
             // Add elements to the pipeline
             pipeline.add_many([
                 &src,
-                &video_capsfilter,
+                &video_capsfilter, &queue,
                 &videoconvert,
                 &format_capsfilter,
                 //&queue,
@@ -555,7 +555,7 @@ pub async fn start_pipeline(
             // Link the elements
             gstreamer::Element::link_many([
                 &src,
-                &video_capsfilter,
+                &video_capsfilter, &queue,
                 &videoconvert,
                 &format_capsfilter,
                 //&queue,

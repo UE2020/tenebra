@@ -65,7 +65,7 @@ use std::{
 use log::*;
 
 use input::{do_input, InputCommand};
-use local_ip_address::local_ip;
+use local_ip_address::{list_afinet_netifas, local_ip};
 use tokio::{
     net::{TcpListener, UdpSocket},
     sync::mpsc::unbounded_channel,
@@ -173,14 +173,19 @@ async fn offer(
     };
 
     let local_ip = local_ip()?;
+    let interfaces = list_afinet_netifas()?;
 
     let socket = UdpSocket::bind("0.0.0.0:0").await?;
 
     let local_socket_addr = SocketAddr::new(local_ip, socket.local_addr()?.port());
-    rtc.add_local_candidate(Candidate::host(
-        local_socket_addr,
-        str0m::net::Protocol::Udp,
-    )?);
+
+    for (_iface, ip) in interfaces.iter() {
+        let local_socket_addr = SocketAddr::new(*ip, socket.local_addr()?.port());
+        rtc.add_local_candidate(Candidate::host(
+            local_socket_addr,
+            str0m::net::Protocol::Udp,
+        )?);
+    }
 
     info!("Local socket addr: {}", local_socket_addr);
 
@@ -195,10 +200,13 @@ async fn offer(
 
     let tcp = TcpListener::bind("0.0.0.0:0").await?;
     let tcp_local_socket_addr = SocketAddr::new(local_ip, tcp.local_addr()?.port());
-    rtc.add_local_candidate(Candidate::host(
-        tcp_local_socket_addr,
-        str0m::net::Protocol::Tcp,
-    )?);
+    for (_iface, ip) in interfaces.iter() {
+        let local_socket_addr = SocketAddr::new(*ip, tcp.local_addr()?.port());
+        rtc.add_local_candidate(Candidate::host(
+            local_socket_addr,
+            str0m::net::Protocol::Tcp,
+        )?);
+    }
 
     let gateway_and_port = if state.config.tcp_upnp {
         if let Ok(gateway) = igd_next::aio::tokio::search_gateway(Default::default()).await {
