@@ -56,7 +56,7 @@
 
 use anyhow::{anyhow, Context};
 use bytecodec::{DecodeExt, EncodeExt as _};
-use std::net::{SocketAddr, IpAddr};
+use std::net::{IpAddr, SocketAddr};
 use stun_codec::rfc5389::{attributes::XorMappedAddress, methods::BINDING, Attribute};
 use stun_codec::*;
 use tokio::net::{ToSocketAddrs, UdpSocket};
