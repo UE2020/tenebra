@@ -56,7 +56,7 @@
 
 use anyhow::{anyhow, Context};
 use bytecodec::{DecodeExt, EncodeExt as _};
-use std::net::SocketAddr;
+use std::net::{SocketAddr, IpAddr};
 use stun_codec::rfc5389::{attributes::XorMappedAddress, methods::BINDING, Attribute};
 use stun_codec::*;
 use tokio::net::{ToSocketAddrs, UdpSocket};
@@ -117,6 +117,12 @@ pub async fn get_addr<A: ToSocketAddrs>(
     let address = parse_binding_response(&buf[..num_read])?;
 
     Ok(address)
+}
+
+pub async fn get_base<A: ToSocketAddrs>(stun_server: A) -> anyhow::Result<IpAddr> {
+    let dummy = UdpSocket::bind("0.0.0.0:0").await?;
+    dummy.connect(stun_server).await?;
+    Ok(dummy.local_addr()?.ip())
 }
 
 pub async fn is_symmetric_nat() -> anyhow::Result<bool> {

@@ -65,7 +65,6 @@ use std::{
 use log::*;
 
 use input::{do_input, InputCommand};
-use local_ip_address::local_ip;
 use network_interface::{NetworkInterface, NetworkInterfaceConfig};
 use tokio::{
     net::{TcpListener, UdpSocket},
@@ -173,7 +172,7 @@ async fn offer(
         rtc.enable_bwe(Some(Bitrate::kbps(4000))).build()
     };
 
-    let local_ip = local_ip()?;
+    let local_ip = stun::get_base("stun.l.google.com:19302").await?;
     let interfaces = NetworkInterface::show()?
         .into_iter()
         .map(|iface| {
