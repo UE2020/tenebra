@@ -452,7 +452,12 @@ pub async fn start_pipeline(
             .build(),
     );
 
-    let queue = ElementFactory::make("queue").property("max-size-buffers", 1u32).property("max-size-time", 0u64).property("max-size-bytes", 0u32).property_from_str("leaky", "downstream").build()?;
+    let queue = ElementFactory::make("queue")
+        .property("max-size-buffers", 1u32)
+        .property("max-size-time", 0u64)
+        .property("max-size-bytes", 0u32)
+        .property_from_str("leaky", "downstream")
+        .build()?;
 
     // Create the pipeline
     let pipeline = Pipeline::default();

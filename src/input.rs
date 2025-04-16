@@ -436,8 +436,150 @@ pub fn do_input(
                     enigo.key(Key::Function, Release)?;
                 }
             }
-            // We ignore bad input
-            _ => {}
+            InputCommand { r#type, .. } => {
+                if r#type == "resetkeyboard" {
+                    let keys: &[Key] = &[
+                        Key::Escape,
+                        Key::Unicode('1'),
+                        Key::Unicode('2'),
+                        Key::Unicode('3'),
+                        Key::Unicode('4'),
+                        Key::Unicode('5'),
+                        Key::Unicode('6'),
+                        Key::Unicode('7'),
+                        Key::Unicode('8'),
+                        Key::Unicode('9'),
+                        Key::Unicode('0'),
+                        Key::Unicode('-'),
+                        Key::Unicode('='),
+                        Key::Backspace,
+                        Key::Tab,
+                        Key::Unicode('q'),
+                        Key::Unicode('w'),
+                        Key::Unicode('e'),
+                        Key::Unicode('r'),
+                        Key::Unicode('t'),
+                        Key::Unicode('y'),
+                        Key::Unicode('u'),
+                        Key::Unicode('i'),
+                        Key::Unicode('o'),
+                        Key::Unicode('p'),
+                        Key::Unicode('['),
+                        Key::Unicode(']'),
+                        Key::Return,
+                        Key::Control,
+                        Key::Unicode('a'),
+                        Key::Unicode('s'),
+                        Key::Unicode('d'),
+                        Key::Unicode('f'),
+                        Key::Unicode('g'),
+                        Key::Unicode('h'),
+                        Key::Unicode('j'),
+                        Key::Unicode('k'),
+                        Key::Unicode('l'),
+                        Key::Unicode(';'),
+                        Key::Unicode('\''),
+                        Key::Unicode('`'),
+                        Key::Shift,
+                        Key::Unicode('\\'),
+                        Key::Unicode('z'),
+                        Key::Unicode('x'),
+                        Key::Unicode('c'),
+                        Key::Unicode('v'),
+                        Key::Unicode('b'),
+                        Key::Unicode('n'),
+                        Key::Unicode('m'),
+                        Key::Unicode(','),
+                        Key::Unicode('.'),
+                        Key::Unicode('/'),
+                        Key::Alt,
+                        Key::Space,
+                        Key::CapsLock,
+                        Key::F1,
+                        Key::F2,
+                        Key::F3,
+                        Key::F4,
+                        Key::F5,
+                        Key::F6,
+                        Key::F7,
+                        Key::F8,
+                        Key::F9,
+                        Key::F10,
+                        #[cfg(not(target_os = "macos"))]
+                        Key::Numlock,
+                        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+                        Key::ScrollLock,
+                        Key::Unicode('+'),
+                        Key::Unicode('*'),
+                        Key::Unicode('='),
+                        Key::Unicode(','),
+                        Key::Unicode('¥'),
+                        Key::Home,
+                        Key::UpArrow,
+                        Key::PageUp,
+                        Key::LeftArrow,
+                        Key::RightArrow,
+                        Key::End,
+                        Key::DownArrow,
+                        Key::PageDown,
+                        Key::Delete,
+                        Key::Meta,
+                        Key::MediaNextTrack,
+                        Key::MediaPlayPause,
+                        Key::MediaPrevTrack,
+                        Key::F11,
+                        Key::F12,
+                        Key::F13,
+                        Key::F14,
+                        Key::F15,
+                        Key::F16,
+                        Key::F17,
+                        Key::F18,
+                        Key::F19,
+                        Key::F20,
+                        Key::Unicode('0'),
+                        Key::Unicode('1'),
+                        Key::Unicode('2'),
+                        Key::Unicode('3'),
+                        Key::Unicode('4'),
+                        Key::Unicode('5'),
+                        Key::Unicode('6'),
+                        Key::Unicode('7'),
+                        Key::Unicode('8'),
+                        Key::Unicode('9'),
+                        Key::Unicode('.'),
+                        Key::Unicode('/'),
+                        Key::Return,
+                        #[cfg(not(target_os = "macos"))]
+                        Key::PrintScr,
+                        #[cfg(not(target_os = "macos"))]
+                        Key::Insert,
+                        #[cfg(not(target_os = "macos"))]
+                        Key::Pause,
+                        #[cfg(not(target_os = "macos"))]
+                        Key::MediaStop,
+                        #[cfg(not(target_os = "macos"))]
+                        Key::F21,
+                        #[cfg(not(target_os = "macos"))]
+                        Key::F22,
+                        #[cfg(not(target_os = "macos"))]
+                        Key::F23,
+                        #[cfg(not(target_os = "macos"))]
+                        Key::F24,
+                        #[cfg(not(target_os = "macos"))]
+                        Key::Select,
+                        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+                        Key::Undo,
+                        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+                        Key::Find,
+                        Key::Help,
+                    ];
+                    // Unpress all possible keys
+                    for key in keys {
+                        enigo.key(*key, Release)?;
+                    }
+                }
+            }
         }
     }
 

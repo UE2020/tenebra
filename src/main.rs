@@ -65,7 +65,8 @@ use std::{
 use log::*;
 
 use input::{do_input, InputCommand};
-use local_ip_address::{list_afinet_netifas, local_ip};
+use local_ip_address::local_ip;
+use network_interface::{NetworkInterface, NetworkInterfaceConfig};
 use tokio::{
     net::{TcpListener, UdpSocket},
     sync::mpsc::unbounded_channel,
@@ -173,7 +174,16 @@ async fn offer(
     };
 
     let local_ip = local_ip()?;
-    let interfaces = list_afinet_netifas()?;
+    let interfaces = NetworkInterface::show()?
+        .into_iter()
+        .map(|iface| {
+            iface
+                .addr
+                .into_iter()
+                .map(move |addr| (iface.name.clone(), addr.ip()))
+        })
+        .flatten()
+        .collect::<Vec<_>>();
 
     let socket = UdpSocket::bind("0.0.0.0:0").await?;
 

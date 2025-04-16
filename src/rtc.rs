@@ -250,6 +250,10 @@ pub async fn run(
                         info!("New state: {:?}", connection_state);
                         if connection_state == IceConnectionState::Connected {
                             info!("ICE Connection state is now CONNECTED. Waiting for media to be added...");
+                            state.input_tx.send(InputCommand {
+                                r#type: String::from("resetkeyboard"),
+                                ..Default::default()
+                            })?;
                         }
                     }
                     _ => {}
