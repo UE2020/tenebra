@@ -481,7 +481,8 @@ pub async fn start_pipeline(
                 // Add elements to the pipeline
                 pipeline.add_many([
                     &src,
-                    &video_capsfilter, &queue,
+                    &video_capsfilter,
+                    &queue,
                     &videoconvert,
                     &format_capsfilter,
                     &enc,
@@ -492,7 +493,8 @@ pub async fn start_pipeline(
                 // Link the elements
                 gstreamer::Element::link_many([
                     &src,
-                    &video_capsfilter, &queue,
+                    &video_capsfilter,
+                    &queue,
                     &videoconvert,
                     &format_capsfilter,
                     &enc,
@@ -503,8 +505,8 @@ pub async fn start_pipeline(
                 // Add elements to the pipeline
                 pipeline.add_many([
                     &src,
-                    &video_capsfilter, &queue,
-                    //&queue,
+                    &video_capsfilter,
+                    &queue,
                     &enc,
                     &h264_capsfilter,
                     appsink.upcast_ref(),
@@ -513,8 +515,8 @@ pub async fn start_pipeline(
                 // Link the elements
                 gstreamer::Element::link_many([
                     &src,
-                    &video_capsfilter, &queue,
-                    //&queue,
+                    &video_capsfilter,
+                    &queue,
                     &enc,
                     &h264_capsfilter,
                     appsink.upcast_ref(),
@@ -523,8 +525,8 @@ pub async fn start_pipeline(
                 // Add elements to the pipeline
                 pipeline.add_many([
                     &src,
-                    &video_capsfilter, &queue,
-                    //&queue,
+                    &video_capsfilter,
+                    &queue,
                     &enc,
                     &h264_capsfilter,
                     &parse,
@@ -535,8 +537,8 @@ pub async fn start_pipeline(
                 // Link the elements
                 gstreamer::Element::link_many([
                     &src,
-                    &video_capsfilter, &queue,
-                    //&queue,
+                    &video_capsfilter,
+                    &queue,
                     &enc,
                     &h264_capsfilter,
                     &parse,
@@ -548,10 +550,10 @@ pub async fn start_pipeline(
             // Add elements to the pipeline
             pipeline.add_many([
                 &src,
-                &video_capsfilter, &queue,
+                &video_capsfilter,
+                &queue,
                 &videoconvert,
                 &format_capsfilter,
-                //&queue,
                 &enc,
                 &h264_capsfilter,
                 appsink.upcast_ref(),
@@ -560,10 +562,10 @@ pub async fn start_pipeline(
             // Link the elements
             gstreamer::Element::link_many([
                 &src,
-                &video_capsfilter, &queue,
+                &video_capsfilter,
+                &queue,
                 &videoconvert,
                 &format_capsfilter,
-                //&queue,
                 &enc,
                 &h264_capsfilter,
                 appsink.upcast_ref(),
