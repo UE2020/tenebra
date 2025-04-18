@@ -327,7 +327,7 @@ pub async fn start_pipeline(
             .property("vbv-buf-capacity", config.vbv_buf_capacity)
             .property_from_str("speed-preset", "superfast")
             .property_from_str("tune", "zerolatency")
-            .property("bitrate", 4000u32 - 64u32)
+            .property("bitrate", config.target_bitrate - 64)
             .property("key-int-max", 2560u32)
             .build()?
     } else {
@@ -342,17 +342,17 @@ pub async fn start_pipeline(
                     .property("ref-frames", 1u32)
                     .property("target-usage", 6u32)
                     .property_from_str("rate-control", "cbr")
-                    .property("bitrate", 4000u32 - 64u32)
+                    .property("bitrate", config.target_bitrate - 64)
                     .property(
                         "cpb-size",
-                        ((4000u32 - 64u32) * config.vbv_buf_capacity) / 1000,
+                        ((config.target_bitrate - 64) * config.vbv_buf_capacity) / 1000,
                     )
                     .property_from_str("mbbrc", "enabled")
                     .build()?
             } else if #[cfg(target_os = "macos")] {
                 ElementFactory::make("vtenc_h264")
                     .property("allow-frame-reordering", false)
-                    .property("bitrate", 4000u32 - 64u32)
+                    .property("bitrate", config.target_bitrate - 64)
                     .property("realtime", true)
                     .build()?
             } else {
@@ -619,7 +619,7 @@ pub async fn start_pipeline(
                     #[cfg(not(target_os = "macos"))]
                     enc.set_property(
                         "cpb-size",
-                        ((4000u32 - 64u32) * config.vbv_buf_capacity) / 1000,
+                        (bitrate * config.vbv_buf_capacity) / 1000,
                     );
                 } else {
                     enc.set_property("bitrate", bitrate);

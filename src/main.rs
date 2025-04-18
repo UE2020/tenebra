@@ -169,7 +169,7 @@ async fn offer(
     let mut rtc = if state.config.no_bwe {
         rtc.build()
     } else {
-        rtc.enable_bwe(Some(Bitrate::kbps(4000))).build()
+        rtc.enable_bwe(Some(Bitrate::kbps(state.config.target_bitrate as u64))).build()
     };
 
     let local_ip = stun::get_base("stun.l.google.com:19302").await?;
