@@ -79,10 +79,10 @@ use str0m::{Event, IceConnectionState, Input, Output, Rtc};
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::sync::mpsc::UnboundedSender;
 
+use crate::keys::Permissions;
 use crate::AppState;
 use crate::CreateOffer;
 use crate::InputCommand;
-use crate::keys::Permissions;
 
 mod pipeline;
 mod tcp;
@@ -247,8 +247,10 @@ pub async fn run(
                         let cmd: InputCommand = serde_json::from_str(&msg_str)?;
                         trace!("Input command: {:#?}", cmd);
                         match permissions {
-                            Permissions::FullControl => { state.input_tx.send(cmd)?; },
-                            _ => error!("Rejected input command: {:?}", cmd)
+                            Permissions::FullControl => {
+                                state.input_tx.send(cmd)?;
+                            }
+                            _ => error!("Rejected input command: {:?}", cmd),
                         }
                     }
                     Event::IceConnectionStateChange(connection_state) => {

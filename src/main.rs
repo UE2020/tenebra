@@ -154,6 +154,7 @@ async fn offer(
         }
     } else if let Some(ref key) = payload.key {
         if let Some(key_permissions) = state.keys.lock().unwrap().use_key(key.as_str()) {
+            info!("Authenticated key {} with permissions: {:?}", key, key_permissions);
             key_permissions
         } else {
             return Ok((
@@ -346,14 +347,13 @@ async fn create_key(
     Json(payload): Json<CreateKeyRequest>,
 ) -> Result<(StatusCode, Json<String>), AppError> {
     if payload.password == state.config.password {
-        Ok((
-            StatusCode::OK,
-            Json(state.keys.lock().unwrap().create_key(if payload.view_only {
-                Permissions::ViewOnly
-            } else {
-                Permissions::FullControl
-            })),
-        ))
+        let key = state.keys.lock().unwrap().create_key(if payload.view_only {
+            Permissions::ViewOnly
+        } else {
+            Permissions::FullControl
+        });
+        info!("Registering new key: {}", key);
+        Ok((StatusCode::OK, Json(key)))
     } else {
         Err(AppError(anyhow!("Password incorrect.")))
     }
@@ -463,7 +463,7 @@ async fn main() -> Result<()> {
     let ports = Arc::new(Mutex::new(Vec::new()));
     let app = Router::new()
         .route("/", get(home))
-        .route("/new_key", post(create_key))
+        .route("/create_key", post(create_key))
         .route("/offer", post(offer))
         .layer(tower_http::cors::CorsLayer::very_permissive())
         .with_state(AppState {
