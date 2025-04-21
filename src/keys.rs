@@ -1,4 +1,4 @@
-use rand::{distributions::Alphanumeric, Rng};
+use rand::{distr::Alphanumeric, Rng};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Hash)]
@@ -20,7 +20,7 @@ impl Keys {
     }
 
     pub fn create_key(&mut self, permissions: Permissions) -> String {
-        let key: String = rand::thread_rng()
+        let key: String = rand::rng()
             .sample_iter(&Alphanumeric)
             .take(32) // 32 bytes * 8 bits = 256 bits entropy
             .map(char::from)
