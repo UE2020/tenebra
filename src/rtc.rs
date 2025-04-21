@@ -82,6 +82,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use crate::AppState;
 use crate::CreateOffer;
 use crate::InputCommand;
+use crate::keys::Permissions;
 
 mod pipeline;
 mod tcp;
@@ -112,6 +113,7 @@ pub async fn run(
     tcp_addr: SocketAddr,
     state: AppState,
     offer: CreateOffer,
+    permissions: Permissions,
     mut kill_rx: UnboundedReceiver<()>,
 ) -> anyhow::Result<()> {
     let mut buf = Vec::new();
@@ -244,16 +246,15 @@ pub async fn run(
                         let msg_str = String::from_utf8(data)?;
                         let cmd: InputCommand = serde_json::from_str(&msg_str)?;
                         trace!("Input command: {:#?}", cmd);
-                        state.input_tx.send(cmd)?;
+                        match permissions {
+                            Permissions::FullControl => { state.input_tx.send(cmd)?; },
+                            _ => error!("Rejected input command: {:?}", cmd)
+                        }
                     }
                     Event::IceConnectionStateChange(connection_state) => {
                         info!("New state: {:?}", connection_state);
                         if connection_state == IceConnectionState::Connected {
                             info!("ICE Connection state is now CONNECTED. Waiting for media to be added...");
-                            state.input_tx.send(InputCommand {
-                                r#type: String::from("resetkeyboard"),
-                                ..Default::default()
-                            })?;
                         }
                     }
                     _ => {}

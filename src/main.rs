@@ -71,7 +71,7 @@ use tokio::{
     sync::mpsc::unbounded_channel,
 };
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 
 use axum::{
     extract::State,
@@ -95,22 +95,12 @@ use base64::prelude::*;
 
 use tokio::{spawn, sync::mpsc::UnboundedSender};
 
+use keys::{Keys, Permissions};
+
 mod input;
+pub mod keys;
 mod rtc;
 mod stun;
-
-#[derive(Deserialize, Clone)]
-struct CreateOffer {
-    password: String,
-    offer: String,
-    show_mouse: bool,
-}
-
-#[derive(Serialize)]
-enum ResponseOffer {
-    Offer(String),
-    Error(String),
-}
 
 pub struct AppError(anyhow::Error);
 
@@ -134,17 +124,51 @@ where
     }
 }
 
+#[derive(Deserialize, Clone)]
+struct CreateOffer {
+    password: Option<String>,
+    key: Option<String>,
+    offer: String,
+    show_mouse: bool,
+}
+
+#[derive(Serialize)]
+enum ResponseOffer {
+    Offer(String),
+    Error(String),
+}
+
 async fn offer(
     State(state): State<AppState>,
     Json(payload): Json<CreateOffer>,
 ) -> Result<(StatusCode, Json<ResponseOffer>), AppError> {
     info!("Received offer");
-    if payload.password != state.config.password {
+    let permissions = if let Some(ref password) = payload.password {
+        if *password != state.config.password {
+            return Ok((
+                StatusCode::UNAUTHORIZED,
+                Json(ResponseOffer::Error("Password incorrect.".to_string())),
+            ));
+        } else {
+            Permissions::FullControl
+        }
+    } else if let Some(ref key) = payload.key {
+        if let Some(key_permissions) = state.keys.lock().unwrap().use_key(key.as_str()) {
+            key_permissions
+        } else {
+            return Ok((
+                StatusCode::UNAUTHORIZED,
+                Json(ResponseOffer::Error("Bad session.".to_string())),
+            ));
+        }
+    } else {
         return Ok((
             StatusCode::UNAUTHORIZED,
-            Json(ResponseOffer::Error("Password incorrect.".to_string())),
+            Json(ResponseOffer::Error(
+                "No authentication provided.".to_string(),
+            )),
         ));
-    }
+    };
 
     let mut exts = ExtensionMap::empty();
     exts.set(1, Extension::AudioLevel);
@@ -169,7 +193,8 @@ async fn offer(
     let mut rtc = if state.config.no_bwe {
         rtc.build()
     } else {
-        rtc.enable_bwe(Some(Bitrate::kbps(state.config.target_bitrate as u64))).build()
+        rtc.enable_bwe(Some(Bitrate::kbps(state.config.target_bitrate as u64)))
+            .build()
     };
 
     let local_ip = stun::get_base("stun.l.google.com:19302").await?;
@@ -282,6 +307,7 @@ async fn offer(
             tcp_local_socket_addr,
             state_cloned,
             payload,
+            permissions,
             kill_rx,
         )
         .await
@@ -309,6 +335,30 @@ async fn offer(
     Ok((StatusCode::OK, Json(ResponseOffer::Offer(b64))))
 }
 
+#[derive(Deserialize, Clone)]
+struct CreateKeyRequest {
+    password: String,
+    view_only: bool,
+}
+
+async fn create_key(
+    State(state): State<AppState>,
+    Json(payload): Json<CreateKeyRequest>,
+) -> Result<(StatusCode, Json<String>), AppError> {
+    if payload.password == state.config.password {
+        Ok((
+            StatusCode::OK,
+            Json(state.keys.lock().unwrap().create_key(if payload.view_only {
+                Permissions::ViewOnly
+            } else {
+                Permissions::FullControl
+            })),
+        ))
+    } else {
+        Err(AppError(anyhow!("Password incorrect.")))
+    }
+}
+
 async fn home(State(state): State<AppState>) -> String {
     let mut out = String::new();
     out.push_str("This is a Telewindow server powered by the Tenebra project. https://github.com/UE2020/tenebra/\n\n");
@@ -322,6 +372,7 @@ pub struct AppState {
     input_tx: UnboundedSender<InputCommand>,
     kill_switch: Arc<Mutex<Option<UnboundedSender<()>>>>,
     ports: Arc<Mutex<Vec<u16>>>,
+    keys: Arc<Mutex<Keys>>,
     config: Config,
 }
 
@@ -412,12 +463,14 @@ async fn main() -> Result<()> {
     let ports = Arc::new(Mutex::new(Vec::new()));
     let app = Router::new()
         .route("/", get(home))
+        .route("/new_key", post(create_key))
         .route("/offer", post(offer))
         .layer(tower_http::cors::CorsLayer::very_permissive())
         .with_state(AppState {
             input_tx: tx,
             kill_switch: Arc::new(Mutex::new(None)),
             config: config.clone(),
+            keys: Arc::new(Mutex::new(Keys::new())),
             ports: ports.clone(),
         });
 

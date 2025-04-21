@@ -617,10 +617,7 @@ pub async fn start_pipeline(
                     #[cfg(not(target_os = "macos"))]
                     enc.set_property("bitrate", bitrate);
                     #[cfg(not(target_os = "macos"))]
-                    enc.set_property(
-                        "cpb-size",
-                        (bitrate * config.vbv_buf_capacity) / 1000,
-                    );
+                    enc.set_property("cpb-size", (bitrate * config.vbv_buf_capacity) / 1000);
                 } else {
                     enc.set_property("bitrate", bitrate);
                 }
