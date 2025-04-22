@@ -22,7 +22,7 @@ impl Keys {
     pub fn create_key(&mut self, permissions: Permissions) -> String {
         let key: String = rand::rng()
             .sample_iter(&Alphanumeric)
-            .take(32) // 32 bytes * 8 bits = 256 bits entropy
+            .take(32)
             .map(char::from)
             .collect();
         self.map.insert(key.clone(), permissions);
