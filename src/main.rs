@@ -67,8 +67,7 @@ use log::*;
 use input::{do_input, InputCommand};
 use network_interface::{NetworkInterface, NetworkInterfaceConfig};
 use tokio::{
-    net::{TcpListener, UdpSocket},
-    sync::mpsc::unbounded_channel,
+    net::{TcpListener, UdpSocket}
 };
 
 use anyhow::{anyhow, bail, Context, Result};
@@ -292,12 +291,6 @@ async fn offer(
 
     info!("Killing last session");
     // kill last session and
-    let mut sender = state.kill_switch.lock().unwrap();
-    if let Some(sender) = sender.as_mut() {
-        sender.send(()).ok();
-    };
-    let (kill_tx, kill_rx) = unbounded_channel();
-    *sender = Some(kill_tx);
     let state_cloned = state.clone();
     spawn(async move {
         if let Err(e) = rtc::run(
@@ -308,8 +301,7 @@ async fn offer(
             tcp_local_socket_addr,
             state_cloned,
             payload,
-            permissions,
-            kill_rx,
+            permissions
         )
         .await
         {
@@ -370,7 +362,6 @@ async fn home(State(state): State<AppState>) -> String {
 #[derive(Debug, Clone)]
 pub struct AppState {
     input_tx: UnboundedSender<InputCommand>,
-    kill_switch: Arc<Mutex<Option<UnboundedSender<()>>>>,
     ports: Arc<Mutex<Vec<u16>>>,
     keys: Arc<Mutex<Keys>>,
     config: Config,
@@ -468,7 +459,6 @@ async fn main() -> Result<()> {
         .layer(tower_http::cors::CorsLayer::very_permissive())
         .with_state(AppState {
             input_tx: tx,
-            kill_switch: Arc::new(Mutex::new(None)),
             config: config.clone(),
             keys: Arc::new(Mutex::new(Keys::new())),
             ports: ports.clone(),

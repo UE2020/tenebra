@@ -54,7 +54,6 @@
  * reserved by Aspect.
  */
 
-use anyhow::anyhow;
 use log::*;
 use std::io::ErrorKind;
 use std::net::SocketAddr;
@@ -114,7 +113,6 @@ pub async fn run(
     state: AppState,
     offer: CreateOffer,
     permissions: Permissions,
-    mut kill_rx: UnboundedReceiver<()>,
 ) -> anyhow::Result<()> {
     let mut buf = Vec::new();
 
@@ -125,10 +123,6 @@ pub async fn run(
     let waker = Arc::new(Notify::new());
 
     let ret = loop {
-        if kill_rx.try_recv().is_ok() {
-            break Err(anyhow!("task killed from the kill_tx"));
-        }
-
         for gstreamer in gstreamers.iter_mut() {
             let buf = gstreamer.buffer_rx.try_recv();
 
