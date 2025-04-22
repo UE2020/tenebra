@@ -345,7 +345,7 @@ struct CreateKeyRequest {
 async fn create_key(
     State(state): State<AppState>,
     Json(payload): Json<CreateKeyRequest>,
-) -> Result<(StatusCode, Json<String>), AppError> {
+) -> Result<(StatusCode, String), AppError> {
     if payload.password == state.config.password {
         let key = state.keys.lock().unwrap().create_key(if payload.view_only {
             Permissions::ViewOnly
@@ -353,7 +353,7 @@ async fn create_key(
             Permissions::FullControl
         });
         info!("Registering new key: {}", key);
-        Ok((StatusCode::OK, Json(key)))
+        Ok((StatusCode::OK, key))
     } else {
         Err(AppError(anyhow!("Password incorrect.")))
     }
