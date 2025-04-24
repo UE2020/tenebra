@@ -66,9 +66,7 @@ use log::*;
 
 use input::{do_input, InputCommand};
 use network_interface::{NetworkInterface, NetworkInterfaceConfig};
-use tokio::{
-    net::{TcpListener, UdpSocket}
-};
+use tokio::net::{TcpListener, UdpSocket};
 
 use anyhow::{anyhow, bail, Context, Result};
 
@@ -153,7 +151,10 @@ async fn offer(
         }
     } else if let Some(ref key) = payload.key {
         if let Some(key_permissions) = state.keys.lock().unwrap().use_key(key.as_str()) {
-            info!("Authenticated key {} with permissions: {:?}", key, key_permissions);
+            info!(
+                "Authenticated key {} with permissions: {:?}",
+                key, key_permissions
+            );
             key_permissions
         } else {
             return Ok((
@@ -301,7 +302,7 @@ async fn offer(
             tcp_local_socket_addr,
             state_cloned,
             payload,
-            permissions
+            permissions,
         )
         .await
         {
