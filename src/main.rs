@@ -293,7 +293,7 @@ async fn offer(
 
     Notification::new()
         .summary("Tenebra Server Alert")
-        .icon("network-wireless-hotspot-symbolic")
+        .icon("network-connect-symbolic")
         .body(&format!(
             "Accepted new connection from {}\nPermission level: {:?}",
             req_addr, permissions
