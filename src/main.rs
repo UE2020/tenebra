@@ -71,7 +71,7 @@ use tokio::net::{TcpListener, UdpSocket};
 use anyhow::{anyhow, bail, Context, Result};
 
 use axum::{
-    extract::State,
+    extract::{ConnectInfo, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -94,6 +94,8 @@ use tokio::{spawn, sync::mpsc::UnboundedSender};
 
 use keys::{Keys, Permissions};
 
+use notify_rust::Notification;
+
 mod input;
 pub mod keys;
 mod rtc;
@@ -101,7 +103,6 @@ mod stun;
 
 pub struct AppError(anyhow::Error);
 
-// Tell axum how to convert `AppError` into a response.
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         (
@@ -137,6 +138,7 @@ enum ResponseOffer {
 
 async fn offer(
     State(state): State<AppState>,
+    ConnectInfo(req_addr): ConnectInfo<SocketAddr>,
     Json(payload): Json<CreateOffer>,
 ) -> Result<(StatusCode, Json<ResponseOffer>), AppError> {
     info!("Received offer");
@@ -181,7 +183,6 @@ async fn offer(
     exts.set(11, Extension::RepairedRtpStreamId);
     exts.set(13, Extension::VideoOrientation);
 
-    // Instantiate a new Rtc instance.
     let rtc = Rtc::builder()
         .clear_codecs()
         .enable_h264(true)
@@ -290,8 +291,14 @@ async fn offer(
     let json_str = serde_json::to_string(&answer)?;
     let b64 = BASE64_STANDARD.encode(&json_str);
 
-    info!("Killing last session");
-    // kill last session and
+    Notification::new()
+        .summary("Tenebra Server Alert")
+        .body(&format!(
+            "Accepted new connection from {}\nPermission level: {:?}",
+            req_addr, permissions
+        ))
+        .show()?;
+
     let state_cloned = state.clone();
     spawn(async move {
         if let Err(e) = rtc::run(
@@ -470,7 +477,7 @@ async fn main() -> Result<()> {
 
     spawn(async move {
         axum_server::bind_rustls(SocketAddr::from(([0, 0, 0, 0], config.port)), tls_config)
-            .serve(app.into_make_service())
+            .serve(app.into_make_service_with_connect_info::<SocketAddr>())
             .await
             .unwrap();
     });
