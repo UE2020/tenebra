@@ -136,6 +136,20 @@ enum ResponseOffer {
     Error(String),
 }
 
+fn is_bad_ip(ip: &std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v4) => {
+            v4.is_loopback() ||
+            v4.is_link_local()
+        }
+        std::net::IpAddr::V6(v6) => {
+            v6.is_loopback() ||
+            v6.is_unspecified() ||
+            v6.is_unique_local() // Optional: you might want to filter ULA too
+        }
+    }
+}
+
 async fn offer(
     State(state): State<AppState>,
     ConnectInfo(req_addr): ConnectInfo<SocketAddr>,
@@ -209,6 +223,7 @@ async fn offer(
                 .map(move |addr| (iface.name.clone(), addr.ip()))
         })
         .flatten()
+        .filter(|(_, addr)| !is_bad_ip(&addr))
         .collect::<Vec<_>>();
 
     let socket = UdpSocket::bind("0.0.0.0:0").await?;
@@ -291,14 +306,14 @@ async fn offer(
     let json_str = serde_json::to_string(&answer)?;
     let b64 = BASE64_STANDARD.encode(&json_str);
 
-    Notification::new()
-        .summary("Tenebra Server Alert")
-        .icon("network-connect-symbolic")
-        .body(&format!(
-            "Accepted new connection from {}\nPermission level: {:?}",
-            req_addr, permissions
-        ))
-        .show()?;
+    //Notification::new()
+        //.summary("Tenebra Server Alert")
+        //.icon("network-connect-symbolic")
+        //.body(&format!(
+            //"Accepted new connection from {}\nPermission level: {:?}",
+            //req_addr, permissions
+        //))
+        //.show()?;
 
     let state_cloned = state.clone();
     spawn(async move {

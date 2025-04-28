@@ -19,7 +19,7 @@ rand = "0.9.1"
 serde = "1.0.210"
 serde_json = "1.0.128"
 #str0m = { git = "https://github.com/UE2020/str0m.git", branch = "main" }
-str0m = "0.7.0"
+str0m = { version = "0.7.0", default-features = false, features = ["openssl", "sha1"] }
 stun_codec = "0.3.5"
 tokio = { version = "1.40.0", features = ["full"] }
 tower-http = { version = "0.5.2", features = ["cors"] }

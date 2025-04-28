@@ -188,20 +188,12 @@ pub async fn start_audio_pipeline(
             .build(),
     );
 
-    let queue = ElementFactory::make("queue")
-        .property("max-size-buffers", 1u32)
-        .property("max-size-time", 0u64)
-        .property("max-size-bytes", 0u32)
-        .property_from_str("leaky", "downstream")
-        .build()?;
-
     // Create the pipeline
     let pipeline = Pipeline::default();
 
     // Add elements to the pipeline
     pipeline.add_many([
         &src,
-        &queue,
         &src_capsfilter,
         &opusenc,
         appsink.upcast_ref(),
@@ -255,6 +247,9 @@ pub async fn start_pipeline(
         .property("show-cursor", show_mouse)
         .build()?;
 
+    #[cfg(target_os = "windows")]
+    let download = ElementFactory::make("d3d11download").build()?;
+    
     cfg_if::cfg_if! {
         if #[cfg(target_os = "macos")] {
             let video_caps = if !config.full_chroma {
@@ -356,7 +351,7 @@ pub async fn start_pipeline(
                     .property("realtime", true)
                     .build()?
             } else {
-                bail!("Hardware accelerated encoding is only supported on macOS and Linux.");
+                anyhow::bail!("Hardware accelerated encoding is only supported on macOS and Linux.");
             }
         }
     };
@@ -381,7 +376,7 @@ pub async fn start_pipeline(
                     .field("stream-format", "byte-stream")
                     .build()
             } else {
-                bail!("Hardware accelerated encoding is only supported on macOS and Linux.");
+                anyhow::bail!("Hardware accelerated encoding is only supported on macOS and Linux.");
             }
         }
     } else {
@@ -465,13 +460,6 @@ pub async fn start_pipeline(
             .build(),
     );
 
-    let queue = ElementFactory::make("queue")
-        .property("max-size-buffers", 1u32)
-        .property("max-size-time", 0u64)
-        .property("max-size-bytes", 0u32)
-        .property_from_str("leaky", "downstream")
-        .build()?;
-
     // Create the pipeline
     let pipeline = Pipeline::default();
 
@@ -495,7 +483,6 @@ pub async fn start_pipeline(
                 pipeline.add_many([
                     &src,
                     &video_capsfilter,
-                    &queue,
                     &videoconvert,
                     &format_capsfilter,
                     &enc,
@@ -507,7 +494,6 @@ pub async fn start_pipeline(
                 gstreamer::Element::link_many([
                     &src,
                     &video_capsfilter,
-                    &queue,
                     &videoconvert,
                     &format_capsfilter,
                     &enc,
@@ -519,7 +505,6 @@ pub async fn start_pipeline(
                 pipeline.add_many([
                     &src,
                     &video_capsfilter,
-                    &queue,
                     &enc,
                     &h264_capsfilter,
                     appsink.upcast_ref(),
@@ -529,7 +514,6 @@ pub async fn start_pipeline(
                 gstreamer::Element::link_many([
                     &src,
                     &video_capsfilter,
-                    &queue,
                     &enc,
                     &h264_capsfilter,
                     appsink.upcast_ref(),
@@ -539,7 +523,6 @@ pub async fn start_pipeline(
                 pipeline.add_many([
                     &src,
                     &video_capsfilter,
-                    &queue,
                     &enc,
                     &h264_capsfilter,
                     &parse,
@@ -551,7 +534,6 @@ pub async fn start_pipeline(
                 gstreamer::Element::link_many([
                     &src,
                     &video_capsfilter,
-                    &queue,
                     &enc,
                     &h264_capsfilter,
                     &parse,
@@ -559,12 +541,35 @@ pub async fn start_pipeline(
                     appsink.upcast_ref(),
                 ])?;
             }
+        } else if #[cfg(target_os = "windows")] {
+            // Add elements to the pipeline
+            pipeline.add_many([
+                &src,
+                &download,
+                &video_capsfilter,
+                &videoconvert,
+                &format_capsfilter,
+                &enc,
+                &h264_capsfilter,
+                appsink.upcast_ref(),
+            ])?;
+
+            // Link the elements
+            gstreamer::Element::link_many([
+                &src,
+                &download,
+                &video_capsfilter,
+                &videoconvert,
+                &format_capsfilter,
+                &enc,
+                &h264_capsfilter,
+                appsink.upcast_ref(),
+            ])?;
         } else {
             // Add elements to the pipeline
             pipeline.add_many([
                 &src,
                 &video_capsfilter,
-                &queue,
                 &videoconvert,
                 &format_capsfilter,
                 &enc,
@@ -576,7 +581,6 @@ pub async fn start_pipeline(
             gstreamer::Element::link_many([
                 &src,
                 &video_capsfilter,
-                &queue,
                 &videoconvert,
                 &format_capsfilter,
                 &enc,
