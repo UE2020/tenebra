@@ -449,6 +449,10 @@ fn default_vbv_buf_capacity() -> u32 {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // WinCrypto simplifies build significantly on Windows
+    #[cfg(target_os = "windows")]
+    str0m::config::CryptoProvider::WinCrypto.install_process_default();
+
     // check if we're behind symmetric NAT
     if stun::is_symmetric_nat().await? {
         bail!("You are behind a symmetric NAT. This configuration prevents STUN binding requests from establishing a proper connection. Please adjust your network settings or consult your network administrator.");
