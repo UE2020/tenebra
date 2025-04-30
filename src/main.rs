@@ -306,14 +306,16 @@ async fn offer(
     let json_str = serde_json::to_string(&answer)?;
     let b64 = BASE64_STANDARD.encode(&json_str);
 
-    //Notification::new()
-        //.summary("Tenebra Server Alert")
-        //.icon("network-connect-symbolic")
-        //.body(&format!(
-            //"Accepted new connection from {}\nPermission level: {:?}",
-            //req_addr, permissions
-        //))
-        //.show()?;
+    // This segfaults on Windows...
+    #[cfg(not(target_os = "windows"))]
+    Notification::new()
+        .summary("Tenebra Server Alert")
+        .icon("network-connect-symbolic")
+        .body(&format!(
+            "Accepted new connection from {}\nPermission level: {:?}",
+            req_addr, permissions
+        ))
+        .show()?;
 
     let state_cloned = state.clone();
     spawn(async move {
