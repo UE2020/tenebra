@@ -247,9 +247,6 @@ pub async fn start_pipeline(
         .property("show-cursor", show_mouse)
         .build()?;
 
-    #[cfg(target_os = "windows")]
-    let download = ElementFactory::make("d3d11download").build()?;
-    
     cfg_if::cfg_if! {
         if #[cfg(target_os = "macos")] {
             let video_caps = if !config.full_chroma {
@@ -275,7 +272,7 @@ pub async fn start_pipeline(
         .build()?;
 
     cfg_if::cfg_if! {
-        if #[cfg(not(target_os = "macos"))] {
+        if #[cfg(target_os = "linux")] {
             let videoconvert = if config.vapostproc {
                 ElementFactory::make("vapostproc")
                     .property_from_str("scale-method", "fast")
@@ -285,12 +282,20 @@ pub async fn start_pipeline(
                     .property("n-threads", 4u32)
                     .build()?
             };
+        } else if #[cfg(target_os = "windows")] {
+                let videoconvert = ElementFactory::make("videoconvert")
+                    .property("n-threads", 4u32)
+                    .build()?;
+        }
+    };
 
+    cfg_if::cfg_if! {
+        if #[cfg(not(target_os = "macos"))] {
             let format = if config.full_chroma { "Y444" } else { "NV12" };
 
             if config.full_chroma && config.vapostproc {
                 warn!(
-                    "Full-chroma is not supported with VA-API! This configuration option has been ignored."
+                    "Full-chroma is not supported with hwencode! This configuration option has been ignored."
                 );
             }
 
@@ -309,11 +314,6 @@ pub async fn start_pipeline(
                 .build()?;
         }
     }
-
-    // this makes the stream smoother on VAAPI, but on x264enc it causes severe latency
-    // especially when the CPU is under load (such as when playing minecraft)
-    // #[cfg(feature = "vaapi")]
-    // let conversion_queue = ElementFactory::make("queue").build()?;
 
     let enc = if !config.vaapi {
         ElementFactory::make("x264enc")
@@ -350,8 +350,16 @@ pub async fn start_pipeline(
                     .property("bitrate", config.target_bitrate - 64)
                     .property("realtime", true)
                     .build()?
+            } else if #[cfg(target_os = "windows")] {
+                ElementFactory::make("mfh264enc")
+                    .property_from_str("rc-mode", "cbr")
+                    .property("low-latency", true)
+                    .property("bframes", 0u32)
+                    .property("bitrate", config.target_bitrate - 64)
+                    .property("gop-size", 1024i32)
+                    .build()?
             } else {
-                anyhow::bail!("Hardware accelerated encoding is only supported on macOS and Linux.");
+                anyhow::bail!("Hardware accelerated encoding is only supported on macOS, Linux, and Windows.");
             }
         }
     };
@@ -370,13 +378,13 @@ pub async fn start_pipeline(
                 gstreamer::Caps::builder("video/x-h264")
                     .field("stream-format", "avc")
                     .build()
-            } else if #[cfg(target_os = "linux")] {
+            } else if #[cfg(any(target_os = "linux", target_os = "windows"))] {
                 gstreamer::Caps::builder("video/x-h264")
                     .field("profile", "high")
                     .field("stream-format", "byte-stream")
                     .build()
             } else {
-                anyhow::bail!("Hardware accelerated encoding is only supported on macOS and Linux.");
+                anyhow::bail!("Hardware accelerated encoding is only supported on macOS, Linux, and Windows.");
             }
         }
     } else {
@@ -545,7 +553,6 @@ pub async fn start_pipeline(
             // Add elements to the pipeline
             pipeline.add_many([
                 &src,
-                &download,
                 &video_capsfilter,
                 &videoconvert,
                 &format_capsfilter,
@@ -557,7 +564,6 @@ pub async fn start_pipeline(
             // Link the elements
             gstreamer::Element::link_many([
                 &src,
-                &download,
                 &video_capsfilter,
                 &videoconvert,
                 &format_capsfilter,

@@ -138,14 +138,9 @@ enum ResponseOffer {
 
 fn is_bad_ip(ip: &std::net::IpAddr) -> bool {
     match ip {
-        std::net::IpAddr::V4(v4) => {
-            v4.is_loopback() ||
-            v4.is_link_local()
-        }
+        std::net::IpAddr::V4(v4) => v4.is_loopback() || v4.is_link_local(),
         std::net::IpAddr::V6(v6) => {
-            v6.is_loopback() ||
-            v6.is_unspecified() ||
-            v6.is_unique_local() // Optional: you might want to filter ULA too
+            v6.is_loopback() || v6.is_unspecified() || v6.is_unique_local() // Optional: you might want to filter ULA too
         }
     }
 }
@@ -307,13 +302,13 @@ async fn offer(
     let b64 = BASE64_STANDARD.encode(&json_str);
 
     //Notification::new()
-        //.summary("Tenebra Server Alert")
-        //.icon("network-connect-symbolic")
-        //.body(&format!(
-            //"Accepted new connection from {}\nPermission level: {:?}",
-            //req_addr, permissions
-        //))
-        //.show()?;
+    //.summary("Tenebra Server Alert")
+    //.icon("network-connect-symbolic")
+    //.body(&format!(
+    //"Accepted new connection from {}\nPermission level: {:?}",
+    //req_addr, permissions
+    //))
+    //.show()?;
 
     let state_cloned = state.clone();
     spawn(async move {
