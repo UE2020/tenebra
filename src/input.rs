@@ -55,23 +55,203 @@
  */
 
 use std::time::{Duration, Instant};
+use std::collections::HashSet;
 
-use enigo::{
-    Button, Coordinate,
-    Direction::{Click, Press, Release},
-    Enigo, Key, Keyboard, Mouse, Settings,
-};
+use log::*;
+
+use input_device::{InputSimulator, Key};
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::UnboundedReceiver;
 
-#[cfg(target_os = "linux")]
-use x11rb::protocol::xproto::ConnectionExt;
-#[cfg(target_os = "linux")]
-use x11rb::{connection::Connection, rust_connection::RustConnection};
+use strum::IntoEnumIterator;
 
-#[cfg(target_os = "linux")]
-mod touch;
+pub fn browser_code_to_key(code: &str) -> Option<Key> {
+    match code {
+        // --- Top Row (Function Keys) ---
+        "Escape" => Some(Key::Esc),
+        "F1" => Some(Key::F1),
+        "F2" => Some(Key::F2),
+        "F3" => Some(Key::F3),
+        "F4" => Some(Key::F4),
+        "F5" => Some(Key::F5),
+        "F6" => Some(Key::F6),
+        "F7" => Some(Key::F7),
+        "F8" => Some(Key::F8),
+        "F9" => Some(Key::F9),
+        "F10" => Some(Key::F10),
+        "F11" => Some(Key::F11),
+        "F12" => Some(Key::F12),
+        "F13" => Some(Key::F13),
+        "F14" => Some(Key::F14),
+        "F15" => Some(Key::F15),
+        // F16-F22 omitted as they are less common and not in the initial enum
+        "F23" => Some(Key::F23),
+        // F24+ omitted
+
+        // --- Top Row (Number Row) ---
+        "Backquote" => Some(Key::Grave), // Often `~ key
+        "Digit1" => Some(Key::Num1),
+        "Digit2" => Some(Key::Num2),
+        "Digit3" => Some(Key::Num3),
+        "Digit4" => Some(Key::Num4),
+        "Digit5" => Some(Key::Num5),
+        "Digit6" => Some(Key::Num6),
+        "Digit7" => Some(Key::Num7),
+        "Digit8" => Some(Key::Num8),
+        "Digit9" => Some(Key::Num9),
+        "Digit0" => Some(Key::Num0),
+        "Minus" => Some(Key::Minus),
+        "Equal" => Some(Key::Equal),
+        "Backspace" => Some(Key::Backspace),
+
+        // --- Second Row (QWERTY Row) ---
+        "Tab" => Some(Key::Tab),
+        "KeyQ" => Some(Key::Q),
+        "KeyW" => Some(Key::W),
+        "KeyE" => Some(Key::E),
+        "KeyR" => Some(Key::R),
+        "KeyT" => Some(Key::T),
+        "KeyY" => Some(Key::Y),
+        "KeyU" => Some(Key::U),
+        "KeyI" => Some(Key::I),
+        "KeyO" => Some(Key::O),
+        "KeyP" => Some(Key::P),
+        "BracketLeft" => Some(Key::LeftBrace), // Often [{ key
+        "BracketRight" => Some(Key::RightBrace), // Often ]} key
+        "Enter" => Some(Key::Enter), // Main Enter key
+
+        // --- Third Row (Home Row) ---
+        "CapsLock" => Some(Key::CapsLock),
+        "KeyA" => Some(Key::A),
+        "KeyS" => Some(Key::S),
+        "KeyD" => Some(Key::D),
+        "KeyF" => Some(Key::F),
+        "KeyG" => Some(Key::G),
+        "KeyH" => Some(Key::H),
+        "KeyJ" => Some(Key::J),
+        "KeyK" => Some(Key::K),
+        "KeyL" => Some(Key::L),
+        "Semicolon" => Some(Key::Semicolon), // Often ;: key
+        "Quote" => Some(Key::Apostrophe), // Often '" key
+        "Backslash" => Some(Key::Backslash), // Often \| key (ANSI)
+
+        // --- Fourth Row (Bottom Row) ---
+        "ShiftLeft" => Some(Key::LeftShift),
+        "IntlBackslash" => Some(Key::IntlBackslash), // ISO key often between LShift and Z
+        "KeyZ" => Some(Key::Z),
+        "KeyX" => Some(Key::X),
+        "KeyC" => Some(Key::C),
+        "KeyV" => Some(Key::V),
+        "KeyB" => Some(Key::B),
+        "KeyN" => Some(Key::N),
+        "KeyM" => Some(Key::M),
+        "Comma" => Some(Key::Comma), // Often ,< key
+        "Period" => Some(Key::Dot), // Often .> key
+        "Slash" => Some(Key::Slash), // Often /? key
+        "ShiftRight" => Some(Key::RightShift),
+
+        // --- Bottom Row (Control Row) ---
+        "ControlLeft" => Some(Key::LeftCtrl),
+        "MetaLeft" => Some(Key::LeftMeta), // Windows/Super/Command key
+        "AltLeft" => Some(Key::LeftAlt),
+        "Space" => Some(Key::Space),
+        "AltRight" => Some(Key::RightAlt), // Often AltGr
+        "MetaRight" => Some(Key::RightMeta), // Windows/Super/Command key
+        "ContextMenu" => Some(Key::Compose), // Menu key
+        "ControlRight" => Some(Key::RightCtrl),
+
+        // --- Navigation Block ---
+        "PrintScreen" => Some(Key::SysRq), // Often SysRq/PrintScreen key
+        "ScrollLock" => Some(Key::ScrollLock),
+        "Pause" => Some(Key::Pause), // Often Pause/Break key
+
+        "Insert" => Some(Key::Insert),
+        "Home" => Some(Key::Home),
+        "PageUp" => Some(Key::PageUp),
+        "Delete" => Some(Key::Delete),
+        "End" => Some(Key::End),
+        "PageDown" => Some(Key::PageDown),
+
+        // --- Arrow Keys ---
+        "ArrowUp" => Some(Key::Up),
+        "ArrowLeft" => Some(Key::Left),
+        "ArrowDown" => Some(Key::Down),
+        "ArrowRight" => Some(Key::Right),
+
+        // --- Numpad ---
+        "NumLock" => Some(Key::NumLock),
+        "NumpadDivide" => Some(Key::KpSlash),
+        "NumpadMultiply" => Some(Key::KpAsterisk),
+        "NumpadSubtract" => Some(Key::KpMinus),
+        "NumpadAdd" => Some(Key::KpPlus),
+        "NumpadEnter" => Some(Key::KpEnter),
+        "NumpadDecimal" => Some(Key::KpDot),
+        "NumpadComma" => Some(Key::KpComma), // Some numpads have comma instead/as well
+        "NumpadEqual" => Some(Key::KpEqual), // Less common
+        // Numpad Paren, +/- etc omitted as they often require Shift or aren't standard codes
+
+        "Numpad0" => Some(Key::Kp0),
+        "Numpad1" => Some(Key::Kp1),
+        "Numpad2" => Some(Key::Kp2),
+        "Numpad3" => Some(Key::Kp3),
+        "Numpad4" => Some(Key::Kp4),
+        "Numpad5" => Some(Key::Kp5),
+        "Numpad6" => Some(Key::Kp6),
+        "Numpad7" => Some(Key::Kp7),
+        "Numpad8" => Some(Key::Kp8),
+        "Numpad9" => Some(Key::Kp9),
+
+        // --- Japanese Keyboard Specific ---
+        "IntlRo" => Some(Key::Ro), // Usually '\ろ' key
+        "Katakana" => Some(Key::Katakana),
+        "Hiragana" => Some(Key::Hiragana), // Often shared with Katakana key
+        "KatakanaHiragana" => Some(Key::KatakanaHiragana), // Often the same key as above
+        "ZenkakuHankaku" => Some(Key::ZenkakuHankaku), // Often `~ key on JIS layout
+        "Henkan" => Some(Key::Henkan), // Convert key
+        "Muhenkan" => Some(Key::Muhenkan), // Non-convert key
+        "IntlYen" => Some(Key::Yen), // Usually '¥|' key
+
+        // --- Korean Keyboard Specific ---
+        "Lang1" => Some(Key::Hanguel), // Often Hangul/English toggle
+        "Lang2" => Some(Key::Hanja), // Often Hanja key
+
+        // --- Multimedia Keys (Common Mappings) ---
+        "AudioVolumeMute" | "VolumeMute" => Some(Key::Mute),
+        "AudioVolumeDown" | "VolumeDown" => Some(Key::VolumeDown),
+        "AudioVolumeUp" | "VolumeUp" => Some(Key::VolumeUp),
+        "MediaTrackNext" => Some(Key::NextSong),
+        "MediaTrackPrevious" => Some(Key::PreviousSong),
+        "MediaStop" => Some(Key::StopCD), // Or Key::Stop if more general
+        "MediaPlayPause" => Some(Key::PlayPause),
+        "LaunchMail" => Some(Key::Mail),
+        "LaunchApp2" | "SelectMedia" => Some(Key::Media), // Often Launch Media Player
+        "LaunchApp1" => Some(Key::Calc), // Often Launch Calculator
+        "BrowserSearch" => Some(Key::Search),
+        "BrowserHome" => Some(Key::Homepage),
+        "BrowserBack" => Some(Key::Back),
+        "BrowserForward" => Some(Key::Forward),
+        "BrowserStop" => Some(Key::Stop), // General stop, different from MediaStop?
+        "BrowserRefresh" => Some(Key::Refresh),
+        "BrowserFavorites" => Some(Key::Bookmarks),
+
+        // --- Power/Sleep ---
+        "Power" => Some(Key::Power),
+        "Sleep" => Some(Key::Sleep),
+        "WakeUp" => Some(Key::WakeUp),
+
+        // --- Less Common / Laptop keys ---
+        // These might vary significantly or not report standard codes
+        "BrightnessDown" => Some(Key::BrightnessDown),
+        "BrightnessUp" => Some(Key::BrightnessUp),
+        "Eject" => None, // Not in Key enum, could map if needed
+        "Help" => Some(Key::Help), // Sometimes mapped to Insert
+
+        // --- Unidentified or Unmappable ---
+        "Unidentified" => None, // Explicitly ignore
+        _ => None, // Any code not listed above is not mapped
+    }
+}
 
 #[allow(non_snake_case)]
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
@@ -87,34 +267,17 @@ pub struct InputCommand {
     pub tiltY: Option<i32>,
 }
 
-#[cfg(target_os = "linux")]
-pub fn get_total_size(conn: &RustConnection) -> anyhow::Result<(i32, i32)> {
-    let root_window = conn.setup().roots[0].root;
-    let geometry = conn.get_geometry(root_window)?.reply()?;
-    Ok((geometry.width as _, geometry.height as _))
-}
-
 pub fn do_input(
     mut rx: UnboundedReceiver<InputCommand>,
     startx: u32,
     starty: u32,
 ) -> anyhow::Result<()> {
-    let mut enigo = Enigo::new(&Settings {
-        linux_delay: 1,
-        ..Default::default()
-    })?;
+    let mut sim = InputSimulator::new()?;
 
     let mut last_capslock = Instant::now();
 
-    #[cfg(target_os = "linux")]
-    let (conn, _screen_num) = x11rb::connect(None)?;
+    let mut held: HashSet<Key> = HashSet::new();
 
-    // Windows and macOS need accumulators to handle small scroll events
-    #[cfg(not(target_os = "linux"))]
-    let (mut wheel_x, mut wheel_y) = (0, 0);
-
-    #[cfg(target_os = "linux")]
-    let mut multi_touch = touch::MultiTouchSimulator::new();
     while let Some(msg) = rx.blocking_recv() {
         match msg {
             InputCommand {
@@ -126,27 +289,10 @@ pub fn do_input(
                 tiltY: Some(tilt_y),
                 ..
             } => {
-                if r#type != "pen" {
-                    continue;
-                }
-                cfg_if::cfg_if! {
-                    if #[cfg(target_os = "linux")] {
-                        let size = get_total_size(&conn)?;
-                        multi_touch.pen(x + startx as i32, y + starty as i32, pressure, tilt_x, tilt_y, size);
-                    } else {
-                        // non-Linux compat implementation
-                        enigo.move_mouse(x + startx as i32, y + starty as i32, Coordinate::Abs)?;
-                        enigo.button(
-                            Button::Left,
-                            match pressure > 0.0 {
-                                true => Press,
-                                false => Release,
-                            },
-                        )?;
-                    }
+                if r#type == "pen" {
+                    sim.pen(x + startx as i32, y + starty as i32, pressure, tilt_x, tilt_y).ok();
                 }
             }
-            #[cfg(target_os = "linux")]
             InputCommand {
                 r#type,
                 x: Some(x),
@@ -154,13 +300,12 @@ pub fn do_input(
                 id: Some(id),
                 ..
             } => {
-                let size = get_total_size(&conn)?;
                 match r#type.as_str() {
                     "touchstart" => {
-                        multi_touch.touch_down(id, x + startx as i32, y + starty as i32, id, size)
+                        sim.touch_down(id, x + startx as i32, y + starty as i32).ok();
                     }
                     "touchmove" => {
-                        multi_touch.touch_move(id, x + startx as i32, y + starty as i32, size)
+                        sim.touch_move(id, x + startx as i32, y + starty as i32).ok();
                     }
                     _ => {}
                 }
@@ -172,60 +317,23 @@ pub fn do_input(
                 ..
             } => match r#type.as_str() {
                 "mousemove" => {
-                    cfg_if::cfg_if! {
-                        if #[cfg(target_os = "linux")] {
-                            multi_touch.relative_mouse(x, y);
-                        } else {
-                            enigo.move_mouse(x, y, Coordinate::Rel)?
-                        }
-                    }
+                    sim.move_mouse_rel(x, y)?;
                 }
                 "mousemoveabs" => {
-                    enigo.move_mouse(x + startx as i32, y + starty as i32, Coordinate::Abs)?
+                    sim.move_mouse_abs(x + startx as i32, y + starty as i32)?
                 }
-                #[cfg(target_os = "windows")]
                 "wheel" => {
-                    wheel_x += x;
-                    wheel_y += y;
-
-                    if wheel_x.abs() >= 120 {
-                        enigo.scroll(wheel_x / 120, enigo::Axis::Horizontal)?;
-                        wheel_x = wheel_x % 120;
-                    }
-                    if wheel_y.abs() >= 120 {
-                        enigo.scroll(wheel_y / 120, enigo::Axis::Vertical)?;
-                        wheel_y = wheel_y % 120;
-                    }
-                }
-                #[cfg(target_os = "macos")]
-                "wheel" => {
-                    wheel_x += x;
-                    wheel_y += y;
-
-                    if wheel_x.abs() >= 40 {
-                        enigo.scroll(wheel_x / 40, enigo::Axis::Horizontal)?;
-                        wheel_x = wheel_x % 40;
-                    }
-                    if wheel_y.abs() >= 40 {
-                        enigo.scroll(wheel_y / 40, enigo::Axis::Vertical)?;
-                        wheel_y = wheel_y % 40;
-                    }
-                }
-                #[cfg(target_os = "linux")]
-                "wheel" => {
-                    multi_touch.scroll_horizontally(x);
-                    multi_touch.scroll_vertically(y);
+                    sim.wheel(x, -y)?;
                 }
                 _ => {}
             },
-            #[cfg(target_os = "linux")]
             InputCommand {
                 r#type,
                 id: Some(id),
                 ..
             } => {
                 if r#type.as_str() == "touchend" {
-                    multi_touch.touch_up(id)
+                    sim.touch_up(id)?;
                 }
             }
             InputCommand {
@@ -233,350 +341,58 @@ pub fn do_input(
                 button: Some(button),
                 ..
             } => {
-                enigo.button(
-                    match button {
-                        0 => Button::Left,
-                        1 => Button::Middle,
-                        2 => Button::Right,
-                        _ => continue,
-                    },
-                    match r#type.as_str() {
-                        "mousedown" => Press,
-                        "mouseup" => Release,
-                        _ => continue,
-                    },
-                )?;
+                match (button, r#type.as_str()) {
+                    (0, "mousedown") => sim.left_mouse_down()?,
+                    (0, "mouseup") => sim.left_mouse_up()?,
+                    (1, "mousedown") => sim.middle_mouse_down()?,
+                    (1, "mouseup") => sim.middle_mouse_up()?,
+                    (2, "mousedown") => sim.right_mouse_down()?,
+                    (2, "mouseup") => sim.right_mouse_up()?,
+                    _ => error!("Received bad mouse button: {}", button)
+                } 
             }
             InputCommand {
                 r#type,
                 key: Some(key),
                 ..
             } => {
-                let key = match key.as_str() {
-                    "Escape" => Key::Escape,
-                    "Digit1" => Key::Unicode('1'),
-                    "Digit2" => Key::Unicode('2'),
-                    "Digit3" => Key::Unicode('3'),
-                    "Digit4" => Key::Unicode('4'),
-                    "Digit5" => Key::Unicode('5'),
-                    "Digit6" => Key::Unicode('6'),
-                    "Digit7" => Key::Unicode('7'),
-                    "Digit8" => Key::Unicode('8'),
-                    "Digit9" => Key::Unicode('9'),
-                    "Digit0" => Key::Unicode('0'),
-                    "Minus" => Key::Unicode('-'),
-                    "Equal" => Key::Unicode('='),
-                    "Backspace" => Key::Backspace,
-                    "Tab" => Key::Tab,
-                    "KeyQ" => Key::Unicode('q'),
-                    "KeyW" => Key::Unicode('w'),
-                    "KeyE" => Key::Unicode('e'),
-                    "KeyR" => Key::Unicode('r'),
-                    "KeyT" => Key::Unicode('t'),
-                    "KeyY" => Key::Unicode('y'),
-                    "KeyU" => Key::Unicode('u'),
-                    "KeyI" => Key::Unicode('i'),
-                    "KeyO" => Key::Unicode('o'),
-                    "KeyP" => Key::Unicode('p'),
-                    "BracketLeft" => Key::Unicode('['),
-                    "BracketRight" => Key::Unicode(']'),
-                    "Enter" => Key::Return,
-                    "ControlLeft" => Key::Control,
-                    "KeyA" => Key::Unicode('a'),
-                    "KeyS" => Key::Unicode('s'),
-                    "KeyD" => Key::Unicode('d'),
-                    "KeyF" => Key::Unicode('f'),
-                    "KeyG" => Key::Unicode('g'),
-                    "KeyH" => Key::Unicode('h'),
-                    "KeyJ" => Key::Unicode('j'),
-                    "KeyK" => Key::Unicode('k'),
-                    "KeyL" => Key::Unicode('l'),
-                    "Semicolon" => Key::Unicode(';'),
-                    "Quote" => Key::Unicode('\''),
-                    "Backquote" => Key::Unicode('`'),
-                    "ShiftLeft" => Key::Shift,
-                    "Backslash" => Key::Unicode('\\'),
-                    "KeyZ" => Key::Unicode('z'),
-                    "KeyX" => Key::Unicode('x'),
-                    "KeyC" => Key::Unicode('c'),
-                    "KeyV" => Key::Unicode('v'),
-                    "KeyB" => Key::Unicode('b'),
-                    "KeyN" => Key::Unicode('n'),
-                    "KeyM" => Key::Unicode('m'),
-                    "Comma" => Key::Unicode(','),
-                    "Period" => Key::Unicode('.'),
-                    "Slash" => Key::Unicode('/'),
-                    "ShiftRight" => Key::Shift,
-                    "NumpadMultiply" => Key::Unicode('*'),
-                    "AltLeft" => Key::Alt,
-                    "Space" => Key::Space,
-                    "CapsLock" => Key::CapsLock,
-                    "F1" => Key::F1,
-                    "F2" => Key::F2,
-                    "F3" => Key::F3,
-                    "F4" => Key::F4,
-                    "F5" => Key::F5,
-                    "F6" => Key::F6,
-                    "F7" => Key::F7,
-                    "F8" => Key::F8,
-                    "F9" => Key::F9,
-                    "F10" => Key::F10,
-                    #[cfg(not(target_os = "macos"))]
-                    "NumLock" => Key::Numlock,
-                    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-                    "ScrollLock" => Key::ScrollLock,
-                    "Numpad7" => Key::Unicode('7'),
-                    "Numpad8" => Key::Unicode('8'),
-                    "Numpad9" => Key::Unicode('9'),
-                    "NumpadSubtract" => Key::Unicode('-'),
-                    "Numpad4" => Key::Unicode('4'),
-                    "Numpad5" => Key::Unicode('5'),
-                    "Numpad6" => Key::Unicode('6'),
-                    "NumpadAdd" => Key::Unicode('+'),
-                    "Numpad1" => Key::Unicode('1'),
-                    "Numpad2" => Key::Unicode('2'),
-                    "Numpad3" => Key::Unicode('3'),
-                    "Numpad0" => Key::Unicode('0'),
-                    "NumpadDecimal" => Key::Unicode('.'),
-                    "IntlBackslash" => Key::Unicode('\\'),
-                    "IntlRo" => Key::Unicode('\\'), // Assuming IntlRo is the Korean won symbol
-                    "IntlYen" => Key::Unicode('¥'), // Assuming IntlYen is the Japanese yen symbol
-                    "F11" => Key::F11,
-                    "F12" => Key::F12,
-                    "NumpadEnter" => Key::Return,
-                    "ControlRight" => Key::Control,
-                    "NumpadDivide" => Key::Unicode('/'),
-                    #[cfg(not(target_os = "macos"))]
-                    "PrintScreen" => Key::PrintScr,
-                    "AltRight" => Key::Alt,
-                    "Home" => Key::Home,
-                    "ArrowUp" => Key::UpArrow,
-                    "PageUp" => Key::PageUp,
-                    "ArrowLeft" => Key::LeftArrow,
-                    "ArrowRight" => Key::RightArrow,
-                    "End" => Key::End,
-                    "ArrowDown" => Key::DownArrow,
-                    "PageDown" => Key::PageDown,
-                    #[cfg(not(target_os = "macos"))]
-                    "Insert" => Key::Insert,
-                    "Delete" => Key::Delete,
-                    // We don't want to pass these through
-                    // "VolumeMute" | "AudioVolumeMute" => Key::VolumeMute, // VolumeMute on Firefox, AudioVolumeMute on Chromium
-                    // "VolumeDown" | "AudioVolumeDown" => Key::VolumeDown, // VolumeDown on Firefox, AudioVolumeDown on Chromium
-                    // "VolumeUp" | "AudioVolumeUp" => Key::VolumeUp, // VolumeUp on Firefox, AudioVolumeUp on Chromium
-                    "NumpadEqual" => Key::Unicode('='),
-                    #[cfg(not(target_os = "macos"))]
-                    "Pause" => Key::Pause,
-                    "NumpadComma" => Key::Unicode(','),
-                    "MetaLeft" => Key::Meta, // MetaLeft on Firefox and Chromium
-                    "MetaRight" => Key::Meta, // MetaRight on Firefox and Chromium
-                    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-                    "Undo" => Key::Undo,
-                    #[cfg(not(target_os = "macos"))]
-                    "Select" => Key::Select,
-                    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-                    "Find" => Key::Find,
-                    "Help" => Key::Help,
-                    "MediaTrackNext" => Key::MediaNextTrack,
-                    "MediaPlayPause" => Key::MediaPlayPause,
-                    "MediaTrackPrevious" => Key::MediaPrevTrack,
-                    #[cfg(not(target_os = "macos"))]
-                    "MediaStop" => Key::MediaStop,
-                    "F13" => Key::F13,
-                    "F14" => Key::F14,
-                    "F15" => Key::F15,
-                    "F16" => Key::F16,
-                    "F17" => Key::F17,
-                    "F18" => Key::F18,
-                    "F19" => Key::F19,
-                    "F20" => Key::F20,
-                    #[cfg(not(target_os = "macos"))]
-                    "F21" => Key::F21,
-                    #[cfg(not(target_os = "macos"))]
-                    "F22" => Key::F22,
-                    #[cfg(not(target_os = "macos"))]
-                    "F23" => Key::F23,
-                    #[cfg(not(target_os = "macos"))]
-                    "F24" => Key::F24,
-                    _ => {
-                        // Handle any unrecognized keys here
-                        println!("Unrecognized key: {}", key);
+                let parsed_key = browser_code_to_key(&key);
+                if let Some(key) = parsed_key {
+                    // fix capslock on iPad client
+                    if key == Key::CapsLock && last_capslock.elapsed() > Duration::from_millis(250) {
+                        sim.key_down(key)?;
+                        //std::thread::sleep(Duration::from_millis(16));
+                        sim.key_up(key)?;
+                        last_capslock = Instant::now();
                         continue;
                     }
-                };
-                // fix capslock on iPad client
-                if key == Key::CapsLock && last_capslock.elapsed() > Duration::from_millis(250) {
-                    enigo.key(key, Click)?;
-                    last_capslock = Instant::now();
-                    continue;
-                }
-                enigo.key(
-                    key,
                     match r#type.as_str() {
-                        "keydown" => Press,
-                        "keyup" => Release,
-                        _ => continue,
-                    },
-                )?;
-                // A SEVERE BUG in Safari means that that any keys that are pressed while Meta is held are never released.
-                // We work around this by specifically ensuring that all numbers, etc. are released when Meta is released.
-                if key == Key::Meta && r#type == "keyup" {
-                    let (held, _) = enigo.held();
-                    for key in held {
-                        enigo.key(key, Release)?;
+                        "keydown" => {
+                            sim.key_down(key)?;
+                            held.insert(key);
+                        }
+                        "keyup" => sim.key_up(key)?,
+                        _ => error!("Received bad packet type: {}", r#type)
                     }
-                }
 
-                // On macOS Ventura, coregraphics is ASTOUNDINGLY BROKEN!
-                // Simulating arrow key presses SOMEHOW causes the function key to get stuck.
-                // There are some other keys that get function stuck that I don't know yet, so
-                // we fix it by unpressing function on keydown
-                #[cfg(target_os = "macos")]
-                if r#type == "keydown" {
-                    enigo.key(Key::Function, Release)?;
+                    // A SEVERE BUG in Safari means that that any keys that are pressed while Meta is held are never released.
+                    // We work around this by specifically ensuring that all numbers, etc. are released when Meta is released.
+                    if (key == Key::LeftMeta || key == Key::RightMeta) && r#type == "keyup" {
+                        for key in held.iter() {
+                            sim.key_up(*key)?;
+                        }
+                        held.clear();
+                    }
+                } else {
+                    error!("Received unknown key: {}", key);
                 }
             }
             InputCommand { r#type, .. } => {
                 if r#type == "resetkeyboard" {
-                    let keys: &[Key] = &[
-                        Key::Escape,
-                        Key::Unicode('1'),
-                        Key::Unicode('2'),
-                        Key::Unicode('3'),
-                        Key::Unicode('4'),
-                        Key::Unicode('5'),
-                        Key::Unicode('6'),
-                        Key::Unicode('7'),
-                        Key::Unicode('8'),
-                        Key::Unicode('9'),
-                        Key::Unicode('0'),
-                        Key::Unicode('-'),
-                        Key::Unicode('='),
-                        Key::Backspace,
-                        Key::Tab,
-                        Key::Unicode('q'),
-                        Key::Unicode('w'),
-                        Key::Unicode('e'),
-                        Key::Unicode('r'),
-                        Key::Unicode('t'),
-                        Key::Unicode('y'),
-                        Key::Unicode('u'),
-                        Key::Unicode('i'),
-                        Key::Unicode('o'),
-                        Key::Unicode('p'),
-                        Key::Unicode('['),
-                        Key::Unicode(']'),
-                        Key::Return,
-                        Key::Control,
-                        Key::Unicode('a'),
-                        Key::Unicode('s'),
-                        Key::Unicode('d'),
-                        Key::Unicode('f'),
-                        Key::Unicode('g'),
-                        Key::Unicode('h'),
-                        Key::Unicode('j'),
-                        Key::Unicode('k'),
-                        Key::Unicode('l'),
-                        Key::Unicode(';'),
-                        Key::Unicode('\''),
-                        Key::Unicode('`'),
-                        Key::Shift,
-                        Key::Unicode('\\'),
-                        Key::Unicode('z'),
-                        Key::Unicode('x'),
-                        Key::Unicode('c'),
-                        Key::Unicode('v'),
-                        Key::Unicode('b'),
-                        Key::Unicode('n'),
-                        Key::Unicode('m'),
-                        Key::Unicode(','),
-                        Key::Unicode('.'),
-                        Key::Unicode('/'),
-                        Key::Alt,
-                        Key::Space,
-                        Key::CapsLock,
-                        Key::F1,
-                        Key::F2,
-                        Key::F3,
-                        Key::F4,
-                        Key::F5,
-                        Key::F6,
-                        Key::F7,
-                        Key::F8,
-                        Key::F9,
-                        Key::F10,
-                        #[cfg(not(target_os = "macos"))]
-                        Key::Numlock,
-                        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-                        Key::ScrollLock,
-                        Key::Unicode('+'),
-                        Key::Unicode('*'),
-                        Key::Unicode('='),
-                        Key::Unicode(','),
-                        Key::Unicode('¥'),
-                        Key::Home,
-                        Key::UpArrow,
-                        Key::PageUp,
-                        Key::LeftArrow,
-                        Key::RightArrow,
-                        Key::End,
-                        Key::DownArrow,
-                        Key::PageDown,
-                        Key::Delete,
-                        Key::Meta,
-                        Key::MediaNextTrack,
-                        Key::MediaPlayPause,
-                        Key::MediaPrevTrack,
-                        Key::F11,
-                        Key::F12,
-                        Key::F13,
-                        Key::F14,
-                        Key::F15,
-                        Key::F16,
-                        Key::F17,
-                        Key::F18,
-                        Key::F19,
-                        Key::F20,
-                        Key::Unicode('0'),
-                        Key::Unicode('1'),
-                        Key::Unicode('2'),
-                        Key::Unicode('3'),
-                        Key::Unicode('4'),
-                        Key::Unicode('5'),
-                        Key::Unicode('6'),
-                        Key::Unicode('7'),
-                        Key::Unicode('8'),
-                        Key::Unicode('9'),
-                        Key::Unicode('.'),
-                        Key::Unicode('/'),
-                        Key::Return,
-                        #[cfg(not(target_os = "macos"))]
-                        Key::PrintScr,
-                        #[cfg(not(target_os = "macos"))]
-                        Key::Insert,
-                        #[cfg(not(target_os = "macos"))]
-                        Key::Pause,
-                        #[cfg(not(target_os = "macos"))]
-                        Key::MediaStop,
-                        #[cfg(not(target_os = "macos"))]
-                        Key::F21,
-                        #[cfg(not(target_os = "macos"))]
-                        Key::F22,
-                        #[cfg(not(target_os = "macos"))]
-                        Key::F23,
-                        #[cfg(not(target_os = "macos"))]
-                        Key::F24,
-                        #[cfg(not(target_os = "macos"))]
-                        Key::Select,
-                        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-                        Key::Undo,
-                        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-                        Key::Find,
-                        Key::Help,
-                    ];
+                    let keys = Key::iter();
                     // Unpress all possible keys
                     for key in keys {
-                        enigo.key(*key, Release)?;
+                        sim.key_up(key)?;
                     }
                 }
             }
