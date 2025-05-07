@@ -56,14 +56,13 @@
 
 #[allow(unused)]
 use std::str::{self, FromStr};
-use std::sync::Arc;
 use tokio::process::Command;
+use tokio::sync::mpsc::unbounded_channel;
 
 use gstreamer::prelude::*;
-use gstreamer::{element_error, ElementFactory, Pipeline, State};
+use gstreamer::{element_error, Element, ElementFactory, Pipeline, State};
 
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
-use tokio::sync::Notify;
+use tokio::sync::mpsc::UnboundedReceiver;
 
 use anyhow::{Context, Result};
 
@@ -71,8 +70,7 @@ use log::*;
 
 use crate::Config;
 
-use super::GStreamerControlMessage;
-
+#[cfg(target_os = "linux")]
 async fn get_pulseaudio_monitor_name() -> Result<String> {
     let output = Command::new("pactl")
         .arg("list")
@@ -103,534 +101,595 @@ async fn get_pulseaudio_monitor_name() -> Result<String> {
     anyhow::bail!("No monitor device found");
 }
 
-/// # Warning: LINUX ONLY
-pub async fn start_audio_pipeline(
-    mut control_rx: UnboundedReceiver<GStreamerControlMessage>,
-    buffer_tx: UnboundedSender<(Vec<u8>, u64)>,
-    waker: Arc<Notify>,
-) -> anyhow::Result<()> {
-    // gst-launch-1.0 -v pulsesrc device=alsa_output.pci-0000_00_1f.3.analog-stereo.monitor ! audioconvert ! vorbisenc ! oggmux ! filesink location=alsasrc.ogg
-    let monitor_device_name = get_pulseaudio_monitor_name().await?;
-    info!("Picked audio monitor device name: {}", monitor_device_name);
-    let src = ElementFactory::make("pulsesrc")
-        .property("device", &monitor_device_name)
-        .build()?;
-    let src_capsfilter = ElementFactory::make("capsfilter")
-        .property(
-            "caps",
-            gstreamer::Caps::builder("audio/x-raw")
-                .field("channels", 2)
-                .build(),
-        )
-        .build()?;
-
-    let opusenc = ElementFactory::make("opusenc")
-        .property("perfect-timestamp", true)
-        .build()?;
-
-    let opus_caps = gstreamer::Caps::builder("audio/x-opus").build();
-
-    let appsink = gstreamer_app::AppSink::builder()
-        // Tell the appsink what format we want. It will then be the audiotestsrc's job to
-        // provide the format we request.
-        // This can be set after linking the two objects, because format negotiation between
-        // both elements will happen during pre-rolling of the pipeline.
-        .caps(&opus_caps)
-        .drop(true)
-        .max_buffers(1)
-        .build();
-
-    // appsink callback - send rtp packets to the streaming thread
-    appsink.set_callbacks(
-        gstreamer_app::AppSinkCallbacks::builder()
-            // Add a handler to the "new-sample" signal.
-            .new_sample(move |appsink| {
-                // Pull the sample in question out of the appsink's buffer.
-                let sample = appsink
-                    .pull_sample()
-                    .map_err(|_| gstreamer::FlowError::Eos)?;
-                let buffer = sample.buffer().ok_or_else(|| {
-                    element_error!(
-                        appsink,
-                        gstreamer::ResourceError::Failed,
-                        ("Failed to get buffer from appsink")
-                    );
-
-                    gstreamer::FlowError::Error
-                })?;
-
-                // At this point, buffer is only a reference to an existing memory region somewhere.
-                // When we want to access its content, we have to map it while requesting the required
-                // mode of access (read, read/write).
-                // This type of abstraction is necessary, because the buffer in question might not be
-                // on the machine's main memory itself, but rather in the GPU's memory.
-                // So mapping the buffer makes the underlying memory region accessible to us.
-                // See: https://gstreamer.freedesktop.org/documentation/plugin-development/advanced/allocation.html
-                let map = buffer.map_readable().map_err(|_| {
-                    element_error!(
-                        appsink,
-                        gstreamer::ResourceError::Failed,
-                        ("Failed to map buffer readable")
-                    );
-
-                    gstreamer::FlowError::Error
-                })?;
-
-                let packet = map.as_slice();
-
-                let pts = buffer.pts().unwrap().useconds();
-
-                // we can .ok() this, because if it DOES fail, the thread will be terminated soon
-                buffer_tx.send((packet.to_vec(), pts)).ok();
-                waker.notify_one();
-                Ok(gstreamer::FlowSuccess::Ok)
-            })
-            .build(),
-    );
-
-    // Create the pipeline
-    let pipeline = Pipeline::default();
-
-    // Add elements to the pipeline
-    pipeline.add_many([
-        &src,
-        &src_capsfilter,
-        &opusenc,
-        appsink.upcast_ref(),
-    ])?;
-
-    // Link the elements
-    gstreamer::Element::link_many([&src, &src_capsfilter, &opusenc, appsink.upcast_ref()])?;
-
-    // Set the pipeline to playing state
-    pipeline.set_state(State::Playing)?;
-    while let Some(msg) = control_rx.recv().await {
-        if let GStreamerControlMessage::Stop = msg {
-            info!("GStreamer task received termination signal!");
-            break;
-        }
-    }
-
-    // Clean up
-    pipeline.set_state(State::Null)?;
-
-    Ok(())
+#[derive(Debug)]
+pub struct AudioRecordingPipeline {
+    pipeline: Pipeline,
+    buffer_rx: UnboundedReceiver<(Vec<u8>, u64)>,
 }
 
-pub async fn start_pipeline(
+impl AudioRecordingPipeline {
+    #[cfg(target_os = "linux")]
+    pub async fn new() -> Result<Self> {
+        let (buffer_tx, buffer_rx) = unbounded_channel();
+        let monitor_device_name = get_pulseaudio_monitor_name().await?;
+        info!("Picked audio monitor device name: {}", monitor_device_name);
+        let src = ElementFactory::make("pulsesrc")
+            .property("device", &monitor_device_name)
+            .build()?;
+        let src_capsfilter = ElementFactory::make("capsfilter")
+            .property(
+                "caps",
+                gstreamer::Caps::builder("audio/x-raw")
+                    .field("channels", 2)
+                    .build(),
+            )
+            .build()?;
+
+        let opusenc = ElementFactory::make("opusenc")
+            .property("perfect-timestamp", true)
+            .build()?;
+
+        let opus_caps = gstreamer::Caps::builder("audio/x-opus").build();
+
+        let appsink = gstreamer_app::AppSink::builder()
+            .caps(&opus_caps)
+            .drop(true)
+            .max_buffers(1)
+            .build();
+
+        appsink.set_callbacks(
+            gstreamer_app::AppSinkCallbacks::builder()
+                .new_sample(move |appsink| {
+                    let sample = appsink
+                        .pull_sample()
+                        .map_err(|_| gstreamer::FlowError::Eos)?;
+                    let buffer = sample.buffer().ok_or_else(|| {
+                        element_error!(
+                            appsink,
+                            gstreamer::ResourceError::Failed,
+                            ("Failed to get buffer from appsink")
+                        );
+
+                        gstreamer::FlowError::Error
+                    })?;
+
+                    let map = buffer.map_readable().map_err(|_| {
+                        element_error!(
+                            appsink,
+                            gstreamer::ResourceError::Failed,
+                            ("Failed to map buffer readable")
+                        );
+
+                        gstreamer::FlowError::Error
+                    })?;
+
+                    let packet = map.as_slice();
+
+                    let pts = buffer.pts().unwrap().useconds();
+
+                    // we can .ok() this, because if it DOES fail, the thread will be terminated soon
+                    buffer_tx.send((packet.to_vec(), pts)).ok();
+                    Ok(gstreamer::FlowSuccess::Ok)
+                })
+                .build(),
+        );
+
+        let pipeline = Pipeline::default();
+        pipeline.add_many([&src, &src_capsfilter, &opusenc, appsink.upcast_ref()])?;
+        Element::link_many([&src, &src_capsfilter, &opusenc, appsink.upcast_ref()])?;
+        pipeline.set_state(State::Playing)?;
+
+        Ok(Self {
+            pipeline,
+            buffer_rx,
+        })
+    }
+
+    pub async fn recv_frame(&mut self) -> Option<(Vec<u8>, u64)> {
+        self.buffer_rx.recv().await
+    }
+}
+
+impl Drop for AudioRecordingPipeline {
+    fn drop(&mut self) {
+        self.pipeline.set_state(State::Null).ok();
+    }
+}
+
+#[derive(Debug)]
+pub struct ScreenRecordingPipeline {
+    enc: Element,
+    pipeline: Pipeline,
+    buffer_rx: UnboundedReceiver<(Vec<u8>, u64)>,
     config: Config,
-    show_mouse: bool,
-    mut control_rx: UnboundedReceiver<GStreamerControlMessage>,
-    buffer_tx: UnboundedSender<(Vec<u8>, u64)>,
-    waker: Arc<Notify>,
-) -> anyhow::Result<()> {
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-    let src = ElementFactory::make("ximagesrc")
-        .property("use-damage", false)
-        .property("startx", config.startx)
-        .property("starty", config.starty)
-        .property_if_some("endx", config.endx)
-        .property_if_some("endy", config.endy)
-        .property("show-pointer", show_mouse)
-        .property("blocksize", 16384u32)
-        .property("remote", true)
-        .build()?;
+}
 
-    #[cfg(target_os = "macos")]
-    let src = ElementFactory::make("avfvideosrc")
-        .property("capture-screen", true)
-        .property("capture-screen-cursor", show_mouse)
-        .build()?;
+impl ScreenRecordingPipeline {
+    #[cfg(target_os = "linux")]
+    pub fn new(config: Config, show_mouse: bool) -> Result<Self> {
+        let (buffer_tx, buffer_rx) = unbounded_channel();
+        let mut elements = vec![];
+        let pipeline = Pipeline::default();
+        elements.push(
+            ElementFactory::make("ximagesrc")
+                .property("use-damage", false)
+                .property("startx", config.startx)
+                .property("starty", config.starty)
+                .property_if_some("endx", config.endx)
+                .property_if_some("endy", config.endy)
+                .property("show-pointer", show_mouse)
+                .property("blocksize", 16384u32)
+                .property("remote", true)
+                .build()?,
+        );
+        let video_caps = gstreamer::Caps::builder("video/x-raw")
+            .field("framerate", gstreamer::Fraction::new(60, 1))
+            .build();
+        let video_capsfilter = ElementFactory::make("capsfilter")
+            .property("caps", &video_caps)
+            .build()?;
+        elements.push(video_capsfilter);
 
-    #[cfg(target_os = "windows")]
-    let src = ElementFactory::make("d3d11screencapturesrc")
-        .property("show-cursor", show_mouse)
-        .build()?;
-
-    #[cfg(target_os = "windows")]
-    let download = ElementFactory::make("d3d11download").build()?;
-    
-    cfg_if::cfg_if! {
-        if #[cfg(target_os = "macos")] {
-            let video_caps = if !config.full_chroma {
-                gstreamer::Caps::builder("video/x-raw")
-                    .field("framerate", gstreamer::Fraction::new(60, 1))
-                    .field("format", "NV12")
-                    .build()
-            } else {
-                gstreamer::Caps::builder("video/x-raw")
-                    .field("framerate", gstreamer::Fraction::new(60, 1))
-                    .field("format", "BGRA")
-                    .build()
-            };
+        let videoconvert = if config.vapostproc {
+            ElementFactory::make("vapostproc")
+                .property_from_str("scale-method", "fast")
+                .build()?
         } else {
-            let video_caps = gstreamer::Caps::builder("video/x-raw")
-                .field("framerate", gstreamer::Fraction::new(60, 1))
-                .build();
+            ElementFactory::make("videoconvert")
+                .property("n-threads", 4u32)
+                .build()?
+        };
+
+        elements.push(videoconvert);
+
+        let format = if config.full_chroma { "Y444" } else { "NV12" };
+
+        if config.full_chroma && config.vapostproc {
+            warn!(
+                "Full-chroma is not supported with VA-API! This configuration option has been ignored."
+            );
         }
-    }
 
-    let video_capsfilter = ElementFactory::make("capsfilter")
-        .property("caps", &video_caps)
-        .build()?;
+        let format_caps = if !config.vapostproc {
+            gstreamer::Caps::builder("video/x-raw")
+                .field("format", format)
+                .build()
+        } else {
+            let caps_str = "video/x-raw(memory:VAMemory)";
+            gstreamer::Caps::from_str(caps_str)?
+        };
 
-    cfg_if::cfg_if! {
-        if #[cfg(not(target_os = "macos"))] {
-            let videoconvert = if config.vapostproc {
-                ElementFactory::make("vapostproc")
-                    .property_from_str("scale-method", "fast")
-                    .build()?
-            } else {
-                ElementFactory::make("videoconvert")
-                    .property("n-threads", 4u32)
-                    .build()?
-            };
+        info!("Format caps: {}", format_caps);
 
-            let format = if config.full_chroma { "Y444" } else { "NV12" };
+        let format_capsfilter = ElementFactory::make("capsfilter")
+            .property("caps", &format_caps)
+            .build()?;
+        elements.push(format_capsfilter);
 
-            if config.full_chroma && config.vapostproc {
-                warn!(
-                    "Full-chroma is not supported with VA-API! This configuration option has been ignored."
-                );
-            }
+        let enc = if !config.vaapi {
+            ElementFactory::make("x264enc")
+                .property("threads", 4u32)
+                .property("b-adapt", false)
+                .property("vbv-buf-capacity", config.vbv_buf_capacity)
+                .property_from_str("speed-preset", "superfast")
+                .property_from_str("tune", "zerolatency")
+                .property("bitrate", config.target_bitrate - 64)
+                .property("key-int-max", 2560u32)
+                .build()?
+        } else {
+            ElementFactory::make("vah264enc")
+                .property("aud", true)
+                .property("b-frames", 0u32)
+                .property("dct8x8", false)
+                .property("key-int-max", 1024u32)
+                .property("num-slices", 4u32)
+                .property("ref-frames", 1u32)
+                .property("target-usage", 6u32)
+                .property_from_str("rate-control", "cbr")
+                .property("bitrate", config.target_bitrate - 64)
+                .property(
+                    "cpb-size",
+                    ((config.target_bitrate - 64) * config.vbv_buf_capacity) / 1000,
+                )
+                .property_from_str("mbbrc", "enabled")
+                .build()?
+        };
 
-            let format_caps = if !config.vapostproc {
-                gstreamer::Caps::builder("video/x-raw")
-                    .field("format", format)
-                    .build()
-            } else {
-                let caps_str = "video/x-raw(memory:VAMemory)";
-                gstreamer::Caps::from_str(caps_str)?
-            };
+        elements.push(enc.clone());
 
-            info!("Format caps: {}", format_caps);
-            let format_capsfilter = ElementFactory::make("capsfilter")
-                .property("caps", &format_caps)
-                .build()?;
-        }
-    }
+        let profile = match (config.vaapi, config.full_chroma) {
+            (true, _) => "high",
+            (_, true) => "high-4:4:4",
+            (false, false) => "baseline",
+        };
 
-    // this makes the stream smoother on VAAPI, but on x264enc it causes severe latency
-    // especially when the CPU is under load (such as when playing minecraft)
-    // #[cfg(feature = "vaapi")]
-    // let conversion_queue = ElementFactory::make("queue").build()?;
-
-    let enc = if !config.vaapi {
-        ElementFactory::make("x264enc")
-            .property("threads", 4u32)
-            .property("b-adapt", false)
-            .property("vbv-buf-capacity", config.vbv_buf_capacity)
-            .property_from_str("speed-preset", "superfast")
-            .property_from_str("tune", "zerolatency")
-            .property("bitrate", config.target_bitrate - 64)
-            .property("key-int-max", 2560u32)
-            .build()?
-    } else {
-        cfg_if::cfg_if! {
-            if #[cfg(target_os = "linux")] {
-                ElementFactory::make("vah264enc")
-                    .property("aud", true)
-                    .property("b-frames", 0u32)
-                    .property("dct8x8", false)
-                    .property("key-int-max", 1024u32)
-                    .property("num-slices", 4u32)
-                    .property("ref-frames", 1u32)
-                    .property("target-usage", 6u32)
-                    .property_from_str("rate-control", "cbr")
-                    .property("bitrate", config.target_bitrate - 64)
-                    .property(
-                        "cpb-size",
-                        ((config.target_bitrate - 64) * config.vbv_buf_capacity) / 1000,
-                    )
-                    .property_from_str("mbbrc", "enabled")
-                    .build()?
-            } else if #[cfg(target_os = "macos")] {
-                ElementFactory::make("vtenc_h264")
-                    .property("allow-frame-reordering", false)
-                    .property("bitrate", config.target_bitrate - 64)
-                    .property("realtime", true)
-                    .build()?
-            } else {
-                anyhow::bail!("Hardware accelerated encoding is only supported on macOS and Linux.");
-            }
-        }
-    };
-
-    info!("Enc: {:?}", enc);
-
-    let profile = if config.full_chroma {
-        "high-4:4:4"
-    } else {
-        "baseline"
-    };
-
-    let final_caps = if config.vaapi {
-        cfg_if::cfg_if! {
-            if #[cfg(target_os = "macos")] {
-                gstreamer::Caps::builder("video/x-h264")
-                    .field("stream-format", "avc")
-                    .build()
-            } else if #[cfg(target_os = "linux")] {
-                gstreamer::Caps::builder("video/x-h264")
-                    .field("profile", "high")
-                    .field("stream-format", "byte-stream")
-                    .build()
-            } else {
-                anyhow::bail!("Hardware accelerated encoding is only supported on macOS and Linux.");
-            }
-        }
-    } else {
-        gstreamer::Caps::builder("video/x-h264")
+        let final_caps = gstreamer::Caps::builder("video/x-h264")
             .field("profile", profile)
             .field("stream-format", "byte-stream")
-            .build()
-    };
+            .build();
 
-    let h264_capsfilter = ElementFactory::make("capsfilter")
-        .property("caps", &final_caps)
-        .build()?;
+        let h264_capsfilter = ElementFactory::make("capsfilter")
+            .property("caps", &final_caps)
+            .build()?;
 
-    cfg_if::cfg_if! {
-        if #[cfg(target_os = "macos")] {
-            let parse = ElementFactory::make("h264parse").property("config-interval", -1).build()?;
-            let final_caps = gstreamer::Caps::builder("video/x-h264")
-                .field("stream-format", "byte-stream")
-                .build();
-            let parse_capsfilter = ElementFactory::make("capsfilter")
-                .property("caps", &final_caps)
-                .build()?;
-        }
+        elements.push(h264_capsfilter);
+
+        let appsink = gstreamer_app::AppSink::builder()
+            .caps(&final_caps)
+            .drop(true)
+            .sync(false)
+            .max_buffers(1)
+            .build();
+
+        appsink.set_callbacks(
+            gstreamer_app::AppSinkCallbacks::builder()
+                .new_sample(move |appsink| {
+                    let sample = appsink
+                        .pull_sample()
+                        .map_err(|_| gstreamer::FlowError::Eos)?;
+                    let buffer = sample.buffer().ok_or_else(|| {
+                        element_error!(
+                            appsink,
+                            gstreamer::ResourceError::Failed,
+                            ("Failed to get buffer from appsink")
+                        );
+                        gstreamer::FlowError::Error
+                    })?;
+                    let map = buffer.map_readable().map_err(|_| {
+                        element_error!(
+                            appsink,
+                            gstreamer::ResourceError::Failed,
+                            ("Failed to map buffer readable")
+                        );
+
+                        gstreamer::FlowError::Error
+                    })?;
+                    let packet = map.as_slice();
+                    let pts = buffer.pts().unwrap().useconds();
+                    // we can .ok() this, because if it DOES fail, the thread will be terminated soon
+                    buffer_tx.send((packet.to_vec(), pts)).ok();
+                    Ok(gstreamer::FlowSuccess::Ok)
+                })
+                .build(),
+        );
+
+        elements.push(appsink.upcast_ref::<Element>().clone());
+
+        info!("Prepared elements: {:?}", &elements);
+        pipeline.add_many(&elements)?;
+        Element::link_many(&elements)?;
+        pipeline.set_state(State::Playing)?;
+
+        Ok(Self {
+            config,
+            enc,
+            pipeline,
+            buffer_rx,
+        })
     }
 
-    let appsink = gstreamer_app::AppSink::builder()
-        // Tell the appsink what format we want. It will then be the audiotestsrc's job to
-        // provide the format we request.
-        // This can be set after linking the two objects, because format negotiation between
-        // both elements will happen during pre-rolling of the pipeline.
-        .caps(&final_caps)
-        .drop(true)
-        .max_buffers(1)
-        .build();
-
-    // appsink callback - send rtp packets to the streaming thread
-    appsink.set_callbacks(
-        gstreamer_app::AppSinkCallbacks::builder()
-            // Add a handler to the "new-sample" signal.
-            .new_sample(move |appsink| {
-                // Pull the sample in question out of the appsink's buffer.
-                let sample = appsink
-                    .pull_sample()
-                    .map_err(|_| gstreamer::FlowError::Eos)?;
-                let buffer = sample.buffer().ok_or_else(|| {
-                    element_error!(
-                        appsink,
-                        gstreamer::ResourceError::Failed,
-                        ("Failed to get buffer from appsink")
-                    );
-
-                    gstreamer::FlowError::Error
-                })?;
-
-                // At this point, buffer is only a reference to an existing memory region somewhere.
-                // When we want to access its content, we have to map it while requesting the required
-                // mode of access (read, read/write).
-                // This type of abstraction is necessary, because the buffer in question might not be
-                // on the machine's main memory itself, but rather in the GPU's memory.
-                // So mapping the buffer makes the underlying memory region accessible to us.
-                // See: https://gstreamer.freedesktop.org/documentation/plugin-development/advanced/allocation.html
-                let map = buffer.map_readable().map_err(|_| {
-                    element_error!(
-                        appsink,
-                        gstreamer::ResourceError::Failed,
-                        ("Failed to map buffer readable")
-                    );
-
-                    gstreamer::FlowError::Error
-                })?;
-
-                let packet = map.as_slice();
-
-                let pts = buffer.pts().unwrap().useconds();
-
-                // we can .ok() this, because if it DOES fail, the thread will be terminated soon
-                buffer_tx.send((packet.to_vec(), pts)).ok();
-                waker.notify_one();
-                Ok(gstreamer::FlowSuccess::Ok)
-            })
-            .build(),
-    );
-
-    // Create the pipeline
-    let pipeline = Pipeline::default();
-
-    cfg_if::cfg_if! {
-        if #[cfg(target_os = "macos")] {
-            if config.full_chroma {
-                let videoconvert = ElementFactory::make("videoconvert")
-                    .property("n-threads", 4u32)
-                    .build()?;
-
-                let format_capsfilter = ElementFactory::make("capsfilter")
-                    .property(
-                        "caps",
-                        gstreamer::Caps::builder("video/x-raw")
-                            .field("format", "Y444")
-                            .build()
-                    )
-                    .build()?;
-
-                // Add elements to the pipeline
-                pipeline.add_many([
-                    &src,
-                    &video_capsfilter,
-                    &videoconvert,
-                    &format_capsfilter,
-                    &enc,
-                    &h264_capsfilter,
-                    appsink.upcast_ref(),
-                ])?;
-
-                // Link the elements
-                gstreamer::Element::link_many([
-                    &src,
-                    &video_capsfilter,
-                    &videoconvert,
-                    &format_capsfilter,
-                    &enc,
-                    &h264_capsfilter,
-                    appsink.upcast_ref(),
-                ])?;
-            } else if !config.vaapi {
-                // Add elements to the pipeline
-                pipeline.add_many([
-                    &src,
-                    &video_capsfilter,
-                    &enc,
-                    &h264_capsfilter,
-                    appsink.upcast_ref(),
-                ])?;
-
-                // Link the elements
-                gstreamer::Element::link_many([
-                    &src,
-                    &video_capsfilter,
-                    &enc,
-                    &h264_capsfilter,
-                    appsink.upcast_ref(),
-                ])?;
-            } else {
-                // Add elements to the pipeline
-                pipeline.add_many([
-                    &src,
-                    &video_capsfilter,
-                    &enc,
-                    &h264_capsfilter,
-                    &parse,
-                    &parse_capsfilter,
-                    appsink.upcast_ref(),
-                ])?;
-
-                // Link the elements
-                gstreamer::Element::link_many([
-                    &src,
-                    &video_capsfilter,
-                    &enc,
-                    &h264_capsfilter,
-                    &parse,
-                    &parse_capsfilter,
-                    appsink.upcast_ref(),
-                ])?;
-            }
-        } else if #[cfg(target_os = "windows")] {
-            // Add elements to the pipeline
-            pipeline.add_many([
-                &src,
-                &download,
-                &video_capsfilter,
-                &videoconvert,
-                &format_capsfilter,
-                &enc,
-                &h264_capsfilter,
-                appsink.upcast_ref(),
-            ])?;
-
-            // Link the elements
-            gstreamer::Element::link_many([
-                &src,
-                &download,
-                &video_capsfilter,
-                &videoconvert,
-                &format_capsfilter,
-                &enc,
-                &h264_capsfilter,
-                appsink.upcast_ref(),
-            ])?;
+    #[cfg(target_os = "macos")]
+    pub fn new(config: Config, show_mouse: bool) -> Result<Self> {
+        let (buffer_tx, buffer_rx) = unbounded_channel();
+        let mut elements = vec![];
+        let pipeline = Pipeline::default();
+        elements.push(
+            ElementFactory::make("avfvideosrc")
+                .property("capture-screen", true)
+                .property("capture-screen-cursor", show_mouse)
+                .build()?,
+        );
+        let video_caps = if !config.full_chroma {
+            gstreamer::Caps::builder("video/x-raw")
+                .field("framerate", gstreamer::Fraction::new(60, 1))
+                .field("format", "NV12")
+                .build()
         } else {
-            // Add elements to the pipeline
-            pipeline.add_many([
-                &src,
-                &video_capsfilter,
-                &videoconvert,
-                &format_capsfilter,
-                &enc,
-                &h264_capsfilter,
-                appsink.upcast_ref(),
-            ])?;
+            gstreamer::Caps::builder("video/x-raw")
+                .field("framerate", gstreamer::Fraction::new(60, 1))
+                .field("format", "BGRA")
+                .build()
+        };
+        let video_capsfilter = ElementFactory::make("capsfilter")
+            .property("caps", &video_caps)
+            .build()?;
+        elements.push(video_capsfilter);
 
-            // Link the elements
-            gstreamer::Element::link_many([
-                &src,
-                &video_capsfilter,
-                &videoconvert,
-                &format_capsfilter,
-                &enc,
-                &h264_capsfilter,
-                appsink.upcast_ref(),
-            ])?;
+        if config.fullchroma {
+            let videoconvert = ElementFactory::make("videoconvert")
+                .property("n-threads", 4u32)
+                .build()?;
+
+            let format_capsfilter = ElementFactory::make("capsfilter")
+                .property(
+                    "caps",
+                    gstreamer::Caps::builder("video/x-raw")
+                        .field("format", "Y444")
+                        .build(),
+                )
+                .build()?;
+            elements.push(videoconvert);
+            elements.push(format_capsfilter);
+        }
+
+        let enc = if !config.vaapi {
+            ElementFactory::make("x264enc")
+                .property("threads", 4u32)
+                .property("b-adapt", false)
+                .property("vbv-buf-capacity", config.vbv_buf_capacity)
+                .property_from_str("speed-preset", "superfast")
+                .property_from_str("tune", "zerolatency")
+                .property("bitrate", config.target_bitrate - 64)
+                .property("key-int-max", 2560u32)
+                .build()?
+        } else {
+            ElementFactory::make("vtenc_h264")
+                .property("allow-frame-reordering", false)
+                .property("bitrate", config.target_bitrate - 64)
+                .property("realtime", true)
+                .build()?
+        };
+
+        elements.push(enc.clone());
+
+        let final_caps = if config.vaapi {
+            gstreamer::Caps::builder("video/x-h264")
+                .field("stream-format", "avc")
+                .build()
+        } else {
+            let profile = if config.full_chroma {
+                "high-4:4:4"
+            } else {
+                "baseline"
+            };
+
+            gstreamer::Caps::builder("video/x-h264")
+                .field("profile", profile)
+                .field("stream-format", "byte-stream")
+                .build()
+        };
+
+        let h264_capsfilter = ElementFactory::make("capsfilter")
+            .property("caps", &final_caps)
+            .build()?;
+
+        elements.push(h264_capsfilter);
+
+        let parse = ElementFactory::make("h264parse")
+            .property("config-interval", -1)
+            .build()?;
+        let final_caps = gstreamer::Caps::builder("video/x-h264")
+            .field("stream-format", "byte-stream")
+            .build();
+        let parse_capsfilter = ElementFactory::make("capsfilter")
+            .property("caps", &final_caps)
+            .build()?;
+
+        elements.push(parse_capsfilter);
+
+        let appsink = gstreamer_app::AppSink::builder()
+            .caps(&final_caps)
+            .drop(true)
+            .sync(false)
+            .max_buffers(1)
+            .build();
+
+        appsink.set_callbacks(
+            gstreamer_app::AppSinkCallbacks::builder()
+                .new_sample(move |appsink| {
+                    let sample = appsink
+                        .pull_sample()
+                        .map_err(|_| gstreamer::FlowError::Eos)?;
+                    let buffer = sample.buffer().ok_or_else(|| {
+                        element_error!(
+                            appsink,
+                            gstreamer::ResourceError::Failed,
+                            ("Failed to get buffer from appsink")
+                        );
+                        gstreamer::FlowError::Error
+                    })?;
+                    let map = buffer.map_readable().map_err(|_| {
+                        element_error!(
+                            appsink,
+                            gstreamer::ResourceError::Failed,
+                            ("Failed to map buffer readable")
+                        );
+
+                        gstreamer::FlowError::Error
+                    })?;
+                    let packet = map.as_slice();
+                    let pts = buffer.pts().unwrap().useconds();
+                    // we can .ok() this, because if it DOES fail, the thread will be terminated soon
+                    buffer_tx.send((packet.to_vec(), pts)).ok();
+                    Ok(gstreamer::FlowSuccess::Ok)
+                })
+                .build(),
+        );
+
+        elements.push(appsink);
+
+        pipeline.add_many(&elements)?;
+        Element::link_many(&elements)?;
+        pipeline.set_state(State::Playing)?;
+
+        Ok(Self {
+            config,
+            enc,
+            pipeline,
+            buffer_rx,
+        })
+    }
+
+    #[cfg(target_os = "windows")]
+    pub fn new(config: Config, show_mouse: bool) -> Result<Self> {
+        let (buffer_tx, buffer_rx) = unbounded_channel();
+        let mut elements = vec![];
+        let pipeline = Pipeline::default();
+        let src = ElementFactory::make("d3d11screencapturesrc")
+            .property("show-cursor", show_mouse)
+            .build()?;
+        elements.push(src);
+        let download = ElementFactory::make("d3d11download").build()?;
+        elements.push(download);
+        let video_caps = gstreamer::Caps::builder("video/x-raw")
+            .field("framerate", gstreamer::Fraction::new(60, 1))
+            .build();
+        let video_capsfilter = ElementFactory::make("capsfilter")
+            .property("caps", &video_caps)
+            .build()?;
+        elements.push(video_capsfilter);
+
+        let videoconvert = ElementFactory::make("videoconvert")
+            .property("n-threads", 4u32)
+            .build()?;
+
+        elements.push(videoconvert);
+
+        let format = if config.full_chroma { "Y444" } else { "NV12" };
+
+        let format_caps = gstreamer::Caps::builder("video/x-raw")
+            .field("format", format)
+            .build();
+
+        info!("Format caps: {}", format_caps);
+
+        let format_capsfilter = ElementFactory::make("capsfilter")
+            .property("caps", &format_caps)
+            .build()?;
+        elements.push(format_capsfilter);
+
+        let enc = if !config.vaapi {
+            ElementFactory::make("x264enc")
+                .property("threads", 4u32)
+                .property("b-adapt", false)
+                .property("vbv-buf-capacity", config.vbv_buf_capacity)
+                .property_from_str("speed-preset", "superfast")
+                .property_from_str("tune", "zerolatency")
+                .property("bitrate", config.target_bitrate - 64)
+                .property("key-int-max", 2560u32)
+                .build()?
+        } else {
+            let enc = ElementFactory::make("mfh264enc")
+                .property("low-latency", true)
+                .property("bframes", 0u32)
+                .property("cabac", false)
+                .property("rc-mode", 0u32)
+                .property("bitrate", config.target_bitrate - 64)
+                .property("vbv-buffer-size", config.vbv_buf_capacity)
+                .property("gop-size", 2560i32)
+                .property("quality-vs-speed", 100u32)
+                .build()?;
+        };
+
+        elements.push(enc.clone());
+
+        let profile = match (config.vaapi, config.full_chroma) {
+            (true, _) => "high",
+            (_, true) => "high-4:4:4",
+            (false, false) => "baseline",
+        };
+
+        let final_caps = gstreamer::Caps::builder("video/x-h264")
+            .field("profile", profile)
+            .field("stream-format", "byte-stream")
+            .build();
+
+        let h264_capsfilter = ElementFactory::make("capsfilter")
+            .property("caps", &final_caps)
+            .build()?;
+
+        elements.push(h264_capsfilter);
+
+        let appsink = gstreamer_app::AppSink::builder()
+            .caps(&final_caps)
+            .drop(true)
+            .sync(false)
+            .max_buffers(1)
+            .build();
+
+        appsink.set_callbacks(
+            gstreamer_app::AppSinkCallbacks::builder()
+                .new_sample(move |appsink| {
+                    let sample = appsink
+                        .pull_sample()
+                        .map_err(|_| gstreamer::FlowError::Eos)?;
+                    let buffer = sample.buffer().ok_or_else(|| {
+                        element_error!(
+                            appsink,
+                            gstreamer::ResourceError::Failed,
+                            ("Failed to get buffer from appsink")
+                        );
+
+                        gstreamer::FlowError::Error
+                    })?;
+                    let map = buffer.map_readable().map_err(|_| {
+                        element_error!(
+                            appsink,
+                            gstreamer::ResourceError::Failed,
+                            ("Failed to map buffer readable")
+                        );
+
+                        gstreamer::FlowError::Error
+                    })?;
+                    let packet = map.as_slice();
+                    let pts = buffer.pts().unwrap().useconds();
+                    // we can .ok() this, because if it DOES fail, the thread will be terminated soon
+                    buffer_tx.send((packet.to_vec(), pts)).ok();
+                    Ok(gstreamer::FlowSuccess::Ok)
+                })
+                .build(),
+        );
+
+        pipeline.add_many(&elements)?;
+        Element::link_many(&elements)?;
+        pipeline.set_state(State::Playing)?;
+
+        Ok(Self {
+            config,
+            enc,
+            pipeline,
+            buffer_rx,
+        })
+    }
+
+    pub fn set_bitrate(&self, new_bitrate: u32) {
+        if self.config.vaapi {
+            // Setting bitrate on macOS causes it vtenc_h264 to DEADLOCK
+            // YET ANOTHER ASTOUNDINGLY BROKEN PIECE OF SOFTWARE
+            // WRITTEN BY THE """DEVELOPERS""" AT APPLE INC
+            // MANY SUCH CASES!
+            #[cfg(not(target_os = "macos"))]
+            self.enc.set_property("bitrate", new_bitrate);
+            #[cfg(target_os = "linux")]
+            self.enc.set_property(
+                "cpb-size",
+                (new_bitrate * self.config.vbv_buf_capacity) / 1000,
+            );
+        } else {
+            self.enc.set_property("bitrate", new_bitrate);
         }
     }
 
-    // Set the pipeline to playing state
-    pipeline.set_state(State::Playing)?;
+    pub fn force_keyframe(&self) {
+        info!("Forcing keyframe");
 
-    while let Some(msg) = control_rx.recv().await {
-        match msg {
-            GStreamerControlMessage::Stop => {
-                info!("GStreamer task received termination signal!");
-                break;
-            }
-            GStreamerControlMessage::RequestKeyFrame => {
-                info!("Forcing keyframe");
+        if !(cfg!(target_os = "macos") && self.config.vaapi) {
+            let force_keyframe_event = gstreamer::Structure::builder("GstForceKeyUnit").build();
 
-                if !(cfg!(target_os = "macos") && config.vaapi) {
-                    let force_keyframe_event =
-                        gstreamer::Structure::builder("GstForceKeyUnit").build();
-
-                    // Send the event to the encoder element
-                    enc.send_event(gstreamer::event::CustomDownstream::new(
-                        force_keyframe_event,
-                    ));
-                }
-            }
-            GStreamerControlMessage::Bitrate(bitrate) => {
-                if config.vaapi {
-                    // Setting bitrate on macOS causes it vtenc_h264 to DEADLOCK
-                    // YET ANOTHER ASTOUNDINGLY BROKEN PIECE OF SOFTWARE
-                    // WRITTEM BY THE """DEVELOPERS""" AT APPLE INC
-                    // MANY SUCH CASES!
-                    #[cfg(not(target_os = "macos"))]
-                    enc.set_property("bitrate", bitrate);
-                    #[cfg(not(target_os = "macos"))]
-                    enc.set_property("cpb-size", (bitrate * config.vbv_buf_capacity) / 1000);
-                } else {
-                    enc.set_property("bitrate", bitrate);
-                }
-            }
+            // Send the event to the encoder element
+            self.enc.send_event(gstreamer::event::CustomDownstream::new(
+                force_keyframe_event,
+            ));
         }
     }
 
-    // Clean up
-    pipeline.set_state(State::Null)?;
+    pub async fn recv_frame(&mut self) -> Option<(Vec<u8>, u64)> {
+        self.buffer_rx.recv().await
+    }
+}
 
-    Ok(())
+impl Drop for ScreenRecordingPipeline {
+    fn drop(&mut self) {
+        self.pipeline.set_state(State::Null).ok();
+    }
 }

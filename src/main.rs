@@ -138,14 +138,9 @@ enum ResponseOffer {
 
 fn is_bad_ip(ip: &std::net::IpAddr) -> bool {
     match ip {
-        std::net::IpAddr::V4(v4) => {
-            v4.is_loopback() ||
-            v4.is_link_local()
-        }
+        std::net::IpAddr::V4(v4) => v4.is_loopback() || v4.is_link_local(),
         std::net::IpAddr::V6(v6) => {
-            v6.is_loopback() ||
-            v6.is_unspecified() ||
-            v6.is_unique_local() // Optional: you might want to filter ULA too
+            v6.is_loopback() || v6.is_unspecified() || v6.is_unique_local() // Optional: you might want to filter ULA too
         }
     }
 }

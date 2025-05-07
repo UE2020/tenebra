@@ -57,26 +57,18 @@
 use log::*;
 use std::io::ErrorKind;
 use std::net::SocketAddr;
-use std::sync::Arc;
 use std::time::Instant;
 use str0m::bwe::Bitrate;
 use str0m::bwe::BweKind;
 use str0m::channel::ChannelData;
 use str0m::format::Codec;
-use str0m::media::MediaKind;
+use str0m::media::{MediaKind, MediaTime, Mid};
 use tokio::net::TcpListener;
 use tokio::net::UdpSocket;
-use tokio::sync::mpsc::unbounded_channel;
-use tokio::sync::Notify;
 
 use anyhow::Context;
-use str0m::media::MediaAdded;
-use str0m::media::MediaTime;
-use str0m::net::Protocol;
-use str0m::net::Receive;
+use str0m::net::{Protocol, Receive};
 use str0m::{Event, IceConnectionState, Input, Output, Rtc};
-use tokio::sync::mpsc::UnboundedReceiver;
-use tokio::sync::mpsc::UnboundedSender;
 
 use crate::keys::Permissions;
 use crate::AppState;
@@ -85,24 +77,6 @@ use crate::InputCommand;
 
 mod pipeline;
 mod tcp;
-
-pub enum GStreamerControlMessage {
-    Stop,
-    RequestKeyFrame,
-    Bitrate(u32),
-}
-
-struct GStreamerInstance {
-    buffer_rx: UnboundedReceiver<(Vec<u8>, u64)>,
-    control_tx: UnboundedSender<GStreamerControlMessage>,
-    media: MediaAdded,
-}
-
-impl Drop for GStreamerInstance {
-    fn drop(&mut self) {
-        self.control_tx.send(GStreamerControlMessage::Stop).ok();
-    }
-}
 
 pub async fn run(
     mut rtc: Rtc,
@@ -118,34 +92,10 @@ pub async fn run(
 
     let mut listener = tcp::Listener::listen(tcp_listener)?;
 
-    let mut gstreamers: Vec<GStreamerInstance> = vec![];
-
-    let waker = Arc::new(Notify::new());
+    let mut video: Option<(pipeline::ScreenRecordingPipeline, Mid)> = None;
+    let mut audio: Option<(pipeline::AudioRecordingPipeline, Mid)> = None;
 
     let ret = loop {
-        for gstreamer in gstreamers.iter_mut() {
-            let buf = gstreamer.buffer_rx.try_recv();
-
-            if let Ok((buf, pts)) = buf {
-                let needed_codec = match gstreamer.media.kind {
-                    MediaKind::Audio => Codec::Opus,
-                    MediaKind::Video => Codec::H264,
-                };
-
-                let writer = rtc
-                    .writer(gstreamer.media.mid)
-                    .context("couldn't get rtc writer")?
-                    .playout_delay(MediaTime::ZERO, MediaTime::ZERO);
-                let pt = writer
-                    .payload_params()
-                    .find(|&params| params.spec().codec == needed_codec)
-                    .unwrap()
-                    .pt();
-                let now = Instant::now();
-                writer.write(pt, now, MediaTime::from_micros(pts), buf)?;
-            }
-        }
-
         // Poll output until we get a timeout. The timeout means we are either awaiting UDP socket input
         // or the timeout to happen.
         let output = rtc.poll_output()?;
@@ -186,53 +136,44 @@ pub async fn run(
 
                         rtc.bwe()
                             .set_desired_bitrate(Bitrate::kbps(state.config.target_bitrate as u64));
-                        let (control_tx, control_rx) =
-                            unbounded_channel::<GStreamerControlMessage>();
-                        let (buffer_tx, buffer_rx) = unbounded_channel();
-                        gstreamers.push(GStreamerInstance {
-                            buffer_rx,
-                            control_tx,
-                            media: media_added,
-                        });
-                        let waker_clone = waker.clone();
+
                         match kind {
-                            MediaKind::Video => tokio::task::spawn(pipeline::start_pipeline(
-                                state.config.clone(),
-                                offer.show_mouse,
-                                control_rx,
-                                buffer_tx,
-                                waker_clone,
-                            )),
-                            MediaKind::Audio => tokio::task::spawn(pipeline::start_audio_pipeline(
-                                control_rx,
-                                buffer_tx,
-                                waker_clone,
-                            )),
-                        };
+                            MediaKind::Video => {
+                                video = Some((
+                                    pipeline::ScreenRecordingPipeline::new(
+                                        state.config.clone(),
+                                        offer.show_mouse,
+                                    )?,
+                                    media_added.mid,
+                                ))
+                            }
+                            MediaKind::Audio => {
+                                audio = Some((
+                                    pipeline::AudioRecordingPipeline::new().await?,
+                                    media_added.mid,
+                                ))
+                            }
+                        }
                     }
                     Event::KeyframeRequest(_) => {
-                        for gstreamer in gstreamers.iter_mut() {
-                            gstreamer
-                                .control_tx
-                                .send(GStreamerControlMessage::RequestKeyFrame)?;
+                        if let Some((ref video, _)) = video {
+                            video.force_keyframe();
                         }
                     }
                     Event::EgressBitrateEstimate(
                         BweKind::Twcc(bitrate) | BweKind::Remb(_, bitrate),
                     ) => {
-                        let bwe = (bitrate.as_u64() / 1000)
+                        let mut bwe = (bitrate.as_u64() / 1000)
                             .clamp(500, state.config.target_bitrate as u64 + 3000)
                             as u32;
-                        let deducted = gstreamers
-                            .iter()
-                            .filter(|gstreamer| gstreamer.media.kind.is_audio())
-                            .count()
-                            * 64;
-                        for gstreamer in gstreamers.iter_mut() {
-                            gstreamer
-                                .control_tx
-                                .send(GStreamerControlMessage::Bitrate(bwe - deducted as u32))?;
+                        if audio.is_some() {
+                            bwe -= 64;
                         }
+
+                        if let Some((ref video, _)) = video {
+                            video.set_bitrate(bwe);
+                        }
+
                         rtc.bwe().set_current_bitrate(Bitrate::kbps(bwe as _));
                         debug!("Set current bitrate to {}", bwe);
                     }
@@ -261,18 +202,55 @@ pub async fn run(
 
         let timeout = time - Instant::now();
 
-        // socket.set_read_timeout(Some(0)) is not ok
         if timeout.is_zero() {
             rtc.handle_input(Input::Timeout(Instant::now()))?;
             continue;
         }
 
-        //socket.set_read_timeout(Some(timeout))?;
         buf.resize(2000, 0);
 
         let input = tokio::select! {
             _ = tokio::time::sleep_until(time.into()) => Input::Timeout(Instant::now()),
-            _ = waker.notified() => Input::Timeout(Instant::now()),
+            Some((buf, pts)) = async {
+                if let Some((ref mut video, _)) = video {
+                    video.recv_frame().await
+                } else {
+                    std::future::pending().await
+                }
+            } => {
+                let writer = rtc
+                    .writer(video.as_ref().unwrap().1)
+                    .context("couldn't get rtc writer")?
+                    .playout_delay(MediaTime::ZERO, MediaTime::ZERO);
+                let pt = writer
+                    .payload_params()
+                    .find(|&params| params.spec().codec == Codec::H264)
+                    .unwrap()
+                    .pt();
+                let now = Instant::now();
+                writer.write(pt, now, MediaTime::from_micros(pts), buf)?;
+                Input::Timeout(Instant::now())
+            },
+            Some((buf, pts)) = async {
+                if let Some((ref mut audio, _)) = audio {
+                    audio.recv_frame().await
+                } else {
+                    std::future::pending().await
+                }
+            } => {
+                let writer = rtc
+                    .writer(audio.as_ref().unwrap().1)
+                    .context("couldn't get rtc writer")?
+                    .playout_delay(MediaTime::ZERO, MediaTime::ZERO);
+                let pt = writer
+                    .payload_params()
+                    .find(|&params| params.spec().codec == Codec::Opus)
+                    .unwrap()
+                    .pt();
+                let now = Instant::now();
+                writer.write(pt, now, MediaTime::from_micros(pts), buf)?;
+                Input::Timeout(Instant::now())
+            },
             Some((msg, addr)) = listener.read() => {
                 buf = msg;
                 Input::Receive(
@@ -315,13 +293,6 @@ pub async fn run(
 
         rtc.handle_input(input)?;
     };
-
-    for gstreamer in gstreamers {
-        gstreamer
-            .control_tx
-            .send(GStreamerControlMessage::Stop)
-            .ok();
-    }
 
     ret
 }

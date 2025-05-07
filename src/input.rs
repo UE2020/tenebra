@@ -54,8 +54,8 @@
  * reserved by Aspect.
  */
 
-use std::time::{Duration, Instant};
 use std::collections::HashSet;
+use std::time::{Duration, Instant};
 
 use log::*;
 
@@ -119,7 +119,7 @@ pub fn browser_code_to_key(code: &str) -> Option<Key> {
         "KeyP" => Some(Key::P),
         "BracketLeft" => Some(Key::LeftBrace), // Often [{ key
         "BracketRight" => Some(Key::RightBrace), // Often ]} key
-        "Enter" => Some(Key::Enter), // Main Enter key
+        "Enter" => Some(Key::Enter),           // Main Enter key
 
         // --- Third Row (Home Row) ---
         "CapsLock" => Some(Key::CapsLock),
@@ -133,7 +133,7 @@ pub fn browser_code_to_key(code: &str) -> Option<Key> {
         "KeyK" => Some(Key::K),
         "KeyL" => Some(Key::L),
         "Semicolon" => Some(Key::Semicolon), // Often ;: key
-        "Quote" => Some(Key::Apostrophe), // Often '" key
+        "Quote" => Some(Key::Apostrophe),    // Often '" key
         "Backslash" => Some(Key::Backslash), // Often \| key (ANSI)
 
         // --- Fourth Row (Bottom Row) ---
@@ -147,7 +147,7 @@ pub fn browser_code_to_key(code: &str) -> Option<Key> {
         "KeyN" => Some(Key::N),
         "KeyM" => Some(Key::M),
         "Comma" => Some(Key::Comma), // Often ,< key
-        "Period" => Some(Key::Dot), // Often .> key
+        "Period" => Some(Key::Dot),  // Often .> key
         "Slash" => Some(Key::Slash), // Often /? key
         "ShiftRight" => Some(Key::RightShift),
 
@@ -156,7 +156,7 @@ pub fn browser_code_to_key(code: &str) -> Option<Key> {
         "MetaLeft" => Some(Key::LeftMeta), // Windows/Super/Command key
         "AltLeft" => Some(Key::LeftAlt),
         "Space" => Some(Key::Space),
-        "AltRight" => Some(Key::RightAlt), // Often AltGr
+        "AltRight" => Some(Key::RightAlt),   // Often AltGr
         "MetaRight" => Some(Key::RightMeta), // Windows/Super/Command key
         "ContextMenu" => Some(Key::Compose), // Menu key
         "ControlRight" => Some(Key::RightCtrl),
@@ -190,7 +190,6 @@ pub fn browser_code_to_key(code: &str) -> Option<Key> {
         "NumpadComma" => Some(Key::KpComma), // Some numpads have comma instead/as well
         "NumpadEqual" => Some(Key::KpEqual), // Less common
         // Numpad Paren, +/- etc omitted as they often require Shift or aren't standard codes
-
         "Numpad0" => Some(Key::Kp0),
         "Numpad1" => Some(Key::Kp1),
         "Numpad2" => Some(Key::Kp2),
@@ -208,13 +207,13 @@ pub fn browser_code_to_key(code: &str) -> Option<Key> {
         "Hiragana" => Some(Key::Hiragana), // Often shared with Katakana key
         "KatakanaHiragana" => Some(Key::KatakanaHiragana), // Often the same key as above
         "ZenkakuHankaku" => Some(Key::ZenkakuHankaku), // Often `~ key on JIS layout
-        "Henkan" => Some(Key::Henkan), // Convert key
+        "Henkan" => Some(Key::Henkan),     // Convert key
         "Muhenkan" => Some(Key::Muhenkan), // Non-convert key
-        "IntlYen" => Some(Key::Yen), // Usually '¥|' key
+        "IntlYen" => Some(Key::Yen),       // Usually '¥|' key
 
         // --- Korean Keyboard Specific ---
         "Lang1" => Some(Key::Hanguel), // Often Hangul/English toggle
-        "Lang2" => Some(Key::Hanja), // Often Hanja key
+        "Lang2" => Some(Key::Hanja),   // Often Hanja key
 
         // --- Multimedia Keys (Common Mappings) ---
         "AudioVolumeMute" | "VolumeMute" => Some(Key::Mute),
@@ -226,7 +225,7 @@ pub fn browser_code_to_key(code: &str) -> Option<Key> {
         "MediaPlayPause" => Some(Key::PlayPause),
         "LaunchMail" => Some(Key::Mail),
         "LaunchApp2" | "SelectMedia" => Some(Key::Media), // Often Launch Media Player
-        "LaunchApp1" => Some(Key::Calc), // Often Launch Calculator
+        "LaunchApp1" => Some(Key::Calc),                  // Often Launch Calculator
         "BrowserSearch" => Some(Key::Search),
         "BrowserHome" => Some(Key::Homepage),
         "BrowserBack" => Some(Key::Back),
@@ -244,12 +243,12 @@ pub fn browser_code_to_key(code: &str) -> Option<Key> {
         // These might vary significantly or not report standard codes
         "BrightnessDown" => Some(Key::BrightnessDown),
         "BrightnessUp" => Some(Key::BrightnessUp),
-        "Eject" => None, // Not in Key enum, could map if needed
+        "Eject" => None,           // Not in Key enum, could map if needed
         "Help" => Some(Key::Help), // Sometimes mapped to Insert
 
         // --- Unidentified or Unmappable ---
         "Unidentified" => None, // Explicitly ignore
-        _ => None, // Any code not listed above is not mapped
+        _ => None,              // Any code not listed above is not mapped
     }
 }
 
@@ -290,7 +289,14 @@ pub fn do_input(
                 ..
             } => {
                 if r#type == "pen" {
-                    sim.pen(x + startx as i32, y + starty as i32, pressure, tilt_x, tilt_y).ok();
+                    sim.pen(
+                        x + startx as i32,
+                        y + starty as i32,
+                        pressure,
+                        tilt_x,
+                        tilt_y,
+                    )
+                    .ok();
                 }
             }
             InputCommand {
@@ -299,17 +305,17 @@ pub fn do_input(
                 y: Some(y),
                 id: Some(id),
                 ..
-            } => {
-                match r#type.as_str() {
-                    "touchstart" => {
-                        sim.touch_down(id, x + startx as i32, y + starty as i32).ok();
-                    }
-                    "touchmove" => {
-                        sim.touch_move(id, x + startx as i32, y + starty as i32).ok();
-                    }
-                    _ => {}
+            } => match r#type.as_str() {
+                "touchstart" => {
+                    sim.touch_down(id, x + startx as i32, y + starty as i32)
+                        .ok();
                 }
-            }
+                "touchmove" => {
+                    sim.touch_move(id, x + startx as i32, y + starty as i32)
+                        .ok();
+                }
+                _ => {}
+            },
             InputCommand {
                 r#type,
                 x: Some(x),
@@ -319,9 +325,7 @@ pub fn do_input(
                 "mousemove" => {
                     sim.move_mouse_rel(x, y)?;
                 }
-                "mousemoveabs" => {
-                    sim.move_mouse_abs(x + startx as i32, y + starty as i32)?
-                }
+                "mousemoveabs" => sim.move_mouse_abs(x + startx as i32, y + starty as i32)?,
                 "wheel" => {
                     sim.wheel(x, -y)?;
                 }
@@ -340,17 +344,15 @@ pub fn do_input(
                 r#type,
                 button: Some(button),
                 ..
-            } => {
-                match (button, r#type.as_str()) {
-                    (0, "mousedown") => sim.left_mouse_down()?,
-                    (0, "mouseup") => sim.left_mouse_up()?,
-                    (1, "mousedown") => sim.middle_mouse_down()?,
-                    (1, "mouseup") => sim.middle_mouse_up()?,
-                    (2, "mousedown") => sim.right_mouse_down()?,
-                    (2, "mouseup") => sim.right_mouse_up()?,
-                    _ => error!("Received bad mouse button: {}", button)
-                } 
-            }
+            } => match (button, r#type.as_str()) {
+                (0, "mousedown") => sim.left_mouse_down()?,
+                (0, "mouseup") => sim.left_mouse_up()?,
+                (1, "mousedown") => sim.middle_mouse_down()?,
+                (1, "mouseup") => sim.middle_mouse_up()?,
+                (2, "mousedown") => sim.right_mouse_down()?,
+                (2, "mouseup") => sim.right_mouse_up()?,
+                _ => error!("Received bad mouse button: {}", button),
+            },
             InputCommand {
                 r#type,
                 key: Some(key),
@@ -359,7 +361,8 @@ pub fn do_input(
                 let parsed_key = browser_code_to_key(&key);
                 if let Some(key) = parsed_key {
                     // fix capslock on iPad client
-                    if key == Key::CapsLock && last_capslock.elapsed() > Duration::from_millis(250) {
+                    if key == Key::CapsLock && last_capslock.elapsed() > Duration::from_millis(250)
+                    {
                         sim.key_down(key)?;
                         //std::thread::sleep(Duration::from_millis(16));
                         sim.key_up(key)?;
@@ -372,7 +375,7 @@ pub fn do_input(
                             held.insert(key);
                         }
                         "keyup" => sim.key_up(key)?,
-                        _ => error!("Received bad packet type: {}", r#type)
+                        _ => error!("Received bad packet type: {}", r#type),
                     }
 
                     // A SEVERE BUG in Safari means that that any keys that are pressed while Meta is held are never released.
