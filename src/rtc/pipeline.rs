@@ -108,6 +108,11 @@ pub struct AudioRecordingPipeline {
 }
 
 impl AudioRecordingPipeline {
+    #[cfg(not(target_os = "linux"))]
+    pub async fn new() -> Result<Self> {
+        todo!()
+    }
+
     #[cfg(target_os = "linux")]
     pub async fn new() -> Result<Self> {
         let (buffer_tx, buffer_rx) = unbounded_channel();
@@ -569,7 +574,7 @@ impl ScreenRecordingPipeline {
                 .property("key-int-max", 2560u32)
                 .build()?
         } else {
-            let enc = ElementFactory::make("mfh264enc")
+            ElementFactory::make("mfh264enc")
                 .property("low-latency", true)
                 .property("bframes", 0u32)
                 .property("cabac", false)
@@ -578,7 +583,7 @@ impl ScreenRecordingPipeline {
                 .property("vbv-buffer-size", config.vbv_buf_capacity)
                 .property("gop-size", 2560i32)
                 .property("quality-vs-speed", 100u32)
-                .build()?;
+                .build()?
         };
 
         elements.push(enc.clone());
@@ -640,6 +645,7 @@ impl ScreenRecordingPipeline {
                 .build(),
         );
 
+        info!("Prepared elements: {:?}", &elements);
         pipeline.add_many(&elements)?;
         Element::link_many(&elements)?;
         pipeline.set_state(State::Playing)?;
