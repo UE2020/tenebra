@@ -137,13 +137,14 @@ pub async fn run(
                         rtc.bwe()
                             .set_desired_bitrate(Bitrate::kbps(state.config.target_bitrate as u64));
 
+                        let config = state.config.clone();
                         match kind {
                             MediaKind::Video => {
                                 video = Some((
-                                    pipeline::ScreenRecordingPipeline::new(
-                                        state.config.clone(),
+                                    tokio::task::spawn_blocking(move || pipeline::ScreenRecordingPipeline::new(
+                                        config,
                                         offer.show_mouse,
-                                    )?,
+                                    )).await??,
                                     media_added.mid,
                                 ))
                             }
