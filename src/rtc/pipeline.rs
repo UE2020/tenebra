@@ -179,6 +179,7 @@ impl AudioRecordingPipeline {
                 .build(),
         );
 
+
         let pipeline = Pipeline::default();
         pipeline.add_many([&src, &src_capsfilter, &opusenc, appsink.upcast_ref()])?;
         Element::link_many([&src, &src_capsfilter, &opusenc, appsink.upcast_ref()])?;
@@ -511,7 +512,7 @@ impl ScreenRecordingPipeline {
                 .build(),
         );
 
-        elements.push(appsink);
+        elements.push(appsink.upcast_ref::<Element>().clone());
 
         pipeline.add_many(&elements)?;
         Element::link_many(&elements)?;
@@ -534,8 +535,6 @@ impl ScreenRecordingPipeline {
             .property("show-cursor", show_mouse)
             .build()?;
         elements.push(src);
-        let download = ElementFactory::make("d3d11download").build()?;
-        elements.push(download);
         let video_caps = gstreamer::Caps::builder("video/x-raw")
             .field("framerate", gstreamer::Fraction::new(60, 1))
             .build();
@@ -644,6 +643,8 @@ impl ScreenRecordingPipeline {
                 })
                 .build(),
         );
+
+        elements.push(appsink.upcast_ref::<Element>().clone());
 
         info!("Prepared elements: {:?}", &elements);
         pipeline.add_many(&elements)?;

@@ -137,7 +137,7 @@ pub async fn run(
                         rtc.bwe()
                             .set_desired_bitrate(Bitrate::kbps(state.config.target_bitrate as u64));
 
-                        /*match kind {
+                        match kind {
                             MediaKind::Video => {
                                 video = Some((
                                     pipeline::ScreenRecordingPipeline::new(
@@ -153,7 +153,7 @@ pub async fn run(
                                     media_added.mid,
                                 ))
                             }
-                        }*/
+                        }
                     }
                     Event::KeyframeRequest(_) => {
                         if let Some((ref video, _)) = video {
