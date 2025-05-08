@@ -326,7 +326,7 @@ async fn offer(
         )
         .await
         {
-            info!("Run task exited: {e:?}");
+            error!("Run task exited: {e:?}");
         }
 
         if let Some((gateway, port)) = gateway_and_port {
