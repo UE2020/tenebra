@@ -59,7 +59,7 @@ use bytecodec::{DecodeExt, EncodeExt as _};
 use std::net::{IpAddr, SocketAddr};
 use stun_codec::rfc5389::{attributes::XorMappedAddress, methods::BINDING, Attribute};
 use stun_codec::*;
-use tokio::net::{ToSocketAddrs, UdpSocket};
+use tokio::net::{lookup_host, ToSocketAddrs, UdpSocket};
 
 fn make_binding_request() -> anyhow::Result<Vec<u8>> {
     let request = Message::<Attribute>::new(
@@ -108,6 +108,10 @@ pub async fn get_addr<A: ToSocketAddrs>(
     socket: &UdpSocket,
     stun_server: A,
 ) -> anyhow::Result<SocketAddr> {
+    let stun_server = lookup_host(stun_server)
+        .await?
+        .find(|addr| addr.is_ipv4())
+        .context("No IPv4 address found for STUN server")?;
     socket
         .send_to(&make_binding_request()?, stun_server)
         .await?;
