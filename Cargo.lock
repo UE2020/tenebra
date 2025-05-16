@@ -1340,7 +1340,7 @@ dependencies = [
 [[package]]
 name = "input-device"
 version = "0.1.0"
-source = "git+https://github.com/UE2020/input-device.git?branch=main#580519e138e0b55a27dfa7d55185a6283134a815"
+source = "git+https://github.com/UE2020/input-device.git?branch=main#14b2f69535bce8223b2565f5f3b3dcbb7a75f0b7"
 dependencies = [
  "evdev",
  "log",

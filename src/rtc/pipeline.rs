@@ -535,25 +535,42 @@ impl ScreenRecordingPipeline {
             .property("show-cursor", show_mouse)
             .build()?;
         elements.push(src);
-        let video_caps = gstreamer::Caps::builder("video/x-raw")
-            .field("framerate", gstreamer::Fraction::new(60, 1))
-            .build();
+
+        let video_caps = if !config.vaapi {
+            gstreamer::Caps::builder("video/x-raw")
+                .field("framerate", gstreamer::Fraction::new(60, 1))
+                .build()
+        } else {
+            let caps_str = "video/x-raw(memory:D3D11Memory),framerate=60/1";
+            gstreamer::Caps::from_str(caps_str)?
+        };
+
         let video_capsfilter = ElementFactory::make("capsfilter")
             .property("caps", &video_caps)
             .build()?;
         elements.push(video_capsfilter);
 
-        let videoconvert = ElementFactory::make("videoconvert")
-            .property("n-threads", 4u32)
-            .build()?;
+        let videoconvert = if !config.vaapi {
+            ElementFactory::make("videoconvert")
+                .property("n-threads", 4u32)
+                .build()?
+        } else {
+            ElementFactory::make("d3d11convert")
+                .build()?
+        };
 
         elements.push(videoconvert);
 
         let format = if config.full_chroma { "Y444" } else { "NV12" };
 
-        let format_caps = gstreamer::Caps::builder("video/x-raw")
-            .field("format", format)
-            .build();
+        let format_caps = if !config.vaapi {
+            gstreamer::Caps::builder("video/x-raw")
+                .field("format", format)
+                .build()
+        } else {
+            let caps_str = "video/x-raw(memory:D3D11Memory),format=NV12";
+            gstreamer::Caps::from_str(caps_str)?
+        };
 
         info!("Format caps: {}", format_caps);
 
@@ -577,7 +594,7 @@ impl ScreenRecordingPipeline {
                 .property("low-latency", true)
                 .property("bframes", 0u32)
                 .property("cabac", false)
-                .property("rc-mode", 0u32)
+                .property_from_str("rc-mode", "cbr")
                 .property("bitrate", config.target_bitrate - 64)
                 .property("vbv-buffer-size", config.vbv_buf_capacity)
                 .property("gop-size", 2560i32)

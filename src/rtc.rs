@@ -292,7 +292,7 @@ pub async fn run(
             }
         };
 
-        rtc.handle_input(input)?;
+        rtc.handle_input(input).ok();
     };
 
     ret
