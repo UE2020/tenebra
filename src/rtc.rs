@@ -92,11 +92,12 @@ pub async fn run(
 
     let mut listener = tcp::Listener::listen(tcp_listener)?;
 
-    let mut video: (pipeline::ScreenRecordingPipeline, Option<Mid>) = (pipeline::ScreenRecordingPipeline::new(
-        state.config.clone(),
-        offer.show_mouse,
-    )?, None);
-    let mut audio: (pipeline::AudioRecordingPipeline, Option<Mid>) = (pipeline::AudioRecordingPipeline::new().await?, None);
+    let mut video: (pipeline::ScreenRecordingPipeline, Option<Mid>) = (
+        pipeline::ScreenRecordingPipeline::new(state.config.clone(), offer.show_mouse)?,
+        None,
+    );
+    let mut audio: (pipeline::AudioRecordingPipeline, Option<Mid>) =
+        (pipeline::AudioRecordingPipeline::new().await?, None);
 
     let ret = loop {
         // Poll output until we get a timeout. The timeout means we are either awaiting UDP socket input
@@ -143,11 +144,11 @@ pub async fn run(
                             MediaKind::Video => {
                                 video.0.start_pipeline();
                                 video.1 = Some(media_added.mid);
-                            },
+                            }
                             MediaKind::Audio => {
                                 audio.0.start_pipeline();
                                 audio.1 = Some(media_added.mid);
-                            },
+                            }
                         }
                     }
                     Event::KeyframeRequest(_) => {
@@ -163,9 +164,7 @@ pub async fn run(
                             bwe -= 64;
                         }
 
-                        
                         video.0.set_bitrate(bwe);
-
 
                         rtc.bwe().set_current_bitrate(Bitrate::kbps(bwe as _));
                         debug!("Set current bitrate to {}", bwe);

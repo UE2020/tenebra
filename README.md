@@ -40,7 +40,7 @@ Alternatively, use [Tenebra GTK](https://github.com/BlueCannonBall/tenebra-gtk) 
 
 ![image](https://github.com/user-attachments/assets/be8aa60a-b19e-4b1a-82cb-d41e613cf82c)
 
-## Using Hardware Accelerated Encoding (macOS & Linux only)
+## Using Hardware Accelerated Encoding (All Platforms)
 
 ### VA-API
 
@@ -50,6 +50,12 @@ On Linux, [VA-API](https://en.wikipedia.org/wiki/Video_Acceleration_API) can be 
 
 On macOS, [VideoToolbox](https://developer.apple.com/documentation/videotoolbox) can be used to perform hardware accelerated H.264 encoding. This can be enabled by setting the `hwencode` property in the config.toml to `true`. The `vtenc_h264` GStreamer element must be installed and USABLE.
 
+### Media Foundation Encoder
+
+On Windows, [Media Foundation](https://learn.microsoft.com/en-us/windows/win32/medfound/microsoft-media-foundation-sdk) can be used to perform hardware accelerated H.264 encoding. This can be enabled by setting the `hwencode` property in the config.toml to `true`. The `mfh264enc` GStreamer element must be installed and USABLE. Enable `hwencode` will also automatically enable the use of D3D11 for video format conversion.
+
 ## Touch input
 
-On Linux, Tenebra has support for receiving and emulating touch events (e.g., from an iPad client). The touch emulator is written in C for simplicity and uses uinput.h (this constitutes the only usage of `unsafe` in the project). Using uinput to emulate touch events may require special permissions. Reference your distribution's documentation for details.
+On Linux and Windows, Tenebra has support for receiving and emulating touch events (e.g. from an iPad client).
+
+On Linux, this requires permission to access uinput. Reference your distribution's documentation for details.

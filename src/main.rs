@@ -464,14 +464,19 @@ async fn main() -> Result<()> {
     let mut config_path = dirs::config_dir()
         .context("Failed to find config directory")?
         .join("tenebra");
-    std::fs::create_dir_all(&config_path)?;
+    std::fs::create_dir_all(&config_path).context("Failed to create config directory")?;
     config_path.push("config.toml");
     if !config_path.exists() {
-        std::fs::write(&config_path, include_bytes!("default.toml"))?;
+        std::fs::write(&config_path, include_bytes!("default.toml"))
+            .context("Failed to write default config")?;
+        bail!("No config file found. The default configuration file has been copied to {}. Before running Tenebra again, populate the config file.", config_path.display());
     }
 
     // read the config
-    let config: Config = toml::from_str(&std::fs::read_to_string(config_path)?)?;
+    let config: Config = toml::from_str(
+        &std::fs::read_to_string(config_path).context("Failed to read config file")?,
+    )
+    .context("Failed to parse config file")?;
 
     println!("{}", config);
 
@@ -489,8 +494,11 @@ async fn main() -> Result<()> {
             ports: ports.clone(),
         });
 
-    let tls_config =
-        RustlsConfig::from_pem(std::fs::read(&config.cert)?, std::fs::read(&config.key)?).await?;
+    let tls_config = RustlsConfig::from_pem(
+        std::fs::read(&config.cert).context("Failed to read certificate file")?,
+        std::fs::read(&config.key).context("Failed to read private key file")?,
+    )
+    .await?;
 
     spawn(async move {
         axum_server::bind_rustls(SocketAddr::from(([0, 0, 0, 0], config.port)), tls_config)

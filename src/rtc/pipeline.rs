@@ -179,7 +179,6 @@ impl AudioRecordingPipeline {
                 .build(),
         );
 
-
         let pipeline = Pipeline::default();
         pipeline.add_many([&src, &src_capsfilter, &opusenc, appsink.upcast_ref()])?;
         Element::link_many([&src, &src_capsfilter, &opusenc, appsink.upcast_ref()])?;
@@ -557,8 +556,7 @@ impl ScreenRecordingPipeline {
                 .property("n-threads", 4u32)
                 .build()?
         } else {
-            ElementFactory::make("d3d11convert")
-                .build()?
+            ElementFactory::make("d3d11convert").build()?
         };
 
         elements.push(videoconvert);
