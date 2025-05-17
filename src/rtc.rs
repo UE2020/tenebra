@@ -92,8 +92,11 @@ pub async fn run(
 
     let mut listener = tcp::Listener::listen(tcp_listener)?;
 
-    let mut video: Option<(pipeline::ScreenRecordingPipeline, Mid)> = None;
-    let mut audio: Option<(pipeline::AudioRecordingPipeline, Mid)> = None;
+    let mut video: (pipeline::ScreenRecordingPipeline, Option<Mid>) = (pipeline::ScreenRecordingPipeline::new(
+        state.config.clone(),
+        offer.show_mouse,
+    )?, None);
+    let mut audio: (pipeline::AudioRecordingPipeline, Option<Mid>) = (pipeline::AudioRecordingPipeline::new().await?, None);
 
     let ret = loop {
         // Poll output until we get a timeout. The timeout means we are either awaiting UDP socket input
@@ -115,7 +118,6 @@ pub async fn run(
             }
 
             Output::Event(v) => {
-                //println!("Received RTP event: {:?}", v);
                 match v {
                     Event::IceConnectionStateChange(IceConnectionState::Disconnected) => {
                         break Ok(());
@@ -137,29 +139,19 @@ pub async fn run(
                         rtc.bwe()
                             .set_desired_bitrate(Bitrate::kbps(state.config.target_bitrate as u64));
 
-                        let config = state.config.clone();
                         match kind {
                             MediaKind::Video => {
-                                video = Some((
-                                    tokio::task::spawn_blocking(move || pipeline::ScreenRecordingPipeline::new(
-                                        config,
-                                        offer.show_mouse,
-                                    )).await??,
-                                    media_added.mid,
-                                ))
-                            }
+                                video.0.start_pipeline();
+                                video.1 = Some(media_added.mid);
+                            },
                             MediaKind::Audio => {
-                                audio = Some((
-                                    pipeline::AudioRecordingPipeline::new().await?,
-                                    media_added.mid,
-                                ))
-                            }
+                                audio.0.start_pipeline();
+                                audio.1 = Some(media_added.mid);
+                            },
                         }
                     }
                     Event::KeyframeRequest(_) => {
-                        if let Some((ref video, _)) = video {
-                            video.force_keyframe();
-                        }
+                        video.0.force_keyframe();
                     }
                     Event::EgressBitrateEstimate(
                         BweKind::Twcc(bitrate) | BweKind::Remb(_, bitrate),
@@ -167,13 +159,13 @@ pub async fn run(
                         let mut bwe = (bitrate.as_u64() / 1000)
                             .clamp(500, state.config.target_bitrate as u64 + 3000)
                             as u32;
-                        if audio.is_some() {
+                        if audio.1.is_some() {
                             bwe -= 64;
                         }
 
-                        if let Some((ref video, _)) = video {
-                            video.set_bitrate(bwe);
-                        }
+                        
+                        video.0.set_bitrate(bwe);
+
 
                         rtc.bwe().set_current_bitrate(Bitrate::kbps(bwe as _));
                         debug!("Set current bitrate to {}", bwe);
@@ -212,15 +204,9 @@ pub async fn run(
 
         let input = tokio::select! {
             _ = tokio::time::sleep_until(time.into()) => Input::Timeout(Instant::now()),
-            Some((buf, pts)) = async {
-                if let Some((ref mut video, _)) = video {
-                    video.recv_frame().await
-                } else {
-                    std::future::pending().await
-                }
-            } => {
+            Some((buf, pts)) = video.0.recv_frame(), if video.1.is_some() => {
                 let writer = rtc
-                    .writer(video.as_ref().unwrap().1)
+                    .writer(video.1.unwrap())
                     .context("couldn't get rtc writer")?
                     .playout_delay(MediaTime::ZERO, MediaTime::ZERO);
                 let pt = writer
@@ -232,15 +218,9 @@ pub async fn run(
                 writer.write(pt, now, MediaTime::from_micros(pts), buf)?;
                 Input::Timeout(Instant::now())
             },
-            Some((buf, pts)) = async {
-                if let Some((ref mut audio, _)) = audio {
-                    audio.recv_frame().await
-                } else {
-                    std::future::pending().await
-                }
-            } => {
+            Some((buf, pts)) = audio.0.recv_frame(), if audio.1.is_some() => {
                 let writer = rtc
-                    .writer(audio.as_ref().unwrap().1)
+                    .writer(audio.1.unwrap())
                     .context("couldn't get rtc writer")?
                     .playout_delay(MediaTime::ZERO, MediaTime::ZERO);
                 let pt = writer

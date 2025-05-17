@@ -183,7 +183,6 @@ impl AudioRecordingPipeline {
         let pipeline = Pipeline::default();
         pipeline.add_many([&src, &src_capsfilter, &opusenc, appsink.upcast_ref()])?;
         Element::link_many([&src, &src_capsfilter, &opusenc, appsink.upcast_ref()])?;
-        pipeline.set_state(State::Playing)?;
 
         Ok(Self {
             pipeline,
@@ -193,6 +192,11 @@ impl AudioRecordingPipeline {
 
     pub async fn recv_frame(&mut self) -> Option<(Vec<u8>, u64)> {
         self.buffer_rx.recv().await
+    }
+
+    pub fn start_pipeline(&self) {
+        let pipeline_clone = self.pipeline.clone();
+        tokio::task::spawn_blocking(move || pipeline_clone.set_state(State::Playing).ok());
     }
 }
 
@@ -364,7 +368,6 @@ impl ScreenRecordingPipeline {
         info!("Prepared elements: {:?}", &elements);
         pipeline.add_many(&elements)?;
         Element::link_many(&elements)?;
-        pipeline.set_state(State::Playing)?;
 
         Ok(Self {
             config,
@@ -516,7 +519,6 @@ impl ScreenRecordingPipeline {
 
         pipeline.add_many(&elements)?;
         Element::link_many(&elements)?;
-        pipeline.set_state(State::Playing)?;
 
         Ok(Self {
             config,
@@ -666,7 +668,6 @@ impl ScreenRecordingPipeline {
         info!("Prepared elements: {:?}", &elements);
         pipeline.add_many(&elements)?;
         Element::link_many(&elements)?;
-        pipeline.set_state(State::Playing)?;
 
         Ok(Self {
             config,
@@ -709,6 +710,11 @@ impl ScreenRecordingPipeline {
 
     pub async fn recv_frame(&mut self) -> Option<(Vec<u8>, u64)> {
         self.buffer_rx.recv().await
+    }
+
+    pub fn start_pipeline(&self) {
+        let pipeline_clone = self.pipeline.clone();
+        tokio::task::spawn_blocking(move || pipeline_clone.set_state(State::Playing).ok());
     }
 }
 
