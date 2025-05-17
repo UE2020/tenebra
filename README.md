@@ -4,6 +4,8 @@
 
 # Tenebra
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/UE2020/tenebra)
+
 Tenebra is a remote desktop server based on modern video streaming technology written in Rust. Connect to Tenebra with a [compatible client](https://github.com/BlueCannonBall/lux) to view and control another machine's screen.
 
 ## Platform Support
