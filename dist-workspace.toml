@@ -32,8 +32,6 @@ install-updater = false
 "gstreamer1.0-gtk3" = "*"
 "gstreamer1.0-qt5" = "*"
 "gstreamer1.0-pulseaudio" = "*"
-libxdo-dev = "*"
-libxdo3 = "*"
 
 [dist.github-custom-runners]
 x86_64-unknown-linux-gnu = "ubuntu-latest"
