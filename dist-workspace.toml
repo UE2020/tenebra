@@ -34,4 +34,7 @@ install-updater = false
 "gstreamer1.0-pulseaudio" = "*"
 
 [dist.github-custom-runners]
-x86_64-unknown-linux-gnu = "ubuntu-latest"
+global = "ubuntu-latest"
+
+[dist.github-custom-runners.x86_64-unknown-linux-gnu]
+runner = "ubuntu-latest"
