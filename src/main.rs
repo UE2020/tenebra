@@ -451,7 +451,10 @@ async fn main() -> Result<()> {
     str0m::config::CryptoProvider::WinCrypto.install_process_default();
 
     // check if we're behind symmetric NAT
-    if stun::is_symmetric_nat().await? {
+    if stun::is_symmetric_nat()
+        .await
+        .context("Failed to check NAT")?
+    {
         bail!("You are behind a symmetric NAT. This configuration prevents STUN binding requests from establishing a proper connection. Please adjust your network settings or consult your network administrator.");
     }
 
