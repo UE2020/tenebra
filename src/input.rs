@@ -337,7 +337,7 @@ pub fn do_input(
                 ..
             } => {
                 if r#type.as_str() == "touchend" {
-                    sim.touch_up(id)?;
+                    sim.touch_up(id).ok();
                 }
             }
             InputCommand {

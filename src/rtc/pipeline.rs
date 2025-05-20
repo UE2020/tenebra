@@ -110,7 +110,10 @@ pub struct AudioRecordingPipeline {
 impl AudioRecordingPipeline {
     #[cfg(not(target_os = "linux"))]
     pub async fn new() -> Result<Self> {
-        todo!()
+        // TODO: no-op pipeline
+        let (buffer_tx, buffer_rx) = unbounded_channel();
+        let pipeline = Pipeline::default();
+        Ok(Self { pipeline, buffer_rx })
     }
 
     #[cfg(target_os = "linux")]
@@ -193,9 +196,15 @@ impl AudioRecordingPipeline {
         self.buffer_rx.recv().await
     }
 
+    #[cfg(target_os = "linux")]
     pub fn start_pipeline(&self) {
         let pipeline_clone = self.pipeline.clone();
         tokio::task::spawn_blocking(move || pipeline_clone.set_state(State::Playing).ok());
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    pub fn start_pipeline(&self) {
+        // TODO: no-op
     }
 }
 
