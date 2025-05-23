@@ -412,7 +412,7 @@ impl ScreenRecordingPipeline {
             .build()?;
         elements.push(video_capsfilter);
 
-        if config.fullchroma {
+        if config.full_chroma {
             let videoconvert = ElementFactory::make("videoconvert")
                 .property("n-threads", 4u32)
                 .build()?;
@@ -472,17 +472,20 @@ impl ScreenRecordingPipeline {
 
         elements.push(h264_capsfilter);
 
-        let parse = ElementFactory::make("h264parse")
-            .property("config-interval", -1)
-            .build()?;
         let final_caps = gstreamer::Caps::builder("video/x-h264")
             .field("stream-format", "byte-stream")
             .build();
-        let parse_capsfilter = ElementFactory::make("capsfilter")
-            .property("caps", &final_caps)
-            .build()?;
 
-        elements.push(parse_capsfilter);
+		if config.vaapi {
+			let parse = ElementFactory::make("h264parse")
+				.property("config-interval", -1)
+				.build()?;
+			let parse_capsfilter = ElementFactory::make("capsfilter")
+				.property("caps", &final_caps)
+				.build()?;
+			elements.push(parse);
+			elements.push(parse_capsfilter);
+		}
 
         let appsink = gstreamer_app::AppSink::builder()
             .caps(&final_caps)
