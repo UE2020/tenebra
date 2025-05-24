@@ -17,7 +17,6 @@ rustflags = ["-Ctarget-cpu=native"]
 rustflags = ["-Ctarget-cpu=native"]
 
 [target.x86_64-pc-windows-msvc]
-linker = "rust-lld.exe"
 rustflags = ["-Ctarget-cpu=native"]
 
 [target.x86_64-pc-windows-gnu]

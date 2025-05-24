@@ -4,3 +4,5 @@ xbox-live.pcapng
 /package
 package.tar.gz
 *.pem
+*.crt
+*.key
