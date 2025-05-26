@@ -108,12 +108,92 @@ pub struct AudioRecordingPipeline {
 }
 
 impl AudioRecordingPipeline {
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "macos")]
     pub async fn new() -> Result<Self> {
         // TODO: no-op pipeline
         let (buffer_tx, buffer_rx) = unbounded_channel();
         let pipeline = Pipeline::default();
-        Ok(Self { pipeline, buffer_rx })
+        Ok(Self {
+            pipeline,
+            buffer_rx,
+        })
+    }
+
+    #[cfg(target_os = "windows")]
+    pub async fn new() -> Result<Self> {
+        let (buffer_tx, buffer_rx) = unbounded_channel();
+        let src = ElementFactory::make("wasapisrc")
+            .property("loopback", true)
+            .build()?;
+        let src_capsfilter = ElementFactory::make("capsfilter")
+            .property(
+                "caps",
+                gstreamer::Caps::builder("audio/x-raw")
+                    .field("channels", 2)
+                    .build(),
+            )
+            .build()?;
+
+        let audioconvert = ElementFactory::make("audioconvert").build()?;
+
+        let opusenc = ElementFactory::make("opusenc")
+            // According to a comment in GStreamer's webrtcsink, this is required for Chrome
+            .property("perfect-timestamp", true)
+            .build()?;
+
+        let opus_caps = gstreamer::Caps::builder("audio/x-opus").build();
+
+        let appsink = gstreamer_app::AppSink::builder()
+            .caps(&opus_caps)
+            .drop(true)
+            .max_buffers(1)
+            .build();
+
+        appsink.set_callbacks(
+            gstreamer_app::AppSinkCallbacks::builder()
+                .new_sample(move |appsink| {
+                    let sample = appsink
+                        .pull_sample()
+                        .map_err(|_| gstreamer::FlowError::Eos)?;
+                    let buffer = sample.buffer().ok_or_else(|| {
+                        element_error!(
+                            appsink,
+                            gstreamer::ResourceError::Failed,
+                            ("Failed to get buffer from appsink")
+                        );
+
+                        gstreamer::FlowError::Error
+                    })?;
+
+                    let map = buffer.map_readable().map_err(|_| {
+                        element_error!(
+                            appsink,
+                            gstreamer::ResourceError::Failed,
+                            ("Failed to map buffer readable")
+                        );
+
+                        gstreamer::FlowError::Error
+                    })?;
+
+                    let packet = map.as_slice();
+
+                    let pts = buffer.pts().unwrap().useconds();
+
+                    // we can .ok() this, because if it DOES fail, the thread will be terminated soon
+                    buffer_tx.send((packet.to_vec(), pts)).ok();
+                    Ok(gstreamer::FlowSuccess::Ok)
+                })
+                .build(),
+        );
+
+        let pipeline = Pipeline::default();
+        pipeline.add_many([&src, &audioconvert, &src_capsfilter, &opusenc, appsink.upcast_ref()])?;
+        Element::link_many([&src, &audioconvert, &src_capsfilter, &opusenc, appsink.upcast_ref()])?;
+
+        Ok(Self {
+            pipeline,
+            buffer_rx,
+        })
     }
 
     #[cfg(target_os = "linux")]
@@ -134,6 +214,7 @@ impl AudioRecordingPipeline {
             .build()?;
 
         let opusenc = ElementFactory::make("opusenc")
+            // According to a comment in GStreamer's webrtcsink, this is required for Chrome
             .property("perfect-timestamp", true)
             .build()?;
 
@@ -196,13 +277,13 @@ impl AudioRecordingPipeline {
         self.buffer_rx.recv().await
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     pub fn start_pipeline(&self) {
         let pipeline_clone = self.pipeline.clone();
         tokio::task::spawn_blocking(move || pipeline_clone.set_state(State::Playing).ok());
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "macos")]
     pub fn start_pipeline(&self) {
         // TODO: no-op
     }
@@ -476,16 +557,16 @@ impl ScreenRecordingPipeline {
             .field("stream-format", "byte-stream")
             .build();
 
-		if config.vaapi {
-			let parse = ElementFactory::make("h264parse")
-				.property("config-interval", -1)
-				.build()?;
-			let parse_capsfilter = ElementFactory::make("capsfilter")
-				.property("caps", &final_caps)
-				.build()?;
-			elements.push(parse);
-			elements.push(parse_capsfilter);
-		}
+        if config.vaapi {
+            let parse = ElementFactory::make("h264parse")
+                .property("config-interval", -1)
+                .build()?;
+            let parse_capsfilter = ElementFactory::make("capsfilter")
+                .property("caps", &final_caps)
+                .build()?;
+            elements.push(parse);
+            elements.push(parse_capsfilter);
+        }
 
         let appsink = gstreamer_app::AppSink::builder()
             .caps(&final_caps)
@@ -545,6 +626,10 @@ impl ScreenRecordingPipeline {
         let mut elements = vec![];
         let pipeline = Pipeline::default();
         let src = ElementFactory::make("d3d11screencapturesrc")
+            .property("crop-x", config.startx)
+            .property("crop-y", config.starty)
+            .property_if_some("crop-width", config.endx.map(|endx| endx - config.startx))
+            .property_if_some("crop-height", config.endy.map(|endy| endy - config.starty))
             .property("show-cursor", show_mouse)
             .build()?;
         elements.push(src);
