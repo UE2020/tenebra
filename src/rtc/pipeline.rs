@@ -187,8 +187,20 @@ impl AudioRecordingPipeline {
         );
 
         let pipeline = Pipeline::default();
-        pipeline.add_many([&src, &audioconvert, &src_capsfilter, &opusenc, appsink.upcast_ref()])?;
-        Element::link_many([&src, &audioconvert, &src_capsfilter, &opusenc, appsink.upcast_ref()])?;
+        pipeline.add_many([
+            &src,
+            &audioconvert,
+            &src_capsfilter,
+            &opusenc,
+            appsink.upcast_ref(),
+        ])?;
+        Element::link_many([
+            &src,
+            &audioconvert,
+            &src_capsfilter,
+            &opusenc,
+            appsink.upcast_ref(),
+        ])?;
 
         Ok(Self {
             pipeline,
@@ -473,6 +485,16 @@ impl ScreenRecordingPipeline {
         let pipeline = Pipeline::default();
         elements.push(
             ElementFactory::make("avfvideosrc")
+                .property("screen-crop-x", config.startx)
+                .property("screen-crop-y", config.starty)
+                .property_if_some(
+                    "screen-crop-width",
+                    config.endx.map(|endx| endx - config.startx),
+                )
+                .property_if_some(
+                    "screen-crop-height",
+                    config.endy.map(|endy| endy - config.starty),
+                )
                 .property("capture-screen", true)
                 .property("capture-screen-cursor", show_mouse)
                 .build()?,
