@@ -444,11 +444,148 @@ fn default_vbv_buf_capacity() -> u32 {
     120
 }
 
+
+#[cfg(target_os = "windows")]
+fn main() -> Result<()> {
+    println!("Starting service");
+    windows_service::run()?;
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+mod windows_service {
+    use windows_service::{
+        define_windows_service,
+        service::{
+            ServiceControl, ServiceControlAccept, ServiceExitCode, ServiceState, ServiceStatus,
+            ServiceType,
+        },
+        service_control_handler::{self, ServiceControlHandlerResult},
+        service_dispatcher
+    };
+
+    use windows::Win32::System::StationsAndDesktops::{DESKTOP_ACCESS_FLAGS, HDESK, OpenInputDesktop, CloseDesktop, SetThreadDesktop, DF_ALLOWOTHERACCOUNTHOOK};
+
+    use anyhow::Result;
+
+    use std::time::Duration;
+    use std::ffi::OsString;
+    use tokio::sync::mpsc;
+
+    const SERVICE_NAME: &str = "Tenebra";
+    const SERVICE_TYPE: ServiceType = ServiceType::OWN_PROCESS;
+
+    pub fn run() -> Result<()> {
+        service_dispatcher::start(SERVICE_NAME, ffi_service_main)?;
+        Ok(())
+    }
+
+    define_windows_service!(ffi_service_main, service_main);
+
+    pub fn service_main(_arguments: Vec<OsString>) {
+        use std::fs::{create_dir_all, OpenOptions};
+        use std::io::Write;
+
+        let _ = create_dir_all("C:\\tenebra_debug");
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("C:\\tenebra_debug\\entry.log")
+            .unwrap();
+        writeln!(file, "service_main called").ok();
+
+        let mut env_vars = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("C:\\tenebra_debug\\env_vars.log").unwrap();
+
+        // Iterate over the environment variables and write them to the file
+        for (key, value) in std::env::vars() {
+            writeln!(env_vars, "{}={}", key, value).ok();
+        }
+
+        if let Err(e) = run_service() {
+            writeln!(file, "Service failed to start: {:?}", e).ok();
+        }
+    }
+
+    pub fn run_service() -> Result<()> {
+        let (tx, mut rx) = mpsc::channel(1);
+        let event_handler = move |control_event| -> ServiceControlHandlerResult {
+            match control_event {
+                ServiceControl::Interrogate => ServiceControlHandlerResult::NoError,
+                ServiceControl::Stop => {
+                    tx.try_send(()).unwrap();
+                    ServiceControlHandlerResult::NoError
+                }
+                ServiceControl::UserEvent(_code) => ServiceControlHandlerResult::NoError,
+                _ => ServiceControlHandlerResult::NotImplemented,
+            }
+        };
+
+        let status_handle = service_control_handler::register(SERVICE_NAME, event_handler)?;
+        status_handle.set_service_status(ServiceStatus {
+            service_type: SERVICE_TYPE,
+            current_state: ServiceState::Running,
+            controls_accepted: ServiceControlAccept::STOP,
+            exit_code: ServiceExitCode::Win32(0),
+            checkpoint: 0,
+            wait_hint: Duration::default(),
+            process_id: None,
+        })?;
+
+        #[cfg(target_os = "windows")]
+        sync_thread_desktop();
+
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(async move {
+                tokio::select! {
+                    _ = rx.recv() => Ok(()),
+                    res = crate::entrypoint() => res,
+                }
+            })?;
+
+        status_handle.set_service_status(ServiceStatus {
+            service_type: SERVICE_TYPE,
+            current_state: ServiceState::Stopped,
+            controls_accepted: ServiceControlAccept::empty(),
+            exit_code: ServiceExitCode::Win32(0),
+            checkpoint: 0,
+            wait_hint: Duration::default(),
+            process_id: None,
+        })?;
+
+        Ok(())
+    }
+
+    pub fn sync_thread_desktop() -> Option<HDESK> {
+        unsafe {
+            let hdesk = OpenInputDesktop(DF_ALLOWOTHERACCOUNTHOOK, false, DESKTOP_ACCESS_FLAGS(0x10000000)).ok()?;
+
+            SetThreadDesktop(hdesk).ok()?;
+
+            CloseDesktop(hdesk).ok()?;
+            Some(hdesk)
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
 #[tokio::main]
 async fn main() -> Result<()> {
+    entrypoint().await
+}
+
+async fn entrypoint() -> Result<()> {
     // WinCrypto simplifies build significantly on Windows
     #[cfg(target_os = "windows")]
     str0m::config::CryptoProvider::WinCrypto.install_process_default();
+
+    #[cfg(target_os = "windows")]
+    windows_service::sync_thread_desktop();
 
     // check if we're behind symmetric NAT
     if stun::is_symmetric_nat()
@@ -464,11 +601,19 @@ async fn main() -> Result<()> {
     gstreamer::init().unwrap();
 
     // get the config path
+    #[cfg(not(target_os = "windows"))]
     let mut config_path = dirs::config_dir()
         .context("Failed to find config directory")?
         .join("tenebra");
-    std::fs::create_dir_all(&config_path).context("Failed to create config directory")?;
+    #[cfg(not(target_os = "windows"))]
     config_path.push("config.toml");
+
+    #[cfg(target_os = "windows")]
+    let mut config_path = std::path::Path::new("C:\\tenebra.toml");
+
+    #[cfg(not(target_os = "windows"))]
+    std::fs::create_dir_all(&config_path).context("Failed to create config directory")?;
+
     if !config_path.exists() {
         std::fs::write(&config_path, include_bytes!("default.toml"))
             .context("Failed to write default config")?;
