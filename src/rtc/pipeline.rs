@@ -652,6 +652,7 @@ impl ScreenRecordingPipeline {
             .property("crop-y", config.starty)
             .property_if_some("crop-width", config.endx.map(|endx| endx - config.startx))
             .property_if_some("crop-height", config.endy.map(|endy| endy - config.starty))
+            .property_if_some("monitor-index", config.windows_monitor_index)
             .property("show-cursor", show_mouse)
             //.property_from_str("capture-api", "wgc")
             .build()?;
