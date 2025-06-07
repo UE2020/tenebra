@@ -278,6 +278,9 @@ pub fn do_input(
     let mut held: HashSet<Key> = HashSet::new();
 
     while let Some(msg) = rx.blocking_recv() {
+        #[cfg(target_os = "windows")]
+        let _ = crate::windows_service::sync_thread_desktop();
+
         match msg {
             InputCommand {
                 r#type,
