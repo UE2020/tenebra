@@ -101,6 +101,10 @@ pub mod keys;
 mod rtc;
 mod stun;
 
+// This module contains all code related to Windows service functionality
+#[cfg(target_os = "windows")]
+pub mod windows_service;
+
 pub struct AppError(anyhow::Error);
 
 impl IntoResponse for AppError {
@@ -447,11 +451,36 @@ fn default_vbv_buf_capacity() -> u32 {
     120
 }
 
+
+#[cfg(target_os = "windows")]
+fn main() -> Result<()> {
+    let args: Vec<String> = std::env::args().collect();
+    let option: Option<&str> = args.get(1).map(|s| s.as_str());
+    if let Some("--console") = option {
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(crate::entrypoint())?;
+    } else {
+        windows_service::run()?;
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
 #[tokio::main]
 async fn main() -> Result<()> {
+    entrypoint().await
+}
+
+async fn entrypoint() -> Result<()> {
     // WinCrypto simplifies build significantly on Windows
     #[cfg(target_os = "windows")]
     str0m::config::CryptoProvider::WinCrypto.install_process_default();
+
+    #[cfg(target_os = "windows")]
+    let _ = windows_service::sync_thread_desktop();
 
     // check if we're behind symmetric NAT
     if stun::is_symmetric_nat()
@@ -467,11 +496,19 @@ async fn main() -> Result<()> {
     gstreamer::init().unwrap();
 
     // get the config path
+    #[cfg(not(target_os = "windows"))]
     let mut config_path = dirs::config_dir()
         .context("Failed to find config directory")?
         .join("tenebra");
-    std::fs::create_dir_all(&config_path).context("Failed to create config directory")?;
+    #[cfg(not(target_os = "windows"))]
     config_path.push("config.toml");
+
+    #[cfg(target_os = "windows")]
+    let mut config_path = std::path::Path::new("C:\\tenebra.toml");
+
+    #[cfg(not(target_os = "windows"))]
+    std::fs::create_dir_all(&config_path).context("Failed to create config directory")?;
+
     if !config_path.exists() {
         std::fs::write(&config_path, include_bytes!("default.toml"))
             .context("Failed to write default config")?;

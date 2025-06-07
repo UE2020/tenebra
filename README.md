@@ -23,11 +23,21 @@ Tenebra uses GStreamer to record the screen in a cross-platform way, and to enco
 
 [GStreamer Installs](https://gstreamer.freedesktop.org/download/)
 
-To use a Github release, you only need the runtime package. To build Tenebra, you need to install both the development and the runtime packages.
+To use a Github release, you only need the runtime package. To build Tenebra, you need to install both the development and the runtime packages. On Windows, GStreamer's bin folder must be added to the PATH.
 
-After the server is built with `cargo build --release`, you may run it:
+After the server is built with `cargo build --release`, you may run it. On macOS and Windows, this is as easy as:
 ```
 ./target/release/tenebra
+```
+
+But on Windows, Tenebra must run as a service in order to have the necessary integrity level to interact with all parts of the desktop. First, a service must be registered:
+```
+sc create Tenebra binPath= "C:\path\to\tenebra\exe"
+```
+
+Then, starting Tenebra is as easy as:
+```
+sc start Tenebra
 ```
 
 However, Tenebra reads from a config file which must be populated before running Tenebra. If it is not populated, Tenebra will fail before copying the default config file to the config file directory.
@@ -56,8 +66,8 @@ On macOS, [VideoToolbox](https://developer.apple.com/documentation/videotoolbox)
 
 On Windows, [Media Foundation](https://learn.microsoft.com/en-us/windows/win32/medfound/microsoft-media-foundation-sdk) can be used to perform hardware accelerated H.264 encoding. This can be enabled by setting the `hwencode` property in the config.toml to `true`. The `mfh264enc` GStreamer element must be installed and USABLE. Enable `hwencode` will also automatically enable the use of D3D11 for video format conversion.
 
-## Touch input
+## Touch input & pen input
 
-On Linux and Windows, Tenebra has support for receiving and emulating touch events (e.g. from an iPad client).
+On Linux and Windows, Tenebra has support for receiving and emulating touch and pen events (e.g. from an iPad client).
 
 On Linux, this requires permission to access uinput. Reference your distribution's documentation for details.
