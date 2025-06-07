@@ -7,22 +7,15 @@ use windows_service::{
     service_control_handler::{self, ServiceControlHandlerResult},
     service_dispatcher
 };
-
 use windows::Win32::System::StationsAndDesktops::{DESKTOP_ACCESS_FLAGS, HDESK, OpenInputDesktop, CloseDesktop, SetThreadDesktop, DF_ALLOWOTHERACCOUNTHOOK};
-
 use windows::Win32::Foundation::*;
-
 use windows::Win32::System::RemoteDesktop::WTSGetActiveConsoleSessionId;
-
 use windows::Win32::System::Threading::{
     CreateProcessAsUserW, GetCurrentProcess, OpenProcessToken, PROCESS_INFORMATION, STARTUPINFOW,
-    CREATE_NEW_CONSOLE, CREATE_UNICODE_ENVIRONMENT,
+    CREATE_NO_WINDOW, CREATE_UNICODE_ENVIRONMENT,
 };
-
 use windows::Win32::Security::*;
-
 use windows::Win32::System::Environment::{DestroyEnvironmentBlock, CreateEnvironmentBlock};
-
 use windows::core::{PCWSTR, PWSTR};
 
 use anyhow::Result;
@@ -96,7 +89,6 @@ pub fn run_service() -> Result<()> {
 
     // Launch the process
     unsafe {
-
         let mut token_handle = HANDLE::default();
         OpenProcessToken(
             GetCurrentProcess(),
@@ -177,7 +169,7 @@ pub fn run_service() -> Result<()> {
             None,
             None,
             false,
-            CREATE_UNICODE_ENVIRONMENT | CREATE_NEW_CONSOLE,
+            CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
             Some(env_block),
             None,
             &si,
