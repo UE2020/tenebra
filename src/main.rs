@@ -392,6 +392,7 @@ pub struct AppState {
     config: Config,
 }
 
+#[allow(unused)]
 #[derive(Deserialize, Clone, Debug)]
 struct Config {
     target_bitrate: u32,
@@ -400,6 +401,8 @@ struct Config {
     starty: u32,
     endx: Option<u32>,
     endy: Option<u32>,
+    // Windows-only
+    windows_monitor_index: Option<i32>,
     port: u16,
     password: String,
     sound_forwarding: bool,
