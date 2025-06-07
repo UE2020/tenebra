@@ -43,7 +43,7 @@ sc start Tenebra
 However, Tenebra reads from a config file which must be populated before running Tenebra. If it is not populated, Tenebra will fail before copying the default config file to the config file directory.
 
 * On **Linux** the config file is at `$XDG_CONFIG_HOME`/tenebra/config.toml or `$HOME`/.config/tenebra/config.toml (e.g. /home/alice/.config/tenebra/config.toml)
-* On **Windows** the config file is at `{FOLDERID_RoamingAppData}` (e.g. C:\Users\Alice\AppData\Roaming)
+* On **Windows** the config file is at `C:\tenebra\config.toml`
 * On **macOS** the config file is at `$HOME`/Library/Application Support (e.g. /Users/Alice/Library/Application Support)
 
 [See the default config file.](src/default.toml)

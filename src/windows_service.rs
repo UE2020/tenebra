@@ -25,6 +25,8 @@ use std::cell::Cell;
 use std::time::Duration;
 use std::ffi::{OsStr, OsString};
 use std::os::windows::ffi::OsStrExt;
+use std::io::Write;
+use std::fs::{File, create_dir_all};
 
 const SERVICE_NAME: &str = "Tenebra";
 const SERVICE_TYPE: ServiceType = ServiceType::OWN_PROCESS;
@@ -57,8 +59,8 @@ pub fn run() -> Result<()> {
 define_windows_service!(ffi_service_main, service_main);
 
 pub fn service_main(_arguments: Vec<OsString>) {
-    use std::io::Write;
-    let mut file = std::fs::File::create("C:\\tenebra_log.txt").unwrap();
+    create_dir_all("C:\\tenebra").unwrap();
+    let mut file = File::create("C:\\tenebra\\tenebra_log.txt").unwrap();
     unsafe { std::env::set_var("RUST_BACKTRACE", "1"); }
     if let Err(e) = run_service() {
         writeln!(&mut file, "Error: {:?}", e).unwrap();
