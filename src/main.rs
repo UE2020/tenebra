@@ -501,13 +501,13 @@ async fn entrypoint() -> Result<()> {
         .context("Failed to find config directory")?
         .join("tenebra");
     #[cfg(not(target_os = "windows"))]
+    std::fs::create_dir_all(&config_path).context("Failed to create config directory")?;
+
+    #[cfg(not(target_os = "windows"))]
     config_path.push("config.toml");
 
     #[cfg(target_os = "windows")]
-    let mut config_path = std::path::Path::new("C:\\tenebra\\config.toml");
-
-    #[cfg(not(target_os = "windows"))]
-    std::fs::create_dir_all(&config_path).context("Failed to create config directory")?;
+    let config_path = std::path::Path::new("C:\\tenebra\\config.toml");
 
     if !config_path.exists() {
         std::fs::write(&config_path, include_bytes!("default.toml"))
