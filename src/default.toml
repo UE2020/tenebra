@@ -3,8 +3,8 @@ startx = 0
 starty = 0
 port = 8080
 password = "placeholder"
-sound_forwarding = true  # Linux only: other platforms will behave as if this is always false
-hwencode = false         # Linux and macOS only: other platforms will behave as if this is always false
+sound_forwarding = true  # Windows & Linux only: other platforms will behave as if this is always false
+hwencode = false
 vapostproc = false       # Linux only: other platforms will behave as if this is always false
 no_bwe = false
 full_chroma = false      # full_chroma cannot be used in combination with hwencode
@@ -12,3 +12,8 @@ tcp_upnp = true
 vbv_buf_capacity = 120   # Not required, default is 120
 cert = "/path/to/cert"
 key = "/path/to/key"
+
+# windows_monitor_index = -1 # Windows-only. -1 uses the primary monitor and is the default
+# windows_capture-api = "dxgi" # Windows-only: "dxgi" will use the desktop duplication capture API, "wgc" will use the Windows Graphics Capture API, "dxgi" is the default
+
+# Use "wgc" if the cursor is showing up when it shouldn't be
