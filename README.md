@@ -13,9 +13,11 @@ Tenebra is a remote desktop server based on modern video streaming technology wr
 | Platform    | Compatibility |
 | --------    | ------------- |
 | Linux/X11 | Excellent |
-| Mac | Almost excellent (the mouse cursor doesn't automatically appear when the cursor moves, so client-side mouse is a requirement) |
-| Windows | Okay (performance may be poor) |
+| Mac | Good[1] |
+| Windows | Excellent |
 | Linux/Wayland | None; [pipewiresrc](https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/4035) [is](https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/4137) [too](https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/3149) [slow](https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/3910) |
+
+[1] Latency seems to be higher. Sound forwarding and pen/touch input are not implemented.
 
 ## Usage
 
