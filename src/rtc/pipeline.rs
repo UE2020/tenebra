@@ -720,7 +720,7 @@ impl ScreenRecordingPipeline {
                 .property("bitrate", config.target_bitrate - 64)
                 .property("vbv-buffer-size", config.vbv_buf_capacity)
                 .property("gop-size", 2560i32)
-                .property("quality-vs-speed", 100u32)
+                .property("quality-vs-speed", config.windows_quality_vs_speed.unwrap_or(100u32))
                 .build()?
         };
 

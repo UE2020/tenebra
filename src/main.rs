@@ -405,6 +405,7 @@ struct Config {
     // Windows-only
     windows_monitor_index: Option<i32>,
     windows_capture_api: Option<String>,
+    windows_quality_vs_speed: Option<u32>,
 
     port: u16,
     password: String,

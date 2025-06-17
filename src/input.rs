@@ -377,7 +377,10 @@ pub fn do_input(
                             sim.key_down(key)?;
                             held.insert(key);
                         }
-                        "keyup" => sim.key_up(key)?,
+                        "keyup" => {
+                            sim.key_up(key)?;
+                            held.remove(&key);
+                        }
                         _ => error!("Received bad packet type: {}", r#type),
                     }
 
