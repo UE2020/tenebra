@@ -94,8 +94,6 @@ use tokio::{spawn, sync::mpsc::UnboundedSender};
 
 use keys::{Keys, Permissions};
 
-use notify_rust::Notification;
-
 mod input;
 pub mod keys;
 mod rtc;
@@ -305,17 +303,6 @@ async fn offer(
     let json_str = serde_json::to_string(&answer)?;
     let b64 = BASE64_STANDARD.encode(&json_str);
 
-    // This segfaults on Windows...
-    #[cfg(not(target_os = "windows"))]
-    Notification::new()
-        .summary("Tenebra Server Alert")
-        .icon("network-connect-symbolic")
-        .body(&format!(
-            "Accepted new connection from {}\nPermission level: {:?}",
-            req_addr, permissions
-        ))
-        .show()?;
-
     let state_cloned = state.clone();
     spawn(async move {
         if let Err(e) = rtc::run(
@@ -401,8 +388,12 @@ struct Config {
     starty: u32,
     endx: Option<u32>,
     endy: Option<u32>,
+
     // Windows-only
     windows_monitor_index: Option<i32>,
+    windows_capture_api: Option<String>,
+    windows_quality_vs_speed: Option<u32>,
+
     port: u16,
     password: String,
     sound_forwarding: bool,
