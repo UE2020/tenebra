@@ -342,9 +342,7 @@ impl ScreenRecordingPipeline {
         elements.push(video_capsfilter);
 
         let videoconvert = if config.vapostproc {
-            ElementFactory::make("vapostproc")
-                .property_from_str("scale-method", "fast")
-                .build()?
+            ElementFactory::make("vapostproc").build()?
         } else {
             ElementFactory::make("videoconvert")
                 .property("n-threads", 4u32)
