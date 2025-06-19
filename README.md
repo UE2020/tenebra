@@ -27,7 +27,7 @@ Tenebra uses GStreamer to record the screen in a cross-platform way, and to enco
 
 To use a Github release, you only need the runtime package. To build Tenebra, you need to install both the development and the runtime packages. On Windows, GStreamer's bin folder must be added to the PATH.
 
-After the server is built with `cargo build --release`, you may run it. On macOS and Windows, this is as easy as:
+After the server is built with `cargo build --release`, you may run it. On macOS and Linux, this is as easy as:
 ```
 ./target/release/tenebra
 ```
@@ -45,7 +45,7 @@ sc start Tenebra
 However, Tenebra reads from a config file which must be populated before running Tenebra. If it is not populated, Tenebra will fail before copying the default config file to the config file directory.
 
 * On **Linux** the config file is at `$XDG_CONFIG_HOME`/tenebra/config.toml or `$HOME`/.config/tenebra/config.toml (e.g. /home/alice/.config/tenebra/config.toml)
-* On **Windows** the config file is at `C:\tenebra\config.toml`
+* On **Windows** the config file is at C:\tenebra\config.toml
 * On **macOS** the config file is at `$HOME`/Library/Application Support (e.g. /Users/Alice/Library/Application Support)
 
 [See the default config file.](src/default.toml)
