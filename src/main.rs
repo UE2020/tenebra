@@ -152,7 +152,7 @@ async fn offer(
     ConnectInfo(req_addr): ConnectInfo<SocketAddr>,
     Json(payload): Json<CreateOffer>,
 ) -> Result<(StatusCode, Json<ResponseOffer>), AppError> {
-    info!("Received offer");
+    info!("Received offer from {}", req_addr);
     let permissions = if let Some(ref password) = payload.password {
         if *password != state.config.password {
             return Ok((
