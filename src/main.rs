@@ -447,14 +447,18 @@ fn default_vbv_buf_capacity() -> u32 {
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let option: Option<&str> = args.get(1).map(|s| s.as_str());
-    if let Some("--console") = option {
-        tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .unwrap()
-            .block_on(crate::entrypoint())?;
-    } else {
-        windows_service::run()?;
+    match option {
+        Some("--console") => {
+            tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(crate::entrypoint())?;
+        },
+        Some("--version") => {
+            println!("v{}", env!("CARGO_PKG_VERSION"));
+        },
+        _ => { windows_service::run()?; }
     }
     Ok(())
 }
@@ -462,7 +466,15 @@ fn main() -> Result<()> {
 #[cfg(not(target_os = "windows"))]
 #[tokio::main]
 async fn main() -> Result<()> {
-    entrypoint().await
+    let args: Vec<String> = std::env::args().collect();
+    let option: Option<&str> = args.get(1).map(|s| s.as_str());
+    match option {
+        Some("--version") => {
+            println!("v{}", env!("CARGO_PKG_VERSION"));
+            Ok(())
+        },
+        _ => { entrypoint().await }
+    }
 }
 
 async fn entrypoint() -> Result<()> {
