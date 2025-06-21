@@ -2404,9 +2404,9 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "str0m"
-version = "0.8.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b3e9d7aa295a1f2af6c92e0ad254fe807487a25c7b0360b4d697bb445db9164"
+checksum = "c7f9fdffeb677e1d5d2cf84993f865143680b8e5eece3396fa488d43b34c1245"
 dependencies = [
  "combine",
  "crc",
