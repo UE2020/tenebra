@@ -98,6 +98,8 @@ mod input;
 pub mod keys;
 mod rtc;
 mod stun;
+#[cfg(target_os = "linux")]
+mod wayland;
 
 // This module contains all code related to Windows service functionality
 #[cfg(target_os = "windows")]

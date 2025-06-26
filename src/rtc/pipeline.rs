@@ -69,6 +69,8 @@ use anyhow::{Context, Result};
 use log::*;
 
 use crate::Config;
+#[cfg(target_os = "linux")]
+use crate::wayland::{DisplayProtocol, get_pipewire_fd};
 
 #[cfg(target_os = "linux")]
 async fn get_pulseaudio_monitor_name() -> Result<String> {
@@ -321,18 +323,42 @@ impl ScreenRecordingPipeline {
         let (buffer_tx, buffer_rx) = unbounded_channel();
         let mut elements = vec![];
         let pipeline = Pipeline::default();
-        elements.push(
-            ElementFactory::make("ximagesrc")
-                .property("use-damage", false)
-                .property("startx", config.startx)
-                .property("starty", config.starty)
-                .property_if_some("endx", config.endx)
-                .property_if_some("endy", config.endy)
-                .property("show-pointer", show_mouse)
-                .property("blocksize", 16384u32)
-                .property("remote", true)
-                .build()?,
-        );
+        
+        // Detect display protocol
+        let display_protocol = DisplayProtocol::detect();
+        info!("Detected display protocol: {:?}", display_protocol);
+        
+        // Create the appropriate source element based on display protocol
+        let src_element = match display_protocol {
+            DisplayProtocol::Wayland => {
+                // For Wayland, we need to ensure the screencast is set up
+                if let Some(fd) = get_pipewire_fd() {
+                    info!("Using pipewiresrc for Wayland capture");
+                    ElementFactory::make("pipewiresrc")
+                        .property("fd", fd.as_raw_fd())
+                        .property("blocksize", 16384u32)
+                        .build()?
+                } else {
+                    anyhow::bail!("Wayland screencast not initialized. Call setup_wayland_screencast() first.");
+                }
+            }
+            DisplayProtocol::X11 => {
+                info!("Using ximagesrc for X11 capture");
+                ElementFactory::make("ximagesrc")
+                    .property("use-damage", false)
+                    .property("startx", config.startx)
+                    .property("starty", config.starty)
+                    .property_if_some("endx", config.endx)
+                    .property_if_some("endy", config.endy)
+                    .property("show-pointer", show_mouse)
+                    .property("blocksize", 16384u32)
+                    .property("remote", true)
+                    .build()?
+            }
+        };
+        
+        elements.push(src_element);
+        
         let video_caps = gstreamer::Caps::builder("video/x-raw")
             .field("framerate", gstreamer::Fraction::new(60, 1))
             .build();

@@ -6,6 +6,26 @@ use ashpd::desktop::{
     PersistMode,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum DisplayProtocol {
+    X11,
+    Wayland,
+}
+
+impl DisplayProtocol {
+    pub fn detect() -> Self {
+        // Check for Wayland environment variables
+        if std::env::var("WAYLAND_DISPLAY").is_ok() {
+            DisplayProtocol::Wayland
+        } else if std::env::var("DISPLAY").is_ok() {
+            DisplayProtocol::X11
+        } else {
+            // Default to X11 if neither is set (fallback)
+            DisplayProtocol::X11
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct PipewireDisplay {
     pub streams: Streams,
@@ -45,4 +65,8 @@ pub async fn setup_wayland_screencast() -> anyhow::Result<()> {
         .unwrap();
 
     Ok(())
+}
+
+pub fn get_pipewire_fd() -> Option<OwnedFd> {
+    STREAMS.get().map(|display| display.file_descriptor.try_clone().unwrap())
 }

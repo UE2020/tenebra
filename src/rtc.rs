@@ -92,6 +92,21 @@ pub async fn run(
 
     let mut listener = tcp::Listener::listen(tcp_listener)?;
 
+    // Initialize Wayland screencast if running under Wayland
+    #[cfg(target_os = "linux")]
+    {
+        use crate::wayland::{DisplayProtocol, setup_wayland_screencast};
+        let display_protocol = DisplayProtocol::detect();
+        if display_protocol == DisplayProtocol::Wayland {
+            info!("Initializing Wayland screencast...");
+            if let Err(e) = setup_wayland_screencast().await {
+                error!("Failed to initialize Wayland screencast: {}", e);
+                anyhow::bail!("Wayland screencast initialization failed: {}", e);
+            }
+            info!("Wayland screencast initialized successfully");
+        }
+    }
+
     let mut video: (pipeline::ScreenRecordingPipeline, Option<Mid>) = (
         pipeline::ScreenRecordingPipeline::new(state.config.clone(), offer.show_mouse)?,
         None,
