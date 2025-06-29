@@ -142,7 +142,10 @@ fn is_bad_ip(ip: &std::net::IpAddr) -> bool {
     match ip {
         std::net::IpAddr::V4(v4) => v4.is_loopback() || v4.is_link_local(),
         std::net::IpAddr::V6(v6) => {
-            v6.is_loopback() || v6.is_unspecified() || v6.is_unique_local() || v6.is_unicast_link_local()
+            v6.is_loopback()
+                || v6.is_unspecified()
+                || v6.is_unique_local()
+                || v6.is_unicast_link_local()
         }
     }
 }
@@ -271,8 +274,7 @@ async fn offer(
 
             state.ports.lock().unwrap().push(port);
 
-            let global_ip = gateway.get_external_ip().await.unwrap();
-            let global_addr = SocketAddr::new(global_ip, port);
+            let global_addr = SocketAddr::new(stun_addr.ip(), port);
             info!("TCP server has been opened at {} globally", global_addr);
             rtc.add_local_candidate(Candidate::server_reflexive(
                 global_addr,
@@ -442,7 +444,6 @@ fn default_vbv_buf_capacity() -> u32 {
     120
 }
 
-
 #[cfg(target_os = "windows")]
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
@@ -454,11 +455,13 @@ fn main() -> Result<()> {
                 .build()
                 .unwrap()
                 .block_on(crate::entrypoint())?;
-        },
+        }
         Some("--version") => {
             println!("v{}", env!("CARGO_PKG_VERSION"));
-        },
-        _ => { windows_service::run()?; }
+        }
+        _ => {
+            windows_service::run()?;
+        }
     }
     Ok(())
 }
@@ -472,8 +475,8 @@ async fn main() -> Result<()> {
         Some("--version") => {
             println!("v{}", env!("CARGO_PKG_VERSION"));
             Ok(())
-        },
-        _ => { entrypoint().await }
+        }
+        _ => entrypoint().await,
     }
 }
 

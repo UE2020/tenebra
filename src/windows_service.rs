@@ -1,3 +1,16 @@
+use windows::core::{PCWSTR, PWSTR};
+use windows::Win32::Foundation::*;
+use windows::Win32::Security::*;
+use windows::Win32::System::Environment::{CreateEnvironmentBlock, DestroyEnvironmentBlock};
+use windows::Win32::System::RemoteDesktop::WTSGetActiveConsoleSessionId;
+use windows::Win32::System::StationsAndDesktops::{
+    CloseDesktop, OpenInputDesktop, SetThreadDesktop, DESKTOP_ACCESS_FLAGS,
+    DF_ALLOWOTHERACCOUNTHOOK, HDESK,
+};
+use windows::Win32::System::Threading::{
+    CreateProcessAsUserW, GetCurrentProcess, OpenProcessToken, CREATE_NO_WINDOW,
+    CREATE_UNICODE_ENVIRONMENT, PROCESS_INFORMATION, STARTUPINFOW,
+};
 use windows_service::{
     define_windows_service,
     service::{
@@ -5,28 +18,18 @@ use windows_service::{
         ServiceType,
     },
     service_control_handler::{self, ServiceControlHandlerResult},
-    service_dispatcher
+    service_dispatcher,
 };
-use windows::Win32::System::StationsAndDesktops::{DESKTOP_ACCESS_FLAGS, HDESK, OpenInputDesktop, CloseDesktop, SetThreadDesktop, DF_ALLOWOTHERACCOUNTHOOK};
-use windows::Win32::Foundation::*;
-use windows::Win32::System::RemoteDesktop::WTSGetActiveConsoleSessionId;
-use windows::Win32::System::Threading::{
-    CreateProcessAsUserW, GetCurrentProcess, OpenProcessToken, PROCESS_INFORMATION, STARTUPINFOW,
-    CREATE_NO_WINDOW, CREATE_UNICODE_ENVIRONMENT,
-};
-use windows::Win32::Security::*;
-use windows::Win32::System::Environment::{DestroyEnvironmentBlock, CreateEnvironmentBlock};
-use windows::core::{PCWSTR, PWSTR};
 
 use anyhow::Result;
 
 use core::ffi::c_void;
 use std::cell::Cell;
-use std::time::Duration;
 use std::ffi::{OsStr, OsString};
-use std::os::windows::ffi::OsStrExt;
+use std::fs::{create_dir_all, File};
 use std::io::Write;
-use std::fs::{File, create_dir_all};
+use std::os::windows::ffi::OsStrExt;
+use std::time::Duration;
 
 const SERVICE_NAME: &str = "Tenebra";
 const SERVICE_TYPE: ServiceType = ServiceType::OWN_PROCESS;
@@ -61,7 +64,9 @@ define_windows_service!(ffi_service_main, service_main);
 pub fn service_main(_arguments: Vec<OsString>) {
     create_dir_all("C:\\tenebra").unwrap();
     let mut file = File::create("C:\\tenebra\\tenebra_log.txt").unwrap();
-    unsafe { std::env::set_var("RUST_BACKTRACE", "1"); }
+    unsafe {
+        std::env::set_var("RUST_BACKTRACE", "1");
+    }
     if let Err(e) = run_service() {
         writeln!(&mut file, "Error: {:?}", e).unwrap();
     }
@@ -97,7 +102,9 @@ pub fn run_service() -> Result<()> {
             TOKEN_ADJUST_PRIVILEGES | TOKEN_DUPLICATE | TOKEN_QUERY,
             &mut token_handle,
         )?;
-        let _token_guard = RAIIGuard::new(|| { let _ = CloseHandle(token_handle); });
+        let _token_guard = RAIIGuard::new(|| {
+            let _ = CloseHandle(token_handle);
+        });
 
         // Give ourselves SeTcbPrivilege
         let mut luid = LUID::default();
@@ -113,7 +120,7 @@ pub fn run_service() -> Result<()> {
             token_handle,
             false, // Do not disable all other privileges
             Some(&new_privs),
-            0, // Buffer length for previous state (not needed)
+            0,    // Buffer length for previous state (not needed)
             None, // Pointer to previous state (not needed)
             None, // Return length (not needed)
         )?;
@@ -127,7 +134,9 @@ pub fn run_service() -> Result<()> {
             TokenPrimary,
             &mut new_token_handle,
         )?;
-        let _new_token_guard = RAIIGuard::new(|| { let _ = CloseHandle(new_token_handle); });
+        let _new_token_guard = RAIIGuard::new(|| {
+            let _ = CloseHandle(new_token_handle);
+        });
 
         // Get the session ID of the active user's session
         let sid = WTSGetActiveConsoleSessionId();
@@ -144,7 +153,9 @@ pub fn run_service() -> Result<()> {
 
         let mut env_block: *mut c_void = std::ptr::null_mut();
         CreateEnvironmentBlock(&mut env_block, Some(new_token_handle), false)?; // Use default env
-        let _env_block_guard = RAIIGuard::new(|| { let _ = DestroyEnvironmentBlock(env_block); });
+        let _env_block_guard = RAIIGuard::new(|| {
+            let _ = DestroyEnvironmentBlock(env_block);
+        });
 
         let mut si: STARTUPINFOW = std::mem::zeroed();
         si.cb = std::mem::size_of::<STARTUPINFOW>() as u32;
@@ -154,7 +165,7 @@ pub fn run_service() -> Result<()> {
             .collect();
         si.lpDesktop = PWSTR(desktop_name.as_mut_ptr());
 
-        // Relying on the output of current_exe is NOT a security risk, because an attacker 
+        // Relying on the output of current_exe is NOT a security risk, because an attacker
         // cannot swap this executable out for a new executable while the service is running.
         // Windows prevents users from deleting the executable of a running service.
         let command = format!("{} --console", std::env::current_exe()?.display());
@@ -195,7 +206,6 @@ pub fn run_service() -> Result<()> {
     Ok(())
 }
 
-
 thread_local! {
     static CURRENT_DESKTOP: Cell<Option<HDESK>> = const { Cell::new(None) };
 }
@@ -218,7 +228,7 @@ pub fn sync_thread_desktop() -> Result<()> {
                 }
                 Some(old) => {
                     SetThreadDesktop(new_desktop)?; // Switch first
-                    CloseDesktop(old).ok();         // Then safely close old
+                    CloseDesktop(old).ok(); // Then safely close old
                     cell.set(Some(new_desktop));
                     Ok(())
                 }

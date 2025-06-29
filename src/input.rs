@@ -326,11 +326,14 @@ pub fn do_input(
                 ..
             } => match r#type.as_str() {
                 "mousemove" => {
-                    sim.move_mouse_rel(x, y)?;
+                    sim.move_mouse_rel(x, y).ok();
                 }
-                "mousemoveabs" => sim.move_mouse_abs(x + startx as i32, y + starty as i32)?,
+                "mousemoveabs" => {
+                    sim.move_mouse_abs(x + startx as i32, y + starty as i32)
+                        .ok();
+                }
                 "wheel" => {
-                    sim.wheel(x, -y)?;
+                    sim.wheel(x, -y).ok();
                 }
                 _ => {}
             },
@@ -348,12 +351,24 @@ pub fn do_input(
                 button: Some(button),
                 ..
             } => match (button, r#type.as_str()) {
-                (0, "mousedown") => sim.left_mouse_down()?,
-                (0, "mouseup") => sim.left_mouse_up()?,
-                (1, "mousedown") => sim.middle_mouse_down()?,
-                (1, "mouseup") => sim.middle_mouse_up()?,
-                (2, "mousedown") => sim.right_mouse_down()?,
-                (2, "mouseup") => sim.right_mouse_up()?,
+                (0, "mousedown") => {
+                    sim.left_mouse_down().ok();
+                }
+                (0, "mouseup") => {
+                    sim.left_mouse_up().ok();
+                }
+                (1, "mousedown") => {
+                    sim.middle_mouse_down().ok();
+                }
+                (1, "mouseup") => {
+                    sim.middle_mouse_up().ok();
+                }
+                (2, "mousedown") => {
+                    sim.right_mouse_down().ok();
+                }
+                (2, "mouseup") => {
+                    sim.right_mouse_up().ok();
+                }
                 _ => error!("Received bad mouse button: {}", button),
             },
             InputCommand {
@@ -366,19 +381,19 @@ pub fn do_input(
                     // fix capslock on iPad client
                     if key == Key::CapsLock && last_capslock.elapsed() > Duration::from_millis(250)
                     {
-                        sim.key_down(key)?;
+                        sim.key_down(key).ok();
                         //std::thread::sleep(Duration::from_millis(16));
-                        sim.key_up(key)?;
+                        sim.key_up(key).ok();
                         last_capslock = Instant::now();
                         continue;
                     }
                     match r#type.as_str() {
                         "keydown" => {
-                            sim.key_down(key)?;
+                            sim.key_down(key).ok();
                             held.insert(key);
                         }
                         "keyup" => {
-                            sim.key_up(key)?;
+                            sim.key_up(key).ok();
                             held.remove(&key);
                         }
                         _ => error!("Received bad packet type: {}", r#type),
@@ -388,7 +403,7 @@ pub fn do_input(
                     // We work around this by specifically ensuring that all numbers, etc. are released when Meta is released.
                     if (key == Key::LeftMeta || key == Key::RightMeta) && r#type == "keyup" {
                         for key in held.iter() {
-                            sim.key_up(*key)?;
+                            sim.key_up(*key).ok();
                         }
                         held.clear();
                     }
@@ -401,7 +416,7 @@ pub fn do_input(
                     let keys = Key::iter();
                     // Unpress all possible keys
                     for key in keys {
-                        sim.key_up(key)?;
+                        sim.key_up(key).ok();
                     }
                 }
             }
