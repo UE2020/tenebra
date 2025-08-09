@@ -62,7 +62,7 @@ use log::*;
 use input_device::{InputSimulator, Key};
 
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::mpsc::*;
 
 use strum::IntoEnumIterator;
 
@@ -252,9 +252,16 @@ pub fn browser_code_to_key(code: &str) -> Option<Key> {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum InputCommand {
+    ClientCommand(ClientCommand),
+    #[allow(unused)]
+    ReleaseAll,
+}
+
 #[allow(non_snake_case)]
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
-pub struct InputCommand {
+pub struct ClientCommand {
     pub r#type: String,
     pub x: Option<i32>,
     pub y: Option<i32>,
@@ -264,17 +271,17 @@ pub struct InputCommand {
     pub pressure: Option<f64>,
     pub tiltX: Option<i32>,
     pub tiltY: Option<i32>,
+
+    // File transfers
+    pub size: Option<u64>,
 }
 
-pub fn do_input(
-    mut rx: UnboundedReceiver<InputCommand>,
-    startx: u32,
-    starty: u32,
-) -> anyhow::Result<()> {
+pub fn do_input(mut rx: Receiver<InputCommand>, startx: u32, starty: u32) -> anyhow::Result<()> {
+    #[cfg(target_os = "windows")]
+    let _ = crate::windows_service::sync_thread_desktop();
+
     let mut sim = InputSimulator::new()?;
-
     let mut last_capslock = Instant::now();
-
     let mut held: HashSet<Key> = HashSet::new();
 
     while let Some(msg) = rx.blocking_recv() {
@@ -282,7 +289,7 @@ pub fn do_input(
         let _ = crate::windows_service::sync_thread_desktop();
 
         match msg {
-            InputCommand {
+            InputCommand::ClientCommand(ClientCommand {
                 r#type,
                 x: Some(x),
                 y: Some(y),
@@ -290,7 +297,7 @@ pub fn do_input(
                 tiltX: Some(tilt_x),
                 tiltY: Some(tilt_y),
                 ..
-            } => {
+            }) => {
                 if r#type == "pen" {
                     sim.pen(
                         x + startx as i32,
@@ -302,13 +309,13 @@ pub fn do_input(
                     .ok();
                 }
             }
-            InputCommand {
+            InputCommand::ClientCommand(ClientCommand {
                 r#type,
                 x: Some(x),
                 y: Some(y),
                 id: Some(id),
                 ..
-            } => match r#type.as_str() {
+            }) => match r#type.as_str() {
                 "touchstart" => {
                     sim.touch_down(id, x + startx as i32, y + starty as i32)
                         .ok();
@@ -319,12 +326,12 @@ pub fn do_input(
                 }
                 _ => {}
             },
-            InputCommand {
+            InputCommand::ClientCommand(ClientCommand {
                 r#type,
                 x: Some(x),
                 y: Some(y),
                 ..
-            } => match r#type.as_str() {
+            }) => match r#type.as_str() {
                 "mousemove" => {
                     sim.move_mouse_rel(x, y).ok();
                 }
@@ -337,20 +344,20 @@ pub fn do_input(
                 }
                 _ => {}
             },
-            InputCommand {
+            InputCommand::ClientCommand(ClientCommand {
                 r#type,
                 id: Some(id),
                 ..
-            } => {
+            }) => {
                 if r#type.as_str() == "touchend" {
                     sim.touch_up(id).ok();
                 }
             }
-            InputCommand {
+            InputCommand::ClientCommand(ClientCommand {
                 r#type,
                 button: Some(button),
                 ..
-            } => match (button, r#type.as_str()) {
+            }) => match (button, r#type.as_str()) {
                 (0, "mousedown") => {
                     sim.left_mouse_down().ok();
                 }
@@ -371,11 +378,11 @@ pub fn do_input(
                 }
                 _ => error!("Received bad mouse button: {}", button),
             },
-            InputCommand {
+            InputCommand::ClientCommand(ClientCommand {
                 r#type,
                 key: Some(key),
                 ..
-            } => {
+            }) => {
                 let parsed_key = browser_code_to_key(&key);
                 if let Some(key) = parsed_key {
                     // fix capslock on iPad client
@@ -411,15 +418,14 @@ pub fn do_input(
                     error!("Received unknown key: {}", key);
                 }
             }
-            InputCommand { r#type, .. } => {
-                if r#type == "resetkeyboard" {
-                    let keys = Key::iter();
-                    // Unpress all possible keys
-                    for key in keys {
-                        sim.key_up(key).ok();
-                    }
+            InputCommand::ReleaseAll => {
+                let keys = Key::iter();
+                // Unpress all possible keys
+                for key in keys {
+                    sim.key_up(key).ok();
                 }
             }
+            _ => {}
         }
     }
 

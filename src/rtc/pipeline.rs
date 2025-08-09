@@ -56,7 +56,6 @@
 
 #[allow(unused)]
 use std::str::{self, FromStr};
-use tokio::process::Command;
 use tokio::sync::mpsc::unbounded_channel;
 
 use gstreamer::prelude::*;
@@ -64,7 +63,7 @@ use gstreamer::{element_error, Element, ElementFactory, Pipeline, State};
 
 use tokio::sync::mpsc::UnboundedReceiver;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 use log::*;
 
@@ -72,6 +71,8 @@ use crate::Config;
 
 #[cfg(target_os = "linux")]
 async fn get_pulseaudio_monitor_name() -> Result<String> {
+    use anyhow::Context;
+    use tokio::process::Command;
     let output = Command::new("pactl")
         .arg("list")
         .arg("sources")
@@ -145,7 +146,6 @@ impl AudioRecordingPipeline {
 
         let appsink = gstreamer_app::AppSink::builder()
             .caps(&opus_caps)
-            .drop(true)
             .max_buffers(1)
             .build();
 
@@ -234,7 +234,6 @@ impl AudioRecordingPipeline {
 
         let appsink = gstreamer_app::AppSink::builder()
             .caps(&opus_caps)
-            .drop(true)
             .max_buffers(1)
             .build();
 
@@ -425,9 +424,7 @@ impl ScreenRecordingPipeline {
 
         let appsink = gstreamer_app::AppSink::builder()
             .caps(&final_caps)
-            .drop(true)
             .sync(false)
-            .max_buffers(1)
             .build();
 
         appsink.set_callbacks(
@@ -590,9 +587,7 @@ impl ScreenRecordingPipeline {
 
         let appsink = gstreamer_app::AppSink::builder()
             .caps(&final_caps)
-            .drop(true)
             .sync(false)
-            .max_buffers(1)
             .build();
 
         appsink.set_callbacks(
@@ -746,9 +741,7 @@ impl ScreenRecordingPipeline {
 
         let appsink = gstreamer_app::AppSink::builder()
             .caps(&final_caps)
-            .drop(true)
             .sync(false)
-            .max_buffers(1)
             .build();
 
         appsink.set_callbacks(

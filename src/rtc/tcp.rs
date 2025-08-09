@@ -7,7 +7,7 @@ use tokio::{
         TcpListener,
     },
     sync::{
-        mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
+        mpsc::{channel, Receiver, Sender},
         Mutex,
     },
 };
@@ -17,8 +17,8 @@ use log::*;
 // Dropping the Listener will end its internal task, because the internal task is always receiving from this tx
 // so if this tx is dropped, the internal task will stop receiving messages and will break and exit
 pub struct Listener {
-    tx: UnboundedSender<(Vec<u8>, SocketAddr)>,
-    rx: UnboundedReceiver<(Vec<u8>, SocketAddr)>,
+    tx: Sender<(Vec<u8>, SocketAddr)>,
+    rx: Receiver<(Vec<u8>, SocketAddr)>,
 }
 
 impl Listener {
@@ -28,8 +28,8 @@ impl Listener {
         // We expose an interface for the rest of the program to
         // wait on messages from all connected peers, and to
         // forward messages to one of the connected peers.
-        let (tx, mut task_rx) = unbounded_channel::<(Vec<u8>, SocketAddr)>();
-        let (task_tx, rx) = unbounded_channel::<(Vec<u8>, SocketAddr)>();
+        let (tx, mut task_rx) = channel::<(Vec<u8>, SocketAddr)>(100);
+        let (task_tx, rx) = channel::<(Vec<u8>, SocketAddr)>(100);
         tokio::spawn(async move {
             let map = Arc::new(Mutex::new(HashMap::new()));
             loop {
@@ -39,7 +39,7 @@ impl Listener {
                         info!("Accepted TCP connection from {peer_addr}");
                         socket.set_nodelay(true).ok();
                         let (reader, writer) = socket.into_split();
-                        let (close_tx, mut close_rx) = unbounded_channel();
+                        let (close_tx, mut close_rx) = channel(1);
                         map.lock().await.insert(peer_addr, (writer, close_tx));
                         let task_tx = task_tx.clone();
                         let map_clone = map.clone();
@@ -60,7 +60,7 @@ impl Listener {
                                 if let Some((socket, close_tx)) =  map.get_mut(&addr) {
                                     if let Err(e) = Self::frame_and_send(socket, &data).await {
                                         error!("Closing {addr} because of send error {e}");
-                                        close_tx.send(()).ok();
+                                        close_tx.send(()).await.ok();
                                         map.remove(&addr);
                                     }
                                 }
@@ -71,7 +71,7 @@ impl Listener {
                                 info!("Closing {} sockets.", map.len());
                                 for (addr, (_, close_tx)) in map.iter() {
                                     info!("Closing socket {addr}");
-                                    close_tx.send(()).ok();
+                                    close_tx.send(()).await.ok();
                                 }
 
                                 break;
@@ -94,7 +94,7 @@ impl Listener {
     }
 
     pub async fn send(&self, data: &[u8], addr: SocketAddr) -> anyhow::Result<()> {
-        self.tx.send((data.to_vec(), addr))?;
+        self.tx.send((data.to_vec(), addr)).await?;
         Ok(())
     }
 
@@ -103,7 +103,7 @@ impl Listener {
     }
 
     async fn handle_read(
-        tx: UnboundedSender<(Vec<u8>, SocketAddr)>,
+        tx: Sender<(Vec<u8>, SocketAddr)>,
         mut reader: OwnedReadHalf,
     ) -> anyhow::Result<()> {
         let peer_addr = reader.peer_addr()?;
@@ -111,7 +111,7 @@ impl Listener {
             let len = reader.read_u16().await?;
             let mut buf = vec![0u8; len as usize];
             reader.read_exact(&mut buf).await?;
-            tx.send((buf, peer_addr))?;
+            tx.send((buf, peer_addr)).await?;
         }
     }
 }

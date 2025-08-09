@@ -1,4 +1,4 @@
-use windows::core::{PCWSTR, PWSTR};
+use windows::core::PWSTR;
 use windows::Win32::Foundation::*;
 use windows::Win32::Security::*;
 use windows::Win32::System::Environment::{CreateEnvironmentBlock, DestroyEnvironmentBlock};

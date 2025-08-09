@@ -64,7 +64,6 @@ use std::{
 
 use log::*;
 
-use input::{do_input, InputCommand};
 use network_interface::{NetworkInterface, NetworkInterfaceConfig};
 use tokio::net::{TcpListener, UdpSocket};
 
@@ -90,10 +89,16 @@ use str0m::{
 
 use base64::prelude::*;
 
-use tokio::{spawn, sync::mpsc::UnboundedSender};
+use tokio::{
+    spawn,
+    sync::mpsc::*,
+};
 
+use dialogs::*;
+use input::{do_input, ClientCommand, InputCommand};
 use keys::{Keys, Permissions};
 
+mod dialogs;
 mod input;
 pub mod keys;
 mod rtc;
@@ -375,7 +380,8 @@ async fn home(State(state): State<AppState>) -> String {
 
 #[derive(Debug, Clone)]
 pub struct AppState {
-    input_tx: UnboundedSender<InputCommand>,
+    input_tx: Sender<InputCommand>,
+    dialog_tx: Sender<Dialog>,
     ports: Arc<Mutex<Vec<u16>>>,
     keys: Arc<Mutex<Keys>>,
     config: Config,
@@ -529,7 +535,9 @@ async fn entrypoint() -> Result<()> {
 
     println!("{}", config);
 
-    let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<InputCommand>();
+    let (tx, rx) = channel::<InputCommand>(100);
+    let (dialog_tx, dialog_rx) = channel::<Dialog>(1);
+
     let ports = Arc::new(Mutex::new(Vec::new()));
     let app = Router::new()
         .route("/", get(home))
@@ -541,11 +549,16 @@ async fn entrypoint() -> Result<()> {
             config: config.clone(),
             keys: Arc::new(Mutex::new(Keys::new())),
             ports: ports.clone(),
+            dialog_tx,
         });
 
     let tls_config = RustlsConfig::from_pem(
-        std::fs::read(&config.cert).context("Failed to read certificate file")?,
-        std::fs::read(&config.key).context("Failed to read private key file")?,
+        tokio::fs::read(&config.cert)
+            .await
+            .context("Failed to read certificate file")?,
+        tokio::fs::read(&config.key)
+            .await
+            .context("Failed to read private key file")?,
     )
     .await?;
 
@@ -601,11 +614,9 @@ async fn entrypoint() -> Result<()> {
         }
     }
 
-    #[cfg(target_os = "linux")]
-    tokio::task::spawn_blocking(move || do_input(rx, config.startx, config.starty)).await??;
+    std::thread::spawn(move || do_input(rx, config.startx, config.starty));
 
-    #[cfg(not(target_os = "linux"))]
-    tokio::task::block_in_place(move || do_input(rx, config.startx, config.starty))?;
+    tokio::task::block_in_place(move || do_dialogs(dialog_rx))?;
 
     Ok(())
 }

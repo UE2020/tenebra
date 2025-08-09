@@ -17,7 +17,7 @@ rustflags = ["-Ctarget-cpu=native"]
 rustflags = ["-Ctarget-cpu=native"]
 
 [target.x86_64-pc-windows-msvc]
-rustflags = ["-Ctarget-cpu=native"]
+#rustflags = ["-Ctarget-cpu=native"]
 
 [target.x86_64-pc-windows-gnu]
 rustflags = ["-Ctarget-cpu=native"]

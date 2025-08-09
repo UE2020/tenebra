@@ -10,8 +10,8 @@ anyhow = "1.0.89"
 axum = "0.7.7"
 base64 = "0.22.1"
 bytecodec = "0.4.15"
-gstreamer = "0.23.2"
-gstreamer-app = "0.23.2"
+gstreamer = "0.24.0"
+gstreamer-app = "0.24.0"
 igd-next = { version = "0.14.3", features = ["aio_tokio"] }
 network-interface = "2.0.1"
 rand = "0.9.1"
@@ -29,6 +29,7 @@ cfg-if = "1.0.0"
 notify-rust = "4.11.7"
 input-device = { version = "0.1.0", git = "https://github.com/UE2020/input-device.git", branch = "main" }
 strum = "0.27.1"
+rfd = "0.15.4"
 
 [patch.crates-io]
 
