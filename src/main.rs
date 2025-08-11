@@ -312,6 +312,7 @@ async fn offer(
 
     let state_cloned = state.clone();
     spawn(async move {
+        //spawn_message_dialog(&state_cloned.dialog_tx, "Tenebra Alert", "New connection received!", rfd::MessageLevel::Info).await;
         if let Err(e) = rtc::run(
             rtc,
             socket,
@@ -549,7 +550,7 @@ async fn entrypoint() -> Result<()> {
             config: config.clone(),
             keys: Arc::new(Mutex::new(Keys::new())),
             ports: ports.clone(),
-            dialog_tx,
+            dialog_tx: dialog_tx.clone(),
         });
 
     let tls_config = RustlsConfig::from_pem(
@@ -607,7 +608,7 @@ async fn entrypoint() -> Result<()> {
                         println!("Port mapping {port} removed. Exiting...");
                     }
 
-                    std::process::exit(0);
+                    let _ = dialog_tx.send(Dialog::StopLoop).await;
                 });
             }
             Err(e) => error!("Error obtaining UPnP gateway: {}", e),

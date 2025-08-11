@@ -418,7 +418,10 @@ pub fn do_input(mut rx: Receiver<InputCommand>, startx: u32, starty: u32) -> any
                     error!("Received unknown key: {}", key);
                 }
             }
-            InputCommand::ReleaseAll => {
+            InputCommand::ClientCommand(ClientCommand {
+                r#type,
+                ..
+            }) if r#type == "releaseall" => {
                 let keys = Key::iter();
                 // Unpress all possible keys
                 for key in keys {

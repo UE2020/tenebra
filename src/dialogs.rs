@@ -18,6 +18,7 @@ pub enum Dialog {
         level: rfd::MessageLevel,
     },
     FileDialog(FileDialogKind, Sender<PathBuf>),
+    StopLoop,
 }
 
 pub fn do_dialogs(mut rx: Receiver<Dialog>) -> Result<()> {
@@ -44,6 +45,7 @@ pub fn do_dialogs(mut rx: Receiver<Dialog>) -> Result<()> {
                     tx.blocking_send(file)?;
                 }
             }
+            Dialog::StopLoop => break,
         }
     }
 
