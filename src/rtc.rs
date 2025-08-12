@@ -290,9 +290,12 @@ impl FileTransfers {
                                         break;
                                     }
 
-                                    let chunk = buf[..n].to_vec();
+                                    let chunk = &buf[..n];
+                                    let mut v = Vec::with_capacity(4 + chunk.len());
+                                    v.extend_from_slice(&id.to_be_bytes());
+                                    v.extend_from_slice(chunk);
 
-                                    if datachannel_tx.send((channel_id, chunk, DatachannelMessageKind::Binary)).await.is_err() {
+                                    if datachannel_tx.send((channel_id, v, DatachannelMessageKind::Binary)).await.is_err() {
                                         break; // Receiver closed
                                     }
                                 } else {
