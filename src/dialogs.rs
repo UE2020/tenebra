@@ -36,7 +36,7 @@ pub fn do_dialogs(mut rx: Receiver<Dialog>) -> Result<()> {
                     .show();
             }
             Dialog::FileDialog(kind, tx) => {
-                let dialog = rfd::FileDialog::new();
+                let dialog = rfd::FileDialog::new().set_directory("/");
                 let file = match kind {
                     FileDialogKind::Open => dialog.pick_file(),
                     FileDialogKind::Save => dialog.save_file(),
