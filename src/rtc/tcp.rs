@@ -42,12 +42,14 @@ impl Listener {
                         let (close_tx, mut close_rx) = channel(1);
                         map.lock().await.insert(peer_addr, (writer, close_tx));
                         let task_tx = task_tx.clone();
-                        let map_clone = map.clone();
+                        let map_clone = Arc::downgrade(&map);
                         tokio::spawn(async move {
                             tokio::select! {
                                 Err(e) = Self::handle_read(task_tx, reader) => {
                                     error!("Failed to read from {peer_addr} because of: {e}");
-                                    map_clone.lock().await.remove(&peer_addr);
+                                    if let Some(map_clone) = map_clone.upgrade() {
+                                        map_clone.lock().await.remove(&peer_addr);
+                                    }
                                 }
                                 _ = close_rx.recv() => {}
                             }

@@ -136,10 +136,12 @@ impl FileTransfers {
     fn cancel_transfer(&self, id: u32) {
         // This suffices to cancel an inbound transfer as dropping the Sender will cause the
         // recv loop to stop, thereby ending the corresponding tokio task.
+        info!("Explicitly canceling transfer {}.", id);
         self.inbound_transfers.lock().unwrap().remove(&id);
         let mut outbound_transfers = self.outbound_transfers.lock().unwrap();
         if let Some(abort_handle) = outbound_transfers.get(&id) {
             abort_handle.abort();
+            info!("Aborted handle for transfer {}.", id);
         }
         outbound_transfers.remove(&id);
     }
@@ -151,7 +153,7 @@ impl FileTransfers {
         channel_id: ChannelId,
         size: u64,
     ) {
-        let inbound_transfers = Arc::clone(&self.inbound_transfers);
+        let inbound_transfers = Arc::downgrade(&self.inbound_transfers);
         let datachannel_tx = self.tx.clone();
         spawn(async move {
             let path = spawn_file_dialog(&tx, FileDialogKind::Save).await;
@@ -160,10 +162,10 @@ impl FileTransfers {
                     let file = File::create(path).await;
                     if let Ok(mut file) = file {
                         let (chunk_tx, mut chunk_rx) = channel(100);
-                        inbound_transfers
-                            .lock()
-                            .unwrap()
-                            .insert(id, chunk_tx);
+                        match inbound_transfers.upgrade() {
+                            Some(inbound_transfers) => { inbound_transfers.lock().unwrap().insert(id, chunk_tx); },
+                            None => return
+                        }
                         let mut total_size = 0u64;
                         datachannel_tx
                             .send((
@@ -176,9 +178,14 @@ impl FileTransfers {
                             ))
                             .await
                             .ok();
+                        info!("Entering file write loop for transfer: {}", id);
                         while let Some(chunk) = chunk_rx.recv().await {
                             if let Err(e) = file.write_all(chunk.as_slice()).await {
-                                inbound_transfers.lock().unwrap().remove(&id);
+                                info!("Write error: {}", e);
+                                match inbound_transfers.upgrade() {
+                                    Some(inbound_transfers) => { inbound_transfers.lock().unwrap().remove(&id); },
+                                    None => return
+                                }
                                 datachannel_tx.send((
                                     channel_id,
                                     serde_json::to_vec(
@@ -198,8 +205,12 @@ impl FileTransfers {
                             }
                             total_size += chunk.len() as u64;
                             if total_size >= size {
-                                inbound_transfers.lock().unwrap().remove(&id);
-                                file.flush().await.ok();
+                                info!("Transfer complete, removing self.");
+                                match inbound_transfers.upgrade() {
+                                    Some(inbound_transfers) => { inbound_transfers.lock().unwrap().remove(&id); },
+                                    None => return
+                                }
+                                info!("Removed!");
                                 spawn_message_dialog(
                                     &tx,
                                     "Tenebra File Transfer Notification",
@@ -212,6 +223,10 @@ impl FileTransfers {
                                 .await;
                                 break;
                             }
+                        }
+                        info!("Flushing file and exiting task.");
+                        if let Err(e) = file.sync_all().await {
+                            error!("Failed to sync file to disk: {}", e);
                         }
                     } else if let Err(e) = file {
                         spawn_message_dialog(
@@ -249,6 +264,7 @@ impl FileTransfers {
                         .ok();
                 }
             }
+            info!("Reached end of task body!");
         });
     }
 
