@@ -36,6 +36,10 @@ pub fn do_dialogs(mut rx: Receiver<Dialog>) -> Result<()> {
                     .show();
             }
             Dialog::FileDialog(kind, tx) => {
+                // TODO: Work around this hack.
+                #[cfg(target_os = "windows")]
+                std::fs::create_dir_all("C:\\Windows\\system32\\config\\systemprofile\\Desktop")?;
+
                 let dialog = rfd::FileDialog::new().set_directory("/");
                 let file = match kind {
                     FileDialogKind::Open => dialog.pick_file(),

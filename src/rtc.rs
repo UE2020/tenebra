@@ -405,6 +405,8 @@ pub async fn run(
     let mut audio: (pipeline::AudioRecordingPipeline, Option<Mid>) =
         (pipeline::AudioRecordingPipeline::new().await?, None);
 
+    let mut can_write_channel = true;
+
     let ret = loop {
         // Poll output until we get a timeout. The timeout means we are either awaiting UDP socket input
         // or the timeout to happen.
@@ -533,6 +535,7 @@ pub async fn run(
                             info!("ICE Connection state is now CONNECTED. Waiting for media to be added...");
                         }
                     }
+                    Event::ChannelBufferedAmountLow(_) => can_write_channel = true,
                     _ => {}
                 }
                 continue;
@@ -550,10 +553,13 @@ pub async fn run(
 
         let input = tokio::select! {
             _ = tokio::time::sleep_until(time.into()) => Input::Timeout(Instant::now()),
-            (channel_id, data, kind) = file_transfers.recv() => {
+            (channel_id, data, kind) = file_transfers.recv(), if can_write_channel => {
                 let channel = rtc.channel(channel_id);
                 if let Some(mut channel) = channel {
                     channel.write(kind.is_binary(), &data)?;
+                    if channel.buffered_amount()? > 0 {
+                        can_write_channel = false;
+                    }
                 } else {
                     warn!("Got file chunk headed to non-existent channel: {:?}", channel_id);
                 }
