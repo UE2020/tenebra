@@ -2535,8 +2535,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 [[package]]
 name = "str0m"
 version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7f9fdffeb677e1d5d2cf84993f865143680b8e5eece3396fa488d43b34c1245"
+source = "git+https://github.com/UE2020/str0m.git?branch=main#73f97eb6bd3b2c2fe106b5f1e1064474618c8361"
 dependencies = [
  "combine",
  "crc",
@@ -2557,8 +2556,7 @@ dependencies = [
 [[package]]
 name = "str0m-wincrypto"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc9453e4967ceb96b56daa9e09abb0bf8fe6e2ef0c4894342128c46ed108532c"
+source = "git+https://github.com/UE2020/str0m.git?branch=main#73f97eb6bd3b2c2fe106b5f1e1064474618c8361"
 dependencies = [
  "thiserror 1.0.69",
  "tracing",

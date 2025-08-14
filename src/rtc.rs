@@ -115,7 +115,7 @@ struct FileTransfers {
 
 impl FileTransfers {
     fn new() -> Self {
-        let (tx, rx) = channel(1);
+        let (tx, rx) = channel(100);
         Self {
             tx,
             rx,
@@ -199,6 +199,7 @@ impl FileTransfers {
                             total_size += chunk.len() as u64;
                             if total_size >= size {
                                 inbound_transfers.lock().unwrap().remove(&id);
+                                file.flush().await.ok();
                                 spawn_message_dialog(
                                     &tx,
                                     "Tenebra File Transfer Notification",
@@ -536,6 +537,11 @@ pub async fn run(
                         }
                     }
                     Event::ChannelBufferedAmountLow(_) => can_write_channel = true,
+                    Event::ChannelOpen(id, _) => {
+                        if let Some(mut channel) = rtc.channel(id) {
+                            channel.set_buffered_amount_low_threshold(32768)?;
+                        }
+                    }
                     _ => {}
                 }
                 continue;
@@ -557,7 +563,7 @@ pub async fn run(
                 let channel = rtc.channel(channel_id);
                 if let Some(mut channel) = channel {
                     channel.write(kind.is_binary(), &data)?;
-                    if channel.buffered_amount()? > 0 {
+                    if channel.buffered_amount()? > 32768 {
                         can_write_channel = false;
                     }
                 } else {
