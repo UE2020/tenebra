@@ -127,7 +127,7 @@ impl FileTransfers {
     async fn handle_inbound_file_chunk(&self, id: u32, chunk: Vec<u8>) -> Result<()> {
         let sender = {
             let mut inbound_transfers = self.inbound_transfers.lock().unwrap();
-            inbound_transfers.get_mut(&id).context("inbound file chunk received for non-existent file transfer")?.clone()
+            inbound_transfers.get_mut(&id).context(format!("inbound file chunk received for non-existent file transfer: {}", id))?.clone()
         };
         sender.send(chunk).await?;
         Ok(())
@@ -225,7 +225,7 @@ impl FileTransfers {
                             }
                         }
                         info!("Flushing file and exiting task.");
-                        if let Err(e) = file.sync_all().await {
+                        if let Err(e) = file.flush().await {
                             error!("Failed to sync file to disk: {}", e);
                         }
                     } else if let Err(e) = file {
