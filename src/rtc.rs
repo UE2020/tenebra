@@ -288,7 +288,7 @@ impl FileTransfers {
                                 .unwrap(),
                                 DatachannelMessageKind::Text
                             )).await.ok();
-                            const CHUNK_SIZE: usize = 1024;
+                            const CHUNK_SIZE: usize = 16384;
                             let mut buf = vec![0u8; CHUNK_SIZE];
                             loop {
                                 let n = file.read(&mut buf).await;
