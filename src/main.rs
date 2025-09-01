@@ -502,7 +502,7 @@ async fn entrypoint() -> Result<()> {
         .await
         .context("Failed to check NAT")?
     {
-        bail!("You are behind a symmetric NAT. This configuration prevents STUN binding requests from establishing a proper connection. Please adjust your network settings or consult your network administrator.");
+        warn!("You are behind a symmetric NAT. This configuration prevents STUN binding requests from establishing a proper connection. Please adjust your network settings or consult your network administrator.");
     }
 
     pretty_env_logger::init_timed();

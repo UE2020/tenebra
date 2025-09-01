@@ -123,7 +123,7 @@ impl AudioRecordingPipeline {
     #[cfg(target_os = "windows")]
     pub async fn new() -> Result<Self> {
         let (buffer_tx, buffer_rx) = unbounded_channel();
-        let src = ElementFactory::make("wasapisrc")
+        let src = ElementFactory::make("wasapi2src")
             .property("loopback", true)
             .build()?;
         let src_capsfilter = ElementFactory::make("capsfilter")

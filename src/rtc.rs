@@ -288,7 +288,7 @@ impl FileTransfers {
                                 .unwrap(),
                                 DatachannelMessageKind::Text
                             )).await.ok();
-                            const CHUNK_SIZE: usize = 16384;
+                            const CHUNK_SIZE: usize = 16 * 1024;
                             let mut buf = vec![0u8; CHUNK_SIZE];
                             loop {
                                 let n = file.read(&mut buf).await;
@@ -555,7 +555,7 @@ pub async fn run(
                     Event::ChannelBufferedAmountLow(_) => can_write_channel = true,
                     Event::ChannelOpen(id, _) => {
                         if let Some(mut channel) = rtc.channel(id) {
-                            channel.set_buffered_amount_low_threshold(32768)?;
+                            channel.set_buffered_amount_low_threshold(256 * 1024)?;
                         }
                     }
                     _ => {}
@@ -579,7 +579,7 @@ pub async fn run(
                 let channel = rtc.channel(channel_id);
                 if let Some(mut channel) = channel {
                     channel.write(kind.is_binary(), &data)?;
-                    if channel.buffered_amount()? > 32768 {
+                    if channel.buffered_amount()? > 512 * 1024 {
                         can_write_channel = false;
                     }
                 } else {
