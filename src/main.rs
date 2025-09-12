@@ -155,36 +155,53 @@ fn is_bad_ip(ip: &std::net::IpAddr) -> bool {
     }
 }
 
+/// Insert "tcptype passive" into tcp candidate lines (idempotent),
+/// keep everything else exactly the same (aside from normalizing line endings).
 fn fix_tcp_candidates(sdp: &str) -> String {
-    sdp.lines()
-        .map(|line| {
-            if line.starts_with("a=candidate:") && line.contains(" tcp ") && !line.contains("tcptype") {
-                // Insert "tcptype passive" after "typ <something>"
-                if let Some(pos) = line.find(" typ ") {
-                    let (head, tail) = line.split_at(pos);
-                    // tail starts with " typ ..."
-                    // Find the end of "typ <value>"
-                    let mut parts = tail.split_whitespace();
-                    let typ_kw = parts.next().unwrap(); // "typ"
-                    let typ_val = parts.next().unwrap(); // e.g. "host" or "srflx"
+    // Normalize to single LF for processing
+    let norm = sdp.replace("\r\n", "\n").replace('\r', "\n");
+    let mut out_lines: Vec<String> = Vec::with_capacity(norm.lines().count());
 
-                    // Rebuild: head + " typ val tcptype passive" + rest
-                    format!(
-                        "{} {} {} tcptype passive {}",
-                        head,
-                        typ_kw,
-                        typ_val,
-                        parts.collect::<Vec<_>>().join(" ")
-                    )
-                } else {
-                    line.to_string()
+    for line in norm.split('\n') {
+        if line.starts_with("a=candidate:") {
+            // Split on ASCII whitespace to preserve attribute tokens
+            let mut toks: Vec<&str> = line.split_ascii_whitespace().collect();
+
+            // candidate format: <0>a=candidate:<foundation> <1>component <2>protocol ...
+            if toks.len() >= 3 && toks[2].eq_ignore_ascii_case("tcp") {
+                // If tcptype already present, leave alone
+                let has_tcptype = toks.iter().any(|t| t.eq_ignore_ascii_case("tcptype"));
+                if !has_tcptype {
+                    // Find "typ" token
+                    if let Some(typ_idx) = toks.iter().position(|&t| t == "typ") {
+                        // We expect typ_idx + 1 to be the type value (host/srflx/prflx/relay)
+                        let insert_pos = typ_idx + 2; // insert after typ and its value
+                        if insert_pos <= toks.len() {
+                            // Insert in order: "tcptype", "passive"
+                            toks.insert(insert_pos, "tcptype");
+                            toks.insert(insert_pos + 1, "passive");
+                        } else {
+                            // Fallback: append at end
+                            toks.push("tcptype");
+                            toks.push("passive");
+                        }
+                    } // if there's no "typ" token, leave the line alone (malformed candidate)
                 }
-            } else {
-                line.to_string()
             }
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
+
+            out_lines.push(toks.join(" "));
+        } else {
+            // not a candidate line — keep as-is
+            out_lines.push(line.to_string());
+        }
+    }
+
+    // Rebuild SDP with CRLF as required by browsers and ensure final CRLF
+    let mut result = out_lines.join("\r\n");
+    if !result.ends_with("\r\n") {
+        result.push_str("\r\n");
+    }
+    result
 }
 
 async fn offer(
@@ -341,9 +358,13 @@ async fn offer(
     let answer = rtc.sdp_api().accept_offer(their_offer)?;
 
     // Munge
-    let answer = str0m::change::SdpAnswer::from_sdp_string(&fix_tcp_candidates(&answer.to_sdp_string()))?;
+    let fixed_sdp = fix_tcp_candidates(&answer.to_sdp_string());
+    let answer = serde_json::json!({
+        "type": "answer",
+        "sdp": &fixed_sdp,
+    });
 
-    let json_str = serde_json::to_string(&answer)?;
+    let json_str = answer.to_string();
     let b64 = BASE64_STANDARD.encode(&json_str);
 
     let state_cloned = state.clone();
