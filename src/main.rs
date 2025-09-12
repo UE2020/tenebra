@@ -155,6 +155,38 @@ fn is_bad_ip(ip: &std::net::IpAddr) -> bool {
     }
 }
 
+fn fix_tcp_candidates(sdp: &str) -> String {
+    sdp.lines()
+        .map(|line| {
+            if line.starts_with("a=candidate:") && line.contains(" tcp ") && !line.contains("tcptype") {
+                // Insert "tcptype passive" after "typ <something>"
+                if let Some(pos) = line.find(" typ ") {
+                    let (head, tail) = line.split_at(pos);
+                    // tail starts with " typ ..."
+                    // Find the end of "typ <value>"
+                    let mut parts = tail.split_whitespace();
+                    let typ_kw = parts.next().unwrap(); // "typ"
+                    let typ_val = parts.next().unwrap(); // e.g. "host" or "srflx"
+
+                    // Rebuild: head + " typ val tcptype passive" + rest
+                    format!(
+                        "{} {} {} tcptype passive {}",
+                        head,
+                        typ_kw,
+                        typ_val,
+                        parts.collect::<Vec<_>>().join(" ")
+                    )
+                } else {
+                    line.to_string()
+                }
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 async fn offer(
     State(state): State<AppState>,
     ConnectInfo(req_addr): ConnectInfo<SocketAddr>,
@@ -307,6 +339,10 @@ async fn offer(
     let desc_data = std::str::from_utf8(&desc_data)?;
     let their_offer = serde_json::from_str::<SdpOffer>(desc_data)?;
     let answer = rtc.sdp_api().accept_offer(their_offer)?;
+
+    // Munge
+    let answer = str0m::change::SdpAnswer::from_sdp_string(&fix_tcp_candidates(&answer.to_sdp_string()))?;
+
     let json_str = serde_json::to_string(&answer)?;
     let b64 = BASE64_STANDARD.encode(&json_str);
 

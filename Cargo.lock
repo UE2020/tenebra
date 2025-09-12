@@ -1464,7 +1464,7 @@ dependencies = [
 [[package]]
 name = "input-device"
 version = "0.1.0"
-source = "git+https://github.com/UE2020/input-device.git?branch=main#de7e6c0ecb8663b45dcde7e0bf8f9365766e32bc"
+source = "git+https://github.com/UE2020/input-device.git?branch=main#17b5db1079770fd2a49cceee092f3afad3a6899d"
 dependencies = [
  "core-graphics",
  "evdev",
@@ -2534,8 +2534,9 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "str0m"
-version = "0.9.0"
-source = "git+https://github.com/UE2020/str0m.git?branch=main#73f97eb6bd3b2c2fe106b5f1e1064474618c8361"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "295002252e46af233371b507e0a5791c05a143d96f94de8617df7f92c23a28f7"
 dependencies = [
  "combine",
  "crc",
@@ -2556,7 +2557,8 @@ dependencies = [
 [[package]]
 name = "str0m-wincrypto"
 version = "0.1.0"
-source = "git+https://github.com/UE2020/str0m.git?branch=main#73f97eb6bd3b2c2fe106b5f1e1064474618c8361"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc9453e4967ceb96b56daa9e09abb0bf8fe6e2ef0c4894342128c46ed108532c"
 dependencies = [
  "thiserror 1.0.69",
  "tracing",

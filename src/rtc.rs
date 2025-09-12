@@ -555,7 +555,7 @@ pub async fn run(
                     Event::ChannelBufferedAmountLow(_) => can_write_channel = true,
                     Event::ChannelOpen(id, _) => {
                         if let Some(mut channel) = rtc.channel(id) {
-                            channel.set_buffered_amount_low_threshold(256 * 1024)?;
+                            channel.set_buffered_amount_low_threshold(256 * 1024);
                         }
                     }
                     _ => {}
@@ -579,7 +579,7 @@ pub async fn run(
                 let channel = rtc.channel(channel_id);
                 if let Some(mut channel) = channel {
                     channel.write(kind.is_binary(), &data)?;
-                    if channel.buffered_amount()? > 512 * 1024 {
+                    if channel.buffered_amount() > 512 * 1024 {
                         can_write_channel = false;
                     }
                 } else {

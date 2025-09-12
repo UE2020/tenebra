@@ -37,7 +37,7 @@ rfd = "0.15.4"
 x11rb = "0.13.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-str0m = { git = "https://github.com/UE2020/str0m.git", branch = "main", default-features = false, features = ["sha1", "wincrypto"] }
+str0m = { version = "0.10.0", default-features = false, features = ["sha1", "wincrypto"] }
 windows-service = "0.8.0"
 windows = { version = "0.61.1", features = [
 	"Win32_Foundation",
@@ -54,7 +54,7 @@ windows = { version = "0.61.1", features = [
 ] }
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
-str0m = { git = "https://github.com/UE2020/str0m.git", branch = "main" }
+str0m = { version = "0.10.0" }
 
 [build-dependencies]
 cc = "1.1.24"
