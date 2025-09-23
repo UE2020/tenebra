@@ -1464,7 +1464,7 @@ dependencies = [
 [[package]]
 name = "input-device"
 version = "0.1.0"
-source = "git+https://github.com/UE2020/input-device.git?branch=main#17b5db1079770fd2a49cceee092f3afad3a6899d"
+source = "git+https://github.com/UE2020/input-device.git?branch=main#92ef2cf333ddcd42e4d23748248ac3c6d8975231"
 dependencies = [
  "core-graphics",
  "evdev",

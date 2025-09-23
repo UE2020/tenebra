@@ -135,6 +135,8 @@ struct CreateOffer {
     key: Option<String>,
     offer: String,
     show_mouse: bool,
+    #[serde(default)]
+    low_power_mode: bool,
 }
 
 #[derive(Serialize)]

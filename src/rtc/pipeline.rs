@@ -316,7 +316,7 @@ pub struct ScreenRecordingPipeline {
 
 impl ScreenRecordingPipeline {
     #[cfg(target_os = "linux")]
-    pub fn new(config: Config, show_mouse: bool) -> Result<Self> {
+    pub fn new(config: Config, show_mouse: bool, fps: i32) -> Result<Self> {
         let (buffer_tx, buffer_rx) = unbounded_channel();
         let mut elements = vec![];
         let pipeline = Pipeline::default();
@@ -333,7 +333,7 @@ impl ScreenRecordingPipeline {
                 .build()?,
         );
         let video_caps = gstreamer::Caps::builder("video/x-raw")
-            .field("framerate", gstreamer::Fraction::new(60, 1))
+            .field("framerate", gstreamer::Fraction::new(fps, 1))
             .build();
         let video_capsfilter = ElementFactory::make("capsfilter")
             .property("caps", &video_caps)
@@ -474,7 +474,7 @@ impl ScreenRecordingPipeline {
     }
 
     #[cfg(target_os = "macos")]
-    pub fn new(config: Config, show_mouse: bool) -> Result<Self> {
+    pub fn new(config: Config, show_mouse: bool, fps: i32) -> Result<Self> {
         let (buffer_tx, buffer_rx) = unbounded_channel();
         let mut elements = vec![];
         let pipeline = Pipeline::default();
@@ -496,12 +496,12 @@ impl ScreenRecordingPipeline {
         );
         let video_caps = if !config.full_chroma {
             gstreamer::Caps::builder("video/x-raw")
-                .field("framerate", gstreamer::Fraction::new(60, 1))
+                .field("framerate", gstreamer::Fraction::new(fps, 1))
                 .field("format", "NV12")
                 .build()
         } else {
             gstreamer::Caps::builder("video/x-raw")
-                .field("framerate", gstreamer::Fraction::new(60, 1))
+                .field("framerate", gstreamer::Fraction::new(fps, 1))
                 .field("format", "BGRA")
                 .build()
         };
@@ -636,7 +636,7 @@ impl ScreenRecordingPipeline {
     }
 
     #[cfg(target_os = "windows")]
-    pub fn new(config: Config, show_mouse: bool) -> Result<Self> {
+    pub fn new(config: Config, show_mouse: bool, fps: i32) -> Result<Self> {
         let (buffer_tx, buffer_rx) = unbounded_channel();
         let mut elements = vec![];
         let pipeline = Pipeline::default();
@@ -654,11 +654,11 @@ impl ScreenRecordingPipeline {
 
         let video_caps = if !config.vaapi {
             gstreamer::Caps::builder("video/x-raw")
-                .field("framerate", gstreamer::Fraction::new(60, 1))
+                .field("framerate", gstreamer::Fraction::new(fps, 1))
                 .build()
         } else {
-            let caps_str = "video/x-raw(memory:D3D11Memory),framerate=60/1";
-            gstreamer::Caps::from_str(caps_str)?
+            let caps_str = format!("video/x-raw(memory:D3D11Memory),framerate={}/1", fps);
+            gstreamer::Caps::from_str(&caps_str)?
         };
 
         let video_capsfilter = ElementFactory::make("capsfilter")
