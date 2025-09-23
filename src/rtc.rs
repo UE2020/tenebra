@@ -415,20 +415,19 @@ pub async fn run(
 
     let mut file_transfers = FileTransfers::new();
 
+    let fps = if offer.low_power_mode {
+        30
+    } else {
+        60
+    };
     let mut video: (pipeline::ScreenRecordingPipeline, Option<Mid>) = (
-        pipeline::ScreenRecordingPipeline::new(state.config.clone(), offer.show_mouse)?,
+        pipeline::ScreenRecordingPipeline::new(state.config.clone(), offer.show_mouse, fps)?,
         None,
     );
     let mut audio: (pipeline::AudioRecordingPipeline, Option<Mid>) =
         (pipeline::AudioRecordingPipeline::new().await?, None);
 
     let mut can_write_channel = true;
-
-    let fps = if offer.low_power_mode {
-        30
-    } else {
-        60
-    };
 
     let ret = loop {
         // Poll output until we get a timeout. The timeout means we are either awaiting UDP socket input
