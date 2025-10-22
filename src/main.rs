@@ -549,9 +549,25 @@ async fn main() -> Result<()> {
 }
 
 async fn entrypoint() -> Result<()> {
+    pretty_env_logger::init_timed();
+
     // WinCrypto simplifies build significantly on Windows
     #[cfg(target_os = "windows")]
-    str0m::config::CryptoProvider::WinCrypto.install_process_default();
+    {
+        use windows::Win32::System::Threading::{
+            GetCurrentProcess, SetPriorityClass, HIGH_PRIORITY_CLASS,
+        };
+        str0m::config::CryptoProvider::WinCrypto.install_process_default();
+        unsafe {
+            let handle = GetCurrentProcess();
+            let result = SetPriorityClass(handle, HIGH_PRIORITY_CLASS);
+            if result.is_ok() {
+                info!("Windows: Successfully set process priority to HIGH.");
+            } else {
+                error!("Failed to set process priority.");
+            }
+        }
+    }
 
     #[cfg(target_os = "windows")]
     let _ = windows_service::sync_thread_desktop();
@@ -563,8 +579,6 @@ async fn entrypoint() -> Result<()> {
     {
         warn!("You are behind a symmetric NAT. This configuration prevents STUN binding requests from establishing a proper connection. Please adjust your network settings or consult your network administrator.");
     }
-
-    pretty_env_logger::init_timed();
 
     // Initialize GStreamer
     gstreamer::init().unwrap();

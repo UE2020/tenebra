@@ -512,6 +512,11 @@ pub async fn run(
                             let cmd: ClientCommand = serde_json::from_str(&msg_str)?;
                             trace!("Client command: {:#?}", cmd);
 
+                            if cmd.r#type.as_str() == "disconnect" {
+                                info!("Client requested clean disconnect.");
+                                return Ok(());
+                            }
+
                             match permissions {
                                 Permissions::FullControl => match cmd.r#type.as_str() {
                                     "requesttransfer" => {
