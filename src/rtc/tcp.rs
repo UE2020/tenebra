@@ -38,6 +38,7 @@ impl Listener {
                     Ok((socket, peer_addr)) = listener.accept() => {
                         info!("Accepted TCP connection from {peer_addr}");
                         socket.set_nodelay(true).ok();
+                        let _ = socket2::SockRef::from(&socket).set_tos_v4(0x88); // DSCP 34 (AF41)
                         let (reader, writer) = socket.into_split();
                         let (close_tx, mut close_rx) = channel(1);
                         map.lock().await.insert(peer_addr, (writer, close_tx));
