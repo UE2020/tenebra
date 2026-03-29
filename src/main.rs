@@ -282,7 +282,20 @@ async fn offer(
         .filter(|(_, addr)| !is_bad_ip(&addr))
         .collect::<Vec<_>>();
 
-    let socket = UdpSocket::bind("0.0.0.0:0").await?;
+    let socket = {
+        let s = socket2::Socket::new(
+            socket2::Domain::IPV4,
+            socket2::Type::DGRAM,
+            Some(socket2::Protocol::UDP),
+        )?;
+        let _ = s.set_tos_v4(0x88); // DSCP 34 (AF41): Interactive Video
+        s.set_nonblocking(true)?;
+        s.bind(&socket2::SockAddr::from(std::net::SocketAddr::new(
+            std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
+            0,
+        )))?;
+        UdpSocket::from_std(s.into())?
+    };
 
     let local_socket_addr = SocketAddr::new(local_ip, socket.local_addr()?.port());
 
@@ -305,7 +318,21 @@ async fn offer(
         str0m::net::Protocol::Udp,
     )?);
 
-    let tcp = TcpListener::bind("0.0.0.0:0").await?;
+    let tcp = {
+        let s = socket2::Socket::new(
+            socket2::Domain::IPV4,
+            socket2::Type::STREAM,
+            Some(socket2::Protocol::TCP),
+        )?;
+        let _ = s.set_tos_v4(0x88); // DSCP 34 (AF41): Interactive Video
+        s.set_nonblocking(true)?;
+        s.bind(&socket2::SockAddr::from(std::net::SocketAddr::new(
+            std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
+            0,
+        )))?;
+        s.listen(128)?;
+        TcpListener::from_std(s.into())?
+    };
     let tcp_local_socket_addr = SocketAddr::new(local_ip, tcp.local_addr()?.port());
     for (_iface, ip) in interfaces.iter() {
         let local_socket_addr = SocketAddr::new(*ip, tcp.local_addr()?.port());

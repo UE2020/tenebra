@@ -30,6 +30,7 @@ notify-rust = "4.11.7"
 input-device = { version = "0.1.0", git = "https://github.com/UE2020/input-device.git", branch = "main" }
 strum = "0.27.1"
 rfd = "0.15.4"
+socket2 = "0.6.3"
 
 [patch.crates-io]
 
