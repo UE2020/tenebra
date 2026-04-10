@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tenebra AI Client</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Outfit:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <button id="menuToggle" class="glass">☰</button>
+    <div class="glass-container">
+        <!-- Sidebar / Controls -->
+        <aside class="sidebar glass">
+            <div class="logo">
+                <span class="pulse"></span>
+                <h1>Tenebra AI</h1>
+            </div>
+            <div class="connection-controls">
+                <input type="text" id="addressInput" placeholder="Server Address (e.g. localhost:8080)">
+                <input type="password" id="passwordInput" placeholder="Password">
+                <button id="connectBtn">Connect</button>
+            </div>
+            <div class="status-panel">
+                <p>Status: <span id="status">Disconnected</span></p>
+                <div class="stats">
+                    <span id="latency">-- ms</span>
+                    <span id="fps">-- fps</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content (Video) -->
+        <main class="video-container glass">
+            <video id="remoteVideo" autoplay playsinline></video>
+            <canvas id="overlayCanvas"></canvas>
+            <div class="ai-overlay" id="aiOverlay">
+                <div class="scanning-bar"></div>
+                <div class="ai-thought" id="aiThought">Waiting for instruction...</div>
+            </div>
+        </main>
+
+        <!-- Unified Agent Terminal -->
+        <div class="resizer" id="resizer"></div>
+        <section class="chat-container glass">
+            <div class="chat-header">
+                <h2>Agent Terminal</h2>
+            </div>
+            <div class="chat-messages" id="chatMessages">
+                <div class="message assistant">
+                    Hello! I'm your AI agent. Connect to a Tenebra server to start controlling it.
+                </div>
+            </div>
+            <div class="chat-input-area">
+                <input type="text" id="userInput" placeholder="Ask me to do something...">
+                <div class="input-buttons">
+                    <button id="sendBtn">Send</button>
+                    <button id="stopBtn" class="danger">Stop</button>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script src="client.js"></script>
+</body>
+</html>
