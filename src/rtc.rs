@@ -497,8 +497,6 @@ pub async fn run(
                         }
 
                         video.0.set_bitrate(bwe);
-
-                        rtc.bwe().set_current_bitrate(Bitrate::kbps(bwe as _));
                         debug!("Set current bitrate to {}", bwe);
                     }
                     Event::ChannelData(ChannelData {

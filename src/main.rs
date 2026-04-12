@@ -59,7 +59,7 @@ use std::{
     net::SocketAddr,
     path::PathBuf,
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Instant, Duration},
 };
 
 use log::*;
@@ -157,7 +157,7 @@ fn is_bad_ip(ip: &std::net::IpAddr) -> bool {
     }
 }
 
-/// Insert "tcptype passive" into tcp candidate lines (idempotent),
+/// Insert "tcptype so" into tcp candidate lines (idempotent),
 /// keep everything else exactly the same (aside from normalizing line endings).
 fn fix_tcp_candidates(sdp: &str) -> String {
     // Normalize to single LF for processing
@@ -181,11 +181,11 @@ fn fix_tcp_candidates(sdp: &str) -> String {
                         if insert_pos <= toks.len() {
                             // Insert in order: "tcptype", "passive"
                             toks.insert(insert_pos, "tcptype");
-                            toks.insert(insert_pos + 1, "passive");
+                            toks.insert(insert_pos + 1, "so");
                         } else {
                             // Fallback: append at end
                             toks.push("tcptype");
-                            toks.push("passive");
+                            toks.push("so");
                         }
                     } // if there's no "typ" token, leave the line alone (malformed candidate)
                 }
@@ -263,10 +263,10 @@ async fn offer(
         .set_stats_interval(Some(Duration::from_secs(1)));
 
     let mut rtc = if state.config.no_bwe {
-        rtc.build()
+        rtc.build(Instant::now())
     } else {
         rtc.enable_bwe(Some(Bitrate::kbps(state.config.target_bitrate as u64)))
-            .build()
+            .build(Instant::now())
     };
 
     let local_ip = stun::get_base("stun.l.google.com:19302").await?;
@@ -557,7 +557,6 @@ async fn entrypoint() -> Result<()> {
         use windows::Win32::System::Threading::{
             GetCurrentProcess, SetPriorityClass, HIGH_PRIORITY_CLASS,
         };
-        str0m::config::CryptoProvider::WinCrypto.install_process_default();
         unsafe {
             let handle = GetCurrentProcess();
             let result = SetPriorityClass(handle, HIGH_PRIORITY_CLASS);
