@@ -21,10 +21,15 @@
             <div class="connection-controls">
                 <input type="text" id="addressInput" placeholder="Server Address (e.g. localhost:8080)">
                 <input type="password" id="passwordInput" placeholder="Password">
+                <select id="modelSelect" class="glass">
+                    <option value="gemini-3.1-flash-lite-preview">Gemini 3.1 Flash Lite</option>
+                    <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
+                </select>
                 <button id="connectBtn">Connect</button>
             </div>
             <div class="status-panel">
                 <p>Status: <span id="status">Disconnected</span></p>
+                <p>Session Spend: <span id="spend">$0.000</span></p>
                 <div class="stats">
                     <span id="latency">-- ms</span>
                     <span id="fps">-- fps</span>
@@ -54,7 +59,12 @@
                 </div>
             </div>
             <div class="chat-input-area">
-                <input type="text" id="userInput" placeholder="Ask me to do something...">
+                <div class="input-actions-bar">
+                    <button id="uploadBtn" class="glass-btn small" title="Upload PDF context">📄</button>
+                    <span id="contextBadge" class="context-badge">No context</span>
+                    <input type="file" id="fileInput" accept=".pdf" style="display: none;">
+                </div>
+                <textarea id="userInput" placeholder="Context is key. Ask me to do something complex..." rows="1"></textarea>
                 <div class="input-buttons">
                     <button id="sendBtn">Send</button>
                     <button id="stopBtn" class="danger">Stop</button>

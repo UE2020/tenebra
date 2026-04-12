@@ -40,10 +40,10 @@ body {
 .glass-container {
     display: grid;
     grid-template-columns: 280px 1fr auto 450px;
-    gap: 0; /* Gap managed by resizer and padding */
-    padding: 0;
+    gap: 20px; /* Consistent gap between all panels */
+    padding: 20px; /* Dashboard padding */
     height: 100dvh;
-    height: 100vh; /* Fallback */
+    box-sizing: border-box;
 }
 
 /* ... existing styles ... */
@@ -207,17 +207,36 @@ hr {
     gap: 12px;
 }
 
-input {
+input, select {
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid var(--glass-border);
     border-radius: 8px;
     padding: 12px;
-    color: white;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important; /* Safari fix */
     font-size: 0.9rem;
     transition: 0.3s;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
 }
 
-input:focus {
+select {
+    background-color: #1a1a2e; /* Solid background to force contrast */
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 16px;
+    padding-right: 40px;
+}
+
+select option {
+    background: #1a1a2e;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+}
+
+input:focus, select:focus {
     outline: none;
     border-color: var(--accent);
     box-shadow: 0 0 10px var(--accent-glow);
@@ -367,18 +386,54 @@ button:hover {
     padding: 15px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
     border-top: 1px solid var(--glass-border);
+}
+
+.input-actions-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.context-badge {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.chat-input-area textarea {
+    width: 100%;
+    min-width: 0;
+    min-height: 48px;
+    max-height: 200px;
+    resize: none;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    padding: 12px;
+    color: white;
+    font-family: inherit;
+    font-size: 0.9rem;
+    transition: 0.3s;
+}
+
+.chat-input-area textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 10px var(--accent-glow);
+}
+
+.glass-btn.small {
+    padding: 4px 10px;
+    font-size: 0.8rem;
 }
 
 .input-buttons {
     display: flex;
     gap: 8px;
-}
-
-.chat-input-area input {
-    width: 100%;
-    min-width: 0;
 }
 
 .chat-input-area button {

@@ -7,10 +7,19 @@ let resizer = document.getElementById('resizer');
 let menuToggle = document.getElementById('menuToggle');
 let sidebar = document.querySelector('.sidebar');
 let glassContainer = document.querySelector('.glass-container');
+let modelSelect = document.getElementById('modelSelect');
+let totalSpend = 0;
+
+const PRICING = {
+    "gemini-3.1-flash-lite-preview": { input: 0.25, output: 1.50 },
+    "gemini-3-flash-preview": { input: 0.50, output: 3.00 }
+};
 let history = [];
 let aiLoopActive = false;
 let stopRequested = false;
 let videoLoaded = false;
+let currentPDFContext = "";
+let uploadedFiles = [];
 
 // UI Elements
 const connectBtn = document.getElementById('connectBtn');
@@ -21,6 +30,9 @@ const addressInput = document.getElementById('addressInput');
 const passwordInput = document.getElementById('passwordInput');
 const aiThought = document.getElementById('aiThought');
 const scanningBar = document.querySelector('.scanning-bar');
+const uploadBtn = document.getElementById('uploadBtn');
+const fileInput = document.getElementById('fileInput');
+const contextBadge = document.getElementById('contextBadge');
 
 const KEY_MAP = {
     'a': 'KeyA', 'b': 'KeyB', 'c': 'KeyC', 'd': 'KeyD', 'e': 'KeyE', 'f': 'KeyF', 'g': 'KeyG', 'h': 'KeyH',
@@ -133,6 +145,58 @@ function addMessage(role, text) {
     if (history.length > 20) history.shift();
 }
 
+// Auto-resize textarea
+userInput.addEventListener('input', () => {
+    userInput.style.height = 'auto';
+    userInput.style.height = (userInput.scrollHeight) + 'px';
+});
+
+// File Upload Logic
+uploadBtn.onclick = () => fileInput.click();
+fileInput.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const originalText = contextBadge.innerText;
+    contextBadge.innerText = "Extracting...";
+    
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+        const response = await fetch("/upload", { method: "POST", body: formData });
+        if (response.ok) {
+            const data = await response.json();
+            // Append rather than overwrite
+            currentPDFContext += `\n--- Context from ${data.filename} ---\n${data.content}\n`;
+            uploadedFiles.push(data.filename);
+            
+            contextBadge.innerText = `${uploadedFiles.length} files loaded`;
+            contextBadge.style.color = "var(--accent)";
+            contextBadge.title = uploadedFiles.join(", ");
+        } else {
+            alert("Upload failed: " + (await response.json()).detail);
+            contextBadge.innerText = originalText;
+        }
+    } catch (err) {
+        alert("Upload error: " + err.message);
+        contextBadge.innerText = originalText;
+    }
+    // Clear input so same file can be uploaded again if needed
+    fileInput.value = "";
+};
+
+// Add clear context capability
+contextBadge.onclick = () => {
+    if (uploadedFiles.length > 0 && confirm("Clear all uploaded context?")) {
+        currentPDFContext = "";
+        uploadedFiles = [];
+        contextBadge.innerText = "No context";
+        contextBadge.style.color = "";
+        contextBadge.title = "";
+    }
+};
+
 function logAction(type, info) {
     const entry = document.createElement('div');
     entry.className = `action-chip ${type}`;
@@ -163,7 +227,7 @@ async function handleAction(action) {
 
     switch (action.type) {
         case 'click_at':
-            await executeClickAt(action.x, action.y, action.button || 0);
+            await executeClickAt(action.x, action.y, action.button || 0, action.clicks || 1);
             break;
         case 'drag_and_drop':
             await executeDragAndDrop(action.x1, action.y1, action.x2, action.y2);
@@ -182,7 +246,9 @@ async function handleAction(action) {
             sendPacket(action);
             break;
         case 'wait':
-            await new Promise(r => setTimeout(r, action.ms || 500));
+            const ms = action.ms || 500;
+            aiThought.innerText = `Waiting for ${ms}ms...`;
+            await new Promise(r => setTimeout(r, ms));
             break;
         case 'chat':
             addMessage('assistant', action.text);
@@ -214,14 +280,20 @@ async function executePressShortcut(keys) {
     }
 }
 
-async function executeClickAt(nx, ny, button = 0) {
+async function executeClickAt(nx, ny, button = 0, clicks = 1) {
     const x = Math.round((nx / 1000) * video.videoWidth);
     const y = Math.round((ny / 1000) * video.videoHeight);
     sendPacket({ type: 'mousemoveabs', x, y });
-    await new Promise(r => setTimeout(r, 50));
-    sendPacket({ type: 'mousedown', button: button });
-    await new Promise(r => setTimeout(r, 50));
-    sendPacket({ type: 'mouseup', button: button });
+    await new Promise(r => setTimeout(r, 100));
+    
+    for (let i = 0; i < clicks; i++) {
+        sendPacket({ type: 'mousedown', button: button });
+        await new Promise(r => setTimeout(r, 50));
+        sendPacket({ type: 'mouseup', button: button });
+        if (clicks > 1 && i < clicks - 1) {
+            await new Promise(r => setTimeout(r, 100)); // Delay between clicks
+        }
+    }
 }
 
 async function executeDragAndDrop(nx1, ny1, nx2, ny2) {
@@ -230,15 +302,15 @@ async function executeDragAndDrop(nx1, ny1, nx2, ny2) {
     const y1 = Math.round((ny1 / 1000) * video.videoHeight);
     const x2 = Math.round((nx2 / 1000) * video.videoWidth);
     const y2 = Math.round((ny2 / 1000) * video.videoHeight);
-    
+
     // 1. Move to start
     sendPacket({ type: 'mousemoveabs', x: x1, y: y1 });
     await new Promise(r => setTimeout(r, 100));
-    
+
     // 2. Click down
     sendPacket({ type: 'mousedown', button: 0 });
     await new Promise(r => setTimeout(r, 200)); // Crucial "wait" to engage windows drag
-    
+
     // 3. Smooth Interpolation (LERP) to destination
     const steps = 10;
     for (let i = 1; i <= steps; i++) {
@@ -247,7 +319,7 @@ async function executeDragAndDrop(nx1, ny1, nx2, ny2) {
         sendPacket({ type: 'mousemoveabs', x: curX, y: curY });
         await new Promise(r => setTimeout(r, 30)); // 300ms total travel time
     }
-    
+
     // 4. Release mouse
     await new Promise(r => setTimeout(r, 100));
     sendPacket({ type: 'mouseup', button: 0 });
@@ -273,7 +345,7 @@ async function executeTypeText(text) {
             sendPacket({ type: 'keyup', key: code });
             if (shift) sendPacket({ type: 'keyup', key: 'ShiftLeft' });
         }
-        await new Promise(r => setTimeout(r, 100)); // ~120 WPM
+        await new Promise(r => setTimeout(r, 100 / 3)); // ~120 WPM
     }
     const end = performance.now();
     console.log(`Typed "${text}" in ${Math.round(end - start)}ms`);
@@ -292,6 +364,10 @@ async function startAutonomousLoop(goal) {
     scanningBar.classList.add('active');
 
     while (aiLoopActive && !stopRequested) {
+        aiThought.innerText = "Settling UI...";
+        // Observation Settling Delay (Wait for animations/transfers to finish)
+        await new Promise(r => setTimeout(r, 1200)); 
+        
         aiThought.innerText = "Observing screen...";
         const screenshot = await captureFrame();
 
@@ -304,11 +380,22 @@ async function startAutonomousLoop(goal) {
                     image_base64: screenshot,
                     history: history.slice(-20),
                     width: video.videoWidth,
-                    height: video.videoHeight
+                    height: video.videoHeight,
+                    model: modelSelect.value,
+                    context: currentPDFContext
                 })
             });
 
             const result = await response.json();
+
+            // Track API Spend
+            if (result.usage) {
+                const rates = PRICING[modelSelect.value] || PRICING["gemini-3.1-flash-lite-preview"];
+                const inputCost = (result.usage.prompt_tokens / 1000000) * rates.input;
+                const outputCost = (result.usage.candidates_tokens / 1000000) * rates.output;
+                totalSpend += (inputCost + outputCost);
+                document.getElementById('spend').innerText = `$${totalSpend.toFixed(4)}`;
+            }
 
             if (result.reasoning) {
                 logThought(result.reasoning);
@@ -326,7 +413,16 @@ async function startAutonomousLoop(goal) {
                 await handleAction(action);
             }
 
-            if (result.status === 'complete' || result.status === 'error') {
+            if (result.status === 'complete') {
+                const chatAction = result.actions.find(a => a.type === 'chat');
+                if (!chatAction && result.reasoning) {
+                    addMessage('assistant', `Task complete. Summary: ${result.reasoning}`);
+                }
+                aiLoopActive = false;
+                break;
+            }
+
+            if (result.status === 'error') {
                 aiLoopActive = false;
                 break;
             }
@@ -353,7 +449,12 @@ sendBtn.onclick = () => {
     userInput.value = '';
     startAutonomousLoop(text);
 };
-userInput.onkeydown = (e) => { if (e.key === 'Enter') sendBtn.click(); };
+userInput.onkeydown = (e) => { 
+    if (e.key === 'Enter' && !e.shiftKey) { 
+        e.preventDefault();
+        sendBtn.click(); 
+    } 
+};
 
 // Resizer Logic
 let isResizing = false;
@@ -366,10 +467,10 @@ resizer.addEventListener('mousedown', (e) => {
 
 document.addEventListener('mousemove', (e) => {
     if (!isResizing) return;
-    
+
     const containerWidth = glassContainer.offsetWidth;
     const containerHeight = glassContainer.offsetHeight;
-    
+
     // Check if we are in vertical mode (stacked)
     const isVertical = window.innerWidth <= 800;
 
