@@ -211,7 +211,7 @@ impl AudioRecordingPipeline {
     #[cfg(target_os = "linux")]
     pub async fn new() -> Result<Self> {
         let (buffer_tx, buffer_rx) = unbounded_channel();
-        let monitor_device_name = get_pulseaudio_monitor_name().await.unwrap_or("");
+        let monitor_device_name = get_pulseaudio_monitor_name().await.unwrap_or(String::from(""));
         info!("Picked audio monitor device name: {}", monitor_device_name);
         let src = ElementFactory::make("pulsesrc")
             .property("device", &monitor_device_name)
