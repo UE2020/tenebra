@@ -396,7 +396,7 @@ async function executeDragAndDrop(nx1, ny1, nx2, ny2) {
 
 async function executeScroll(direction, amount) {
     // Standard convention: Negative for Down (toward user), Positive for Up (away)
-    const deltaY = direction === 'down' ? -120 * amount : 120 * amount;
+    const deltaY = direction === 'down' ? 120 * amount : -120 * amount;
     currentZoom = null; // Scroll resets zoom
     sendPacket({ type: 'wheel', x: 0, y: deltaY });
 }
