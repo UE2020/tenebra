@@ -411,7 +411,7 @@ pub async fn run(
 ) -> Result<()> {
     let mut buf = Vec::new();
 
-    let mut listener = tcp::Listener::listen(tcp_listener).unwrap();
+    let mut listener = tcp::Listener::listen(tcp_listener)?;
 
     let mut file_transfers = FileTransfers::new();
 
@@ -421,24 +421,24 @@ pub async fn run(
         60
     };
     let mut video: (pipeline::ScreenRecordingPipeline, Option<Mid>) = (
-        pipeline::ScreenRecordingPipeline::new(state.config.clone(), offer.show_mouse, fps).unwrap(),
+        pipeline::ScreenRecordingPipeline::new(state.config.clone(), offer.show_mouse, fps)?,
         None,
     );
     let mut audio: (pipeline::AudioRecordingPipeline, Option<Mid>) =
-        (pipeline::AudioRecordingPipeline::new().await.unwrap(), None);
+        (pipeline::AudioRecordingPipeline::new().await?, None);
 
     let mut can_write_channel = true;
 
     let ret = loop {
         // Poll output until we get a timeout. The timeout means we are either awaiting UDP socket input
         // or the timeout to happen.
-        let output = rtc.poll_output().unwrap();
+        let output = rtc.poll_output()?;
         let time = match output {
             Output::Timeout(v) => v,
 
             Output::Transmit(v) => {
                 match v.proto {
-                    Protocol::Tcp => listener.send(&v.contents, v.destination).await.unwrap(),
+                    Protocol::Tcp => listener.send(&v.contents, v.destination).await?,
                     Protocol::Udp => {
                         if let Err(e) = udp_socket.send_to(&v.contents, v.destination).await {
                             warn!("Error sending UDP data: {}", e);
@@ -506,8 +506,8 @@ pub async fn run(
                         ..
                     }) => {
                         if !binary {
-                            let msg_str = String::from_utf8(data).unwrap();
-                            let cmd: ClientCommand = serde_json::from_str(&msg_str).unwrap();
+                            let msg_str = String::from_utf8(data)?;
+                            let cmd: ClientCommand = serde_json::from_str(&msg_str)?;
                             trace!("Client command: {:#?}", cmd);
 
                             if cmd.r#type.as_str() == "disconnect" {
@@ -537,21 +537,21 @@ pub async fn run(
                                         }
                                     }
                                     "transferready" => warn!("Received `transferready` packet despite being server. Perhaps update tenebra?"),
-                                    "canceltransfer" => file_transfers.cancel_transfer(cmd.id.context("no id present on canceltransfer packet").unwrap() as _),
+                                    "canceltransfer" => file_transfers.cancel_transfer(cmd.id.context("no id present on canceltransfer packet")? as _),
                                     _ => {
                                         state
                                             .input_tx
                                             .send(InputCommand::ClientCommand(cmd))
-                                            .await.unwrap()
+                                            .await?
                                     }
                                 },
                                 _ => error!("Rejected input command: {:?}", cmd),
                             }
                         } else {
                             // File segment packet
-                            let id = u32::from_be_bytes(data[0..4].try_into().unwrap());
+                            let id = u32::from_be_bytes(data[0..4].try_into()?);
                             let chunk = data[4..].to_vec();
-                            file_transfers.handle_inbound_file_chunk(id, chunk).await.unwrap();
+                            file_transfers.handle_inbound_file_chunk(id, chunk).await?;
                         }
                     }
                     Event::IceConnectionStateChange(connection_state) => {
@@ -575,7 +575,7 @@ pub async fn run(
         let timeout = time - Instant::now();
 
         if timeout.is_zero() {
-            rtc.handle_input(Input::Timeout(Instant::now())).unwrap();
+            rtc.handle_input(Input::Timeout(Instant::now()))?;
             continue;
         }
 
@@ -586,7 +586,7 @@ pub async fn run(
             (channel_id, data, kind) = file_transfers.recv(), if can_write_channel => {
                 let channel = rtc.channel(channel_id);
                 if let Some(mut channel) = channel {
-                    channel.write(kind.is_binary(), &data).unwrap();
+                    channel.write(kind.is_binary(), &data)?;
                     if channel.buffered_amount() > 512 * 1024 {
                         can_write_channel = false;
                     }
@@ -598,7 +598,7 @@ pub async fn run(
             Some((buf, pts)) = video.0.recv_frame(), if video.1.is_some() => {
                 let writer = rtc
                     .writer(video.1.unwrap())
-                    .context("couldn't get rtc writer").unwrap()
+                    .context("couldn't get rtc writer")?
                     .playout_delay(MediaTime::ZERO, MediaTime::ZERO);
                 let pt = writer
                     .payload_params()
@@ -606,13 +606,13 @@ pub async fn run(
                     .unwrap()
                     .pt();
                 let now = Instant::now();
-                writer.write(pt, now, MediaTime::from_micros(pts), buf).unwrap();
+                writer.write(pt, now, MediaTime::from_micros(pts), buf)?;
                 Input::Timeout(Instant::now())
             }
             Some((buf, pts)) = audio.0.recv_frame(), if audio.1.is_some() => {
                 let writer = rtc
                     .writer(audio.1.unwrap())
-                    .context("couldn't get rtc writer").unwrap()
+                    .context("couldn't get rtc writer")?
                     .playout_delay(MediaTime::ZERO, MediaTime::ZERO);
                 let pt = writer
                     .payload_params()
@@ -620,7 +620,7 @@ pub async fn run(
                     .unwrap()
                     .pt();
                 let now = Instant::now();
-                writer.write(pt, now, MediaTime::from_micros(pts), buf).unwrap();
+                writer.write(pt, now, MediaTime::from_micros(pts), buf)?;
                 Input::Timeout(Instant::now())
             }
             Some((msg, addr)) = listener.read() => {
@@ -631,7 +631,7 @@ pub async fn run(
                         proto: Protocol::Tcp,
                         source: addr,
                         destination: tcp_addr,
-                        contents: buf.as_slice().try_into().unwrap(),
+                        contents: buf.as_slice().try_into()?,
                     },
                 )
             }
@@ -646,9 +646,9 @@ pub async fn run(
                                 source,
                                 destination: SocketAddr::new(
                                     local_socket_addr.ip(),
-                                    udp_socket.local_addr().unwrap().port(),
+                                    udp_socket.local_addr()?.port(),
                                 ),
-                                contents: (&buf[..n]).try_into().unwrap(),
+                                contents: (&buf[..n]).try_into()?,
                             },
                         )
                     }
@@ -663,7 +663,7 @@ pub async fn run(
             }
         };
 
-        rtc.handle_input(input).unwrap();
+        rtc.handle_input(input)?;
     };
 
     ret
