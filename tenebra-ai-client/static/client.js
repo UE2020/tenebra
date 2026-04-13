@@ -3,7 +3,6 @@ let orderedChannel = null;
 let video = document.getElementById('remoteVideo');
 let chatMessages = document.getElementById('chatMessages');
 let statusSpan = document.getElementById('status');
-let resizer = document.getElementById('resizer');
 let menuToggle = document.getElementById('menuToggle');
 let sidebar = document.querySelector('.sidebar');
 let glassContainer = document.querySelector('.glass-container');
@@ -107,7 +106,12 @@ async function connect() {
     conn.ontrack = (event) => {
         if (event.track.kind === "video") {
             video.srcObject = event.streams[0];
-            video.onloadedmetadata = () => { videoLoaded = true; statusSpan.innerText = "Connected"; };
+            video.onloadedmetadata = () => {
+                videoLoaded = true;
+                statusSpan.innerText = "Connected";
+                video.classList.add('active');
+                document.getElementById('videoPlaceholder').classList.add('hidden');
+            };
             video.play();
         }
     };
@@ -160,7 +164,7 @@ fileInput.onchange = async (e) => {
 
     const originalText = contextBadge.innerText;
     contextBadge.innerText = "Extracting...";
-    
+
     const formData = new FormData();
     formData.append("file", file);
 
@@ -171,9 +175,9 @@ fileInput.onchange = async (e) => {
             // Append rather than overwrite
             currentPDFContext += `\n--- Context from ${data.filename} ---\n${data.content}\n`;
             uploadedFiles.push(data.filename);
-            
-            contextBadge.innerText = `${uploadedFiles.length} files loaded`;
-            contextBadge.style.color = "var(--accent)";
+
+            contextBadge.innerText = `${uploadedFiles.length} file${uploadedFiles.length > 1 ? 's' : ''} loaded`;
+            document.getElementById('contextIndicators').style.display = 'flex';
             contextBadge.title = uploadedFiles.join(", ");
         } else {
             alert("Upload failed: " + (await response.json()).detail);
@@ -192,8 +196,8 @@ contextBadge.onclick = () => {
     if (uploadedFiles.length > 0 && confirm("Clear all uploaded context?")) {
         currentPDFContext = "";
         uploadedFiles = [];
-        contextBadge.innerText = "No context";
-        contextBadge.style.color = "";
+        contextBadge.innerText = "";
+        document.getElementById('contextIndicators').style.display = 'none';
         contextBadge.title = "";
     }
 };
@@ -201,7 +205,22 @@ contextBadge.onclick = () => {
 function logAction(type, info) {
     const entry = document.createElement('div');
     entry.className = `action-chip ${type}`;
-    entry.innerText = `> ${type.toUpperCase()}`; // Clean terminal style
+
+    const header = document.createElement('div');
+    header.className = 'action-chip-header';
+    header.innerHTML = `<span>> ${type.toUpperCase()}</span> <span class="action-chip-arrow">▼</span>`;
+
+    const body = document.createElement('div');
+    body.className = 'action-chip-body';
+    body.innerText = info;
+
+    header.onclick = () => {
+        entry.classList.toggle('expanded');
+    };
+
+    entry.appendChild(header);
+    entry.appendChild(body);
+
     chatMessages.appendChild(entry);
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
@@ -232,7 +251,7 @@ function translateCoordinates(nx, ny) {
     if (sx < 0) sx = 0; if (sy < 0) sy = 0;
     if (sx + w > video.videoWidth) sx = video.videoWidth - w;
     if (sy + h > video.videoHeight) sy = video.videoHeight - h;
-    
+
     return {
         x: Math.round(sx + (nx / 1000) * w),
         y: Math.round(sy + (ny / 1000) * h)
@@ -249,16 +268,16 @@ async function captureFrame() {
         const cy = (currentZoom.ny / 1000) * video.videoHeight;
         let sx = cx - w / 2;
         let sy = cy - h / 2;
-        
+
         if (sx < 0) sx = 0; if (sy < 0) sy = 0;
         if (sx + w > video.videoWidth) sx = video.videoWidth - w;
         if (sy + h > video.videoHeight) sy = video.videoHeight - h;
-        
-        canvas.width = w; 
+
+        canvas.width = w;
         canvas.height = h;
         canvas.getContext('2d').drawImage(video, sx, sy, w, h, 0, 0, w, h);
     } else {
-        canvas.width = video.videoWidth; 
+        canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         canvas.getContext('2d').drawImage(video, 0, 0);
     }
@@ -336,7 +355,7 @@ async function executeClickAt(nx, ny, button = 0, clicks = 1) {
     currentZoom = null;
     sendPacket({ type: 'mousemoveabs', x, y });
     await new Promise(r => setTimeout(r, 100));
-    
+
     for (let i = 0; i < clicks; i++) {
         sendPacket({ type: 'mousedown', button: button });
         await new Promise(r => setTimeout(r, 50));
@@ -414,12 +433,14 @@ async function startAutonomousLoop(goal) {
     aiLoopActive = true;
     stopRequested = false;
     scanningBar.classList.add('active');
+    sendBtn.style.display = 'none';
+    stopBtn.style.display = 'flex';
 
     while (aiLoopActive && !stopRequested) {
         aiThought.innerText = "Settling UI...";
         // Observation Settling Delay (Wait for animations/transfers to finish)
-        await new Promise(r => setTimeout(r, 1200)); 
-        
+        await new Promise(r => setTimeout(r, 1200));
+
         aiThought.innerText = "Observing screen...";
         const screenshot = await captureFrame();
 
@@ -494,6 +515,8 @@ async function startAutonomousLoop(goal) {
     aiLoopActive = false;
     scanningBar.classList.remove('active');
     aiThought.innerText = stopRequested ? "Agent stopped." : "Task finished.";
+    sendBtn.style.display = 'flex';
+    stopBtn.style.display = 'none';
 }
 
 // Event Listeners
@@ -505,54 +528,15 @@ sendBtn.onclick = () => {
     userInput.value = '';
     startAutonomousLoop(text);
 };
-userInput.onkeydown = (e) => { 
-    if (e.key === 'Enter' && !e.shiftKey) { 
+userInput.onkeydown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        sendBtn.click(); 
-    } 
-};
-
-// Resizer Logic
-let isResizing = false;
-
-resizer.addEventListener('mousedown', (e) => {
-    isResizing = true;
-    resizer.classList.add('active');
-    document.body.style.cursor = 'col-resize';
-});
-
-document.addEventListener('mousemove', (e) => {
-    if (!isResizing) return;
-
-    const containerWidth = glassContainer.offsetWidth;
-    const containerHeight = glassContainer.offsetHeight;
-
-    // Check if we are in vertical mode (stacked)
-    const isVertical = window.innerWidth <= 800;
-
-    if (isVertical) {
-        const newVideoHeight = e.clientY;
-        if (newVideoHeight > 100 && newVideoHeight < containerHeight - 100) {
-            glassContainer.style.gridTemplateRows = `${newVideoHeight}px auto 1fr`;
-            glassContainer.style.gridTemplateColumns = '1fr';
-        }
-    } else {
-        const newTerminalWidth = containerWidth - e.clientX;
-        // Constraints
-        if (newTerminalWidth > 300 && newTerminalWidth < 800) {
-            const sidebarWidth = window.innerWidth > 1024 ? '280px' : '0px'; // Account for hidden sidebar
-            glassContainer.style.gridTemplateColumns = `${sidebarWidth} 1fr auto ${newTerminalWidth}px`;
-        }
+        sendBtn.click();
     }
-});
-
-document.addEventListener('mouseup', () => {
-    isResizing = false;
-    resizer.classList.remove('active');
-    document.body.style.cursor = 'default';
-});
+};
 
 // Sidebar Toggle
 menuToggle.onclick = () => {
     sidebar.classList.toggle('active');
+    menuToggle.classList.toggle('active');
 };
