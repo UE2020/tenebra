@@ -12,7 +12,8 @@ let totalSpend = 0;
 
 const PRICING = {
     "gemini-3.1-flash-lite-preview": { input: 0.25, output: 1.50 },
-    "gemini-3-flash-preview": { input: 0.50, output: 3.00 }
+    "gemini-3-flash-preview": { input: 0.50, output: 3.00 },
+    "gemma-4-31b-it": { input: 0.05, output: 0.15 }
 };
 let history = [];
 let aiLoopActive = false;
@@ -213,11 +214,54 @@ function logThought(text) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
+let currentZoom = null;
+
+function translateCoordinates(nx, ny) {
+    if (!currentZoom) {
+        return {
+            x: Math.round((nx / 1000) * video.videoWidth),
+            y: Math.round((ny / 1000) * video.videoHeight)
+        };
+    }
+    const w = video.videoWidth / currentZoom.scale;
+    const h = video.videoHeight / currentZoom.scale;
+    const cx = (currentZoom.nx / 1000) * video.videoWidth;
+    const cy = (currentZoom.ny / 1000) * video.videoHeight;
+    let sx = cx - w / 2;
+    let sy = cy - h / 2;
+    if (sx < 0) sx = 0; if (sy < 0) sy = 0;
+    if (sx + w > video.videoWidth) sx = video.videoWidth - w;
+    if (sy + h > video.videoHeight) sy = video.videoHeight - h;
+    
+    return {
+        x: Math.round(sx + (nx / 1000) * w),
+        y: Math.round(sy + (ny / 1000) * h)
+    };
+}
+
 async function captureFrame() {
     if (!videoLoaded) return null;
     const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-    canvas.getContext('2d').drawImage(video, 0, 0);
+    if (currentZoom) {
+        const w = video.videoWidth / currentZoom.scale;
+        const h = video.videoHeight / currentZoom.scale;
+        const cx = (currentZoom.nx / 1000) * video.videoWidth;
+        const cy = (currentZoom.ny / 1000) * video.videoHeight;
+        let sx = cx - w / 2;
+        let sy = cy - h / 2;
+        
+        if (sx < 0) sx = 0; if (sy < 0) sy = 0;
+        if (sx + w > video.videoWidth) sx = video.videoWidth - w;
+        if (sy + h > video.videoHeight) sy = video.videoHeight - h;
+        
+        canvas.width = w; 
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(video, sx, sy, w, h, 0, 0, w, h);
+    } else {
+        canvas.width = video.videoWidth; 
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+    }
     return canvas.toDataURL('image/jpeg', 0.8);
 }
 
@@ -253,6 +297,9 @@ async function handleAction(action) {
         case 'chat':
             addMessage('assistant', action.text);
             break;
+        case 'zoom':
+            currentZoom = { nx: action.x, ny: action.y, scale: action.scale || 3 };
+            break;
     }
 }
 
@@ -266,9 +313,11 @@ function normalizeKey(key) {
         'Ctrl': 'ControlLeft',
         'Shift': 'ShiftLeft'
     };
-    let k = maps[key] || key;
-    if (k.length === 1 && KEY_MAP[k.toLowerCase()]) return KEY_MAP[k.toLowerCase()];
-    return k;
+    if (maps[key]) return maps[key];
+    if (KEY_MAP[key]) return KEY_MAP[key];
+    if (SHIFT_MAP[key]) return SHIFT_MAP[key];
+    if (key.length === 1 && KEY_MAP[key.toLowerCase()]) return KEY_MAP[key.toLowerCase()];
+    return key;
 }
 
 async function executePressShortcut(keys) {
@@ -283,8 +332,8 @@ async function executePressShortcut(keys) {
 }
 
 async function executeClickAt(nx, ny, button = 0, clicks = 1) {
-    const x = Math.round((nx / 1000) * video.videoWidth);
-    const y = Math.round((ny / 1000) * video.videoHeight);
+    const { x, y } = translateCoordinates(nx, ny);
+    currentZoom = null;
     sendPacket({ type: 'mousemoveabs', x, y });
     await new Promise(r => setTimeout(r, 100));
     
@@ -300,10 +349,9 @@ async function executeClickAt(nx, ny, button = 0, clicks = 1) {
 
 async function executeDragAndDrop(nx1, ny1, nx2, ny2) {
     const video = document.getElementById('remoteVideo');
-    const x1 = Math.round((nx1 / 1000) * video.videoWidth);
-    const y1 = Math.round((ny1 / 1000) * video.videoHeight);
-    const x2 = Math.round((nx2 / 1000) * video.videoWidth);
-    const y2 = Math.round((ny2 / 1000) * video.videoHeight);
+    const { x: x1, y: y1 } = translateCoordinates(nx1, ny1);
+    const { x: x2, y: y2 } = translateCoordinates(nx2, ny2);
+    currentZoom = null;
 
     // 1. Move to start
     sendPacket({ type: 'mousemoveabs', x: x1, y: y1 });
@@ -329,11 +377,13 @@ async function executeDragAndDrop(nx1, ny1, nx2, ny2) {
 
 async function executeScroll(direction, amount) {
     // Standard convention: Negative for Down (toward user), Positive for Up (away)
-    const deltaY = direction === 'down' ? 120 * amount : -120 * amount;
+    const deltaY = direction === 'down' ? -120 * amount : 120 * amount;
+    currentZoom = null; // Scroll resets zoom
     sendPacket({ type: 'wheel', x: 0, y: deltaY });
 }
 
 async function executeTypeText(text) {
+    currentZoom = null;
     const start = performance.now();
     for (const char of text) {
         if (stopRequested) break;
@@ -380,6 +430,7 @@ async function startAutonomousLoop(goal) {
                 body: JSON.stringify({
                     message: goal,
                     image_base64: screenshot,
+                    is_zoomed: currentZoom !== null,
                     history: history.slice(-20),
                     width: video.videoWidth,
                     height: video.videoHeight,
@@ -410,9 +461,12 @@ async function startAutonomousLoop(goal) {
 
             aiThought.innerText = result.plan || "Executing...";
 
-            for (const action of result.actions) {
+            for (let i = 0; i < result.actions.length; i++) {
                 if (stopRequested) break;
-                await handleAction(action);
+                await handleAction(result.actions[i]);
+                if (i < result.actions.length - 1) {
+                    await new Promise(r => setTimeout(r, 500));
+                }
             }
 
             if (result.status === 'complete') {

@@ -24,6 +24,7 @@ else:
 class ChatRequest(BaseModel):
     message: str
     image_base64: Optional[str] = None
+    is_zoomed: Optional[bool] = False
     history: List[dict] = []
     width: Optional[int] = None
     height: Optional[int] = None
@@ -43,6 +44,7 @@ Toolbox (Actions):
 - {"type": "press_shortcut", "keys": ["Key1", "Key2", ...]}: Press a shortcut. Use explicit W3C key codes like ["ControlLeft", "KeyB"] for bold.
 - {"type": "wait", "ms": milliseconds}: Pause tool execution.
 - {"type": "chat", "text": "message"}: Speak to user.
+- {"type": "zoom", "x": x, "y": y, "scale": 2|3|4|5}: Zooms the camera into a specific patch of the screen centered at (x, y). Use when you need sub-pixel targeting accuracy on tiny objects.
 
 Response Schema:
 {
@@ -69,12 +71,10 @@ Rules:
 14. MULTI-CLICK SELECTION: Effectively select text using click counts:
     - Use `clicks: 2` (double-click) to select a single word.
     - Use `clicks: 3` (triple-click) to select an entire line of code or a paragraph.
-15. SCROLL VERIFICATION: After every `scroll` action, your next turn MUST compare the frames. If the screen did not move, the scroll failed. Do NOT repeat the failed action. Instead, ensure focus (Rule 13) or use a fallback.
-16. SCROLL FALLBACKS: If mouse-wheel `scroll` fails, try:
-    - `drag_and_drop` the visible scrollbar handle.
-    - `press_shortcut` with ["PageDown"] or ["PageUp"].
-    - Clicking the scroll arrow buttons at the top/bottom of scrollbars.
+15. SCROLLING PREFERENCE: Mouse-wheel `scroll` is often unreliable depending on cursor focus. For more robust navigation, use `press_shortcut` with `["PageDown"]` or `["PageUp"]` INSTEAD of using the `scroll` tool where possible.
+16. SCROLL VERIFICATION & BOUNDARY TESTING: If you MUST use `scroll` and your next frame shows the screen did not move, the scroll failed. You MUST then fallback to ensuring focus (Rule 13) and immediately try scrolling in BOTH directions (up AND down) to test if you are at a boundary. Never endlessly retry a failed scroll direction without explicitly testing the opposite.
 17. OFF-SCREEN MENU DETECTION: If you click a dropdown or menu and no options appear, assume the content is off-screen. Use 'scroll' (Rule 15) to locate the hidden UI elements instead of re-clicking the menu.
+18. PRECISION TARGETING: When dealing with non-traditional UI elements like graph points or precise drawing nodes, you MUST use the 'zoom' tool to get a magnified patch of the screen. Do not attempt to guess coordinates of sub-elements on a full-screen view. When zoomed, the coordinates (0-1000) you output map ONLY to the magnified bounds. The system translates them back to absolute space. Zooming automatically resets to full-screen upon any interaction.
 
 IMPORTANT: Respond ONLY with the JSON object.
 """
@@ -100,10 +100,12 @@ async def chat_endpoint(request: ChatRequest):
     current_message = f"User Request/Goal: {request.message}"
     if request.width and request.height:
         current_message += f"\n(Current Screen Resolution: {request.width}x{request.height})"
-    
+    if getattr(request, 'is_zoomed', False):
+        current_message += "\n\n⚠️ SYSTEM NOTICE: You are currently looking at a ZOOMED patch of the screen. Any coordinates you output will explicitly map relative to this patch, not the absolute screen!"
+        
     parts = [current_message]
 
-    # Add image if present
+    # Add current image if present
     if request.image_base64:
         try:
             image_data = base64.b64decode(request.image_base64.split(",")[-1])
@@ -125,6 +127,7 @@ async def chat_endpoint(request: ChatRequest):
         response = active_model.generate_content(contents)
         text = response.text.strip()
         
+
         import json
         result = json.loads(text)
 
