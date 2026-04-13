@@ -36,12 +36,24 @@
                 </select>
                 <button id="connectBtn">Connect</button>
             </div>
-            <div class="status-panel">
-                <p>Status: <span id="status">Disconnected</span></p>
-                <p>Session Spend: <span id="spend">$0.000</span></p>
-                <div class="stats">
-                    <span id="latency">-- ms</span>
-                    <span id="fps">-- fps</span>
+            <div class="telemetry-hud">
+                <div class="telemetry-item">
+                    <span class="telemetry-label">Status</span>
+                    <span id="status" class="telemetry-value">Disconnected</span>
+                </div>
+                <div class="telemetry-item">
+                    <span class="telemetry-label">Session Spend</span>
+                    <span id="spend" class="telemetry-value">$0.000</span>
+                </div>
+                <div class="telemetry-row">
+                    <div class="telemetry-item">
+                        <span class="telemetry-label">Latency</span>
+                        <span id="latency" class="telemetry-value">-- ms</span>
+                    </div>
+                    <div class="telemetry-item">
+                        <span class="telemetry-label">Stream</span>
+                        <span id="fps" class="telemetry-value">-- fps</span>
+                    </div>
                 </div>
             </div>
         </aside>

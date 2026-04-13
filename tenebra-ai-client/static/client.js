@@ -97,6 +97,11 @@ async function connect() {
 
     conn.oniceconnectionstatechange = () => {
         statusSpan.innerText = conn.iceConnectionState;
+        if (conn.iceConnectionState === 'connected') {
+            statusSpan.classList.add('connected');
+        } else {
+            statusSpan.classList.remove('connected');
+        }
         if (['failed', 'disconnected', 'closed'].includes(conn.iceConnectionState)) {
             connectBtn.disabled = false;
             aiLoopActive = false;
@@ -109,6 +114,7 @@ async function connect() {
             video.onloadedmetadata = () => {
                 videoLoaded = true;
                 statusSpan.innerText = "Connected";
+                statusSpan.classList.add('connected');
                 video.classList.add('active');
                 document.getElementById('videoPlaceholder').classList.add('hidden');
             };
@@ -203,6 +209,7 @@ contextBadge.onclick = () => {
 };
 
 function logAction(type, info) {
+    if (type === 'chat') return;
     const entry = document.createElement('div');
     entry.className = `action-chip ${type}`;
 

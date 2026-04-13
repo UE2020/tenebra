@@ -169,6 +169,11 @@ async def chat_endpoint(request: ChatRequest):
         if response.parsed:
             result = response.parsed.model_dump(exclude_none=True)
         else:
+            if not response.text:
+                raise HTTPException(
+                    status_code=500, 
+                    detail="Model returned an empty response. Check safety filters or model settings."
+                )
             text = response.text.strip()
             # Clean markdown codeblocks
             if text.startswith("```"):
