@@ -297,42 +297,96 @@ button:hover {
 
 .ai-overlay {
     position: absolute;
-    top: 20px;
-    left: 20px;
-    right: 20px;
+    top: 4px;
+    left: 4px;
+    right: 4px;
+    bottom: 4px;
     pointer-events: none;
+    border-radius: 8px;
+    overflow: hidden;
 }
 
 .scanning-bar {
-    height: 2px;
-    background: var(--accent);
+    height: 140px;
     width: 100%;
-    box-shadow: 0 0 15px var(--accent);
+    background: linear-gradient(to bottom, transparent 0%, rgba(0, 242, 255, 0.05) 50%, rgba(0, 242, 255, 0.4) 90%, rgba(255, 255, 255, 0.8) 100%);
     position: absolute;
-    top: 0;
+    top: -150px;
+    left: 0;
     opacity: 0;
-    transition: opacity 0.3s;
+    pointer-events: none;
+    transition: opacity 0.5s ease;
+    mix-blend-mode: screen;
+}
+
+.scanning-bar::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: #ffffff;
+    box-shadow: 0 0 15px 5px rgba(0, 242, 255, 0.8), 0 0 30px 10px rgba(0, 242, 255, 0.4);
 }
 
 .scanning-bar.active {
-    opacity: 1;
-    animation: scan 2s linear infinite;
+    animation: premium-scan 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
-@keyframes scan {
-    0% { top: 0; }
-    100% { top: 100%; }
+@keyframes premium-scan {
+    0%   { top: -150px; opacity: 0; }
+    15%  { opacity: 1; }
+    85%  { opacity: 1; }
+    100% { top: 100%; opacity: 0; }
 }
 
 .ai-thought {
-    background: rgba(0, 0, 0, 0.7);
-    padding: 8px 16px;
-    border-radius: 20px;
-    border: 1px solid var(--accent);
-    color: var(--accent);
-    font-size: 0.8rem;
+    background: rgba(10, 10, 15, 0.85);
+    padding: 10px 24px;
+    border-radius: 30px;
+    border: 1px solid rgba(0, 242, 255, 0.4);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 242, 255, 0.15) inset;
+    color: #ffffff;
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-align: center;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    letter-spacing: 0.5px;
+    z-index: 100;
+    max-width: 80%;
+    
+    animation: thought-pulse 3s infinite ease-in-out;
+}
+
+@keyframes thought-pulse {
+    0%, 100% { box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4), 0 0 15px rgba(0, 242, 255, 0.1) inset, 0 0 5px rgba(0, 242, 255, 0.2); }
+    50% { box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4), 0 0 25px rgba(0, 242, 255, 0.4) inset, 0 0 15px rgba(0, 242, 255, 0.6); }
+}
+
+.ai-thought::before {
+    content: '';
     display: inline-block;
-    backdrop-filter: blur(4px);
+    width: 8px;
+    height: 8px;
+    background: var(--accent);
+    border-radius: 50%;
+    margin-right: 12px;
+    box-shadow: 0 0 10px var(--accent);
+    animation: blink 1.5s infinite;
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 1; box-shadow: 0 0 15px var(--accent); }
 }
 
 /* Chat Container */
