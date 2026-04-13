@@ -266,7 +266,9 @@ function normalizeKey(key) {
         'Ctrl': 'ControlLeft',
         'Shift': 'ShiftLeft'
     };
-    return maps[key] || key;
+    let k = maps[key] || key;
+    if (k.length === 1 && KEY_MAP[k.toLowerCase()]) return KEY_MAP[k.toLowerCase()];
+    return k;
 }
 
 async function executePressShortcut(keys) {

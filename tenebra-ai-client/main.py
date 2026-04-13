@@ -36,11 +36,11 @@ You will receive a screenshot and a user goal.
 Analyze the screenshot and provide a JSON response containing 'reasoning', 'status', 'plan', and 'actions'.
 
 Toolbox (Actions):
-- {"type": "click_at", "x": x, "y": y, "button": 0|1|2, "clicks": 1|2|3}: Click at normalized coordinates. Use clicks: 2 for double-click, 3 for triple-click.
-- {"type": "drag_and_drop", "x1": x1, "y1": y1, "x2": x2, "y2": y2}: Drag from 1 to 2.
+- {"type": "click_at", "x": x, "y": y, "button": 0|1|2, "clicks": 1|2|3}: Click at normalized coordinates (integers 0 to 1000, where 0,0 is top-left and 1000,1000 is bottom-right). Use clicks: 2 for double-click, 3 for triple-click.
+- {"type": "drag_and_drop", "x1": x1, "y1": y1, "x2": x2, "y2": y2}: Drag from 1 to 2 using normalized coordinates (0 to 1000).
 - {"type": "scroll", "direction": "up"|"down", "amount": n}: Scroll the mouse wheel. n is the number of 'notches'. Note: 1 notch (amount: 1) is ~3 lines of text. Use amount: 5-10 for full page scrolls.
 - {"type": "type_text", "text": "string"}: Type the specified string into the currently focused element.
-- {"type": "press_shortcut", "keys": ["Key1", "Key2", ...]}: Press a shortcut. Use for formatting like ["ControlLeft", "b"] for bold.
+- {"type": "press_shortcut", "keys": ["Key1", "Key2", ...]}: Press a shortcut. Use explicit W3C key codes like ["ControlLeft", "KeyB"] for bold.
 - {"type": "wait", "ms": milliseconds}: Pause tool execution.
 - {"type": "chat", "text": "message"}: Speak to user.
 
@@ -84,60 +84,50 @@ async def chat_endpoint(request: ChatRequest):
     if not GEMINI_API_KEY:
         raise HTTPException(status_code=500, detail="Gemini API Key missing")
 
-    contents = [SYSTEM_PROMPT]
+    contents = []
     
     # Add context if provided
     if request.context:
-        contents.append(f"Additional Agent Context/Document Data:\n{request.context}")
+        contents.append({"role": "user", "parts": [f"Additional Agent Context/Document Data:\n{request.context}"]})
+        contents.append({"role": "model", "parts": ["Context recorded. I will use this information to accomplish tasks."]})
 
     # Add history
     for msg in request.history:
-        contents.append(f"{msg['role']}: {msg['content']}")
+        role = "user" if msg['role'] == "user" else "model"
+        contents.append({"role": role, "parts": [msg['content']]})
 
     # Add current message
     current_message = f"User Request/Goal: {request.message}"
     if request.width and request.height:
         current_message += f"\n(Current Screen Resolution: {request.width}x{request.height})"
-    contents.append(current_message)
+    
+    parts = [current_message]
 
     # Add image if present
     if request.image_base64:
         try:
             image_data = base64.b64decode(request.image_base64.split(",")[-1])
             img = Image.open(io.BytesIO(image_data))
-            contents.append(img)
+            parts.append(img)
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Invalid image data: {str(e)}")
+
+    contents.append({"role": "user", "parts": parts})
 
     try:
         # Dynamically select model
         target_model_name = request.model or "gemini-3.1-flash-lite-preview"
-        active_model = genai.GenerativeModel(target_model_name)
+        active_model = genai.GenerativeModel(
+            model_name=target_model_name,
+            system_instruction=SYSTEM_PROMPT,
+            generation_config={"response_mime_type": "application/json"}
+        )
         response = active_model.generate_content(contents)
         text = response.text.strip()
         
-        # Robustly extract JSON block using regex
-        import re
-        json_match = re.search(r'\{.*\}', text, re.DOTALL)
-        if json_match:
-            text = json_match.group(0)
-        else:
-            print(f"DEBUG: No JSON found in response: {text}")
-            raise ValueError("No JSON object found in response")
-            
         import json
-        import ast
-        try:
-            result = json.loads(text)
-        except json.JSONDecodeError:
-            # Fallback for single-quote JSON or other minor formatting issues
-            try:
-                result = ast.literal_eval(text)
-                if not isinstance(result, dict):
-                    raise ValueError("Parsed object is not a dictionary")
-            except Exception as e:
-                print(f"DEBUG: Both json.loads and ast.literal_eval failed for: {text}")
-                raise ValueError(f"Failed to parse model output as JSON: {str(e)}")
+        result = json.loads(text)
+
         
         # Include usage metadata for spend tracking
         if hasattr(response, 'usage_metadata'):
