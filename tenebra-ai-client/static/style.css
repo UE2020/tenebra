@@ -46,6 +46,7 @@ body::before {
     animation: grid-move 4s linear infinite;
     -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 20%, black 100%);
     mask-image: linear-gradient(to bottom, transparent 0%, black 20%, black 100%);
+    will-change: background-position;
 }
 
 body::after {
@@ -74,8 +75,6 @@ body::after {
 
 .glass {
     background: var(--glass-bg);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
     border: 1px solid var(--glass-border);
     border-radius: 16px;
 }
@@ -179,6 +178,8 @@ hr {
     color: var(--text-dim);
     align-self: flex-start;
     max-width: 90%;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
 }
 
 .action-chip {
@@ -194,6 +195,8 @@ hr {
     width: 100%;
     max-width: 90%;
     transition: all 0.3s ease;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
 }
 
 .action-chip-header {
@@ -314,12 +317,13 @@ select {
     padding: 12px;
     color: #ffffff !important;
     -webkit-text-fill-color: #ffffff !important;
-    /* Safari fix */
     font-size: 0.9rem;
     transition: 0.3s;
     appearance: none;
     -webkit-appearance: none;
     -moz-appearance: none;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
 }
 
 select {
@@ -401,6 +405,7 @@ button:hover {
 
 .placeholder-icon {
     animation: placeholder-pulse 2s infinite ease-in-out;
+    will-change: transform, opacity;
 }
 
 @keyframes placeholder-pulse {
@@ -408,13 +413,11 @@ button:hover {
     0%,
     100% {
         opacity: 0.3;
-        filter: drop-shadow(0 0 5px var(--accent-glow));
         transform: scale(1);
     }
 
     50% {
         opacity: 1;
-        filter: drop-shadow(0 0 15px var(--accent));
         transform: scale(1.05);
     }
 }
@@ -465,12 +468,14 @@ button:hover {
     width: 100%;
     background: linear-gradient(to bottom, transparent 0%, rgba(0, 242, 255, 0.05) 50%, rgba(0, 242, 255, 0.4) 90%, rgba(255, 255, 255, 0.8) 100%);
     position: absolute;
-    top: -150px;
+    top: 0;
     left: 0;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.5s ease;
     mix-blend-mode: screen;
+    will-change: transform, opacity;
+    transform: translateY(-150px);
 }
 
 .scanning-bar::after {
@@ -490,7 +495,7 @@ button:hover {
 
 @keyframes premium-scan {
     0% {
-        top: -150px;
+        transform: translateY(-150px);
         opacity: 0;
     }
 
@@ -503,7 +508,7 @@ button:hover {
     }
 
     100% {
-        top: 100%;
+        transform: translateY(100vh);
         opacity: 0;
     }
 }
@@ -524,7 +529,8 @@ button:hover {
     position: absolute;
     bottom: 20px;
     left: 50%;
-    transform: translateX(-50%);
+    transform: translateX(-50%) scale(1);
+    will-change: transform, opacity;
 
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     letter-spacing: 0.5px;
@@ -538,11 +544,13 @@ button:hover {
 
     0%,
     100% {
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4), 0 0 15px rgba(0, 242, 255, 0.1) inset, 0 0 5px rgba(0, 242, 255, 0.2);
+        opacity: 0.85;
+        transform: translateX(-50%) scale(1);
     }
 
     50% {
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4), 0 0 25px rgba(0, 242, 255, 0.4) inset, 0 0 15px rgba(0, 242, 255, 0.6);
+        opacity: 1;
+        transform: translateX(-50%) scale(1.02);
     }
 }
 
@@ -616,6 +624,8 @@ button:hover {
     border-bottom-right-radius: 4px;
     color: #fff;
     box-shadow: 0 4px 15px rgba(0, 242, 255, 0.1);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
 }
 
 .message.assistant {
@@ -625,6 +635,8 @@ button:hover {
     border-top-left-radius: 4px;
     border-left: 3px solid var(--accent);
     color: var(--text);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
 }
 
 .chat-input-area {
@@ -651,6 +663,8 @@ button:hover {
     cursor: pointer;
     transition: 0.2s;
     font-weight: 500;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
 }
 
 .context-badge:hover {
@@ -666,6 +680,8 @@ button:hover {
     padding: 8px 12px;
     gap: 8px;
     transition: 0.3s;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
 }
 
 .chat-input-pill:focus-within {
@@ -759,8 +775,6 @@ button:hover {
         background: rgba(15, 15, 20, 0.95);
         border-right: 1px solid var(--glass-border);
         box-shadow: 5px 0 30px rgba(0, 0, 0, 0.8);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
     }
 
     .sidebar.active {
@@ -816,5 +830,28 @@ button:hover {
         display: flex;
         align-items: center;
         justify-content: center;
+    }
+}
+
+/* Firefox WebRender Bug Fallback */
+/* Firefox often fails to render backdrop-filter blurs over 3D-transformed pseudo-elements. 
+   We increase the opacity of these components specifically for Firefox to guarantee readability. */
+@-moz-document url-prefix() {
+    .message.user {
+        background: linear-gradient(135deg, rgba(0, 242, 255, 0.8), rgba(61, 90, 254, 0.95));
+    }
+
+    .message.assistant,
+    .action-chip,
+    .thought-entry,
+    .context-badge {
+        background: rgba(15, 15, 20, 0.95);
+    }
+
+    .chat-input-pill,
+    input,
+    select,
+    #menuToggle {
+        background: rgba(10, 10, 15, 0.95);
     }
 }
