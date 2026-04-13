@@ -1,25 +1,51 @@
 import os
 import json
 import base64
+
+import re
+import uvicorn
 from typing import List, Optional
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
-import google.generativeai as genai
-from PIL import Image
-import io
+from pydantic import BaseModel, Field
+from google import genai
+from google.genai import types
+
 from pypdf import PdfReader
-from fastapi import UploadFile, File
+
+class Action(BaseModel):
+    type: str
+    x: Optional[int] = None
+    y: Optional[int] = None
+    button: Optional[int] = None
+    clicks: Optional[int] = None
+    x1: Optional[int] = None
+    y1: Optional[int] = None
+    x2: Optional[int] = None
+    y2: Optional[int] = None
+    direction: Optional[str] = None
+    amount: Optional[int] = None
+    text: Optional[str] = None
+    keys: Optional[List[str]] = None
+    ms: Optional[int] = None
+    scale: Optional[int] = None
+
+class AgentResponse(BaseModel):
+    reasoning: Optional[str] = Field(description="Detailed reflection on the current state")
+    status: str = Field(description="continue | complete | error")
+    plan: str
+    actions: List[Action]
 
 # Initialize FastAPI
 app = FastAPI(title="Tenebra AI Client Backend")
 
 # Configure Gemini
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+client = None
 if not GEMINI_API_KEY:
     print("WARNING: GEMINI_API_KEY environment variable not set.")
 else:
-    genai.configure(api_key=GEMINI_API_KEY)
+    client = genai.Client(api_key=GEMINI_API_KEY)
 
 class ChatRequest(BaseModel):
     message: str
@@ -88,13 +114,13 @@ async def chat_endpoint(request: ChatRequest):
     
     # Add context if provided
     if request.context:
-        contents.append({"role": "user", "parts": [f"Additional Agent Context/Document Data:\n{request.context}"]})
-        contents.append({"role": "model", "parts": ["Context recorded. I will use this information to accomplish tasks."]})
+        contents.append(types.Content(role="user", parts=[types.Part.from_text(text=f"Additional Agent Context/Document Data:\n{request.context}")]))
+        contents.append(types.Content(role="model", parts=[types.Part.from_text(text="Context recorded. I will use this information to accomplish tasks.")]))
 
     # Add history
     for msg in request.history:
         role = "user" if msg['role'] == "user" else "model"
-        contents.append({"role": role, "parts": [msg['content']]})
+        contents.append(types.Content(role=role, parts=[types.Part.from_text(text=msg['content'])]))
 
     # Add current message
     current_message = f"User Request/Goal: {request.message}"
@@ -103,37 +129,56 @@ async def chat_endpoint(request: ChatRequest):
     if getattr(request, 'is_zoomed', False):
         current_message += "\n\n⚠️ SYSTEM NOTICE: You are currently looking at a ZOOMED patch of the screen. Any coordinates you output will explicitly map relative to this patch, not the absolute screen!"
         
-    parts = [current_message]
+    parts = [types.Part.from_text(text=current_message)]
 
     # Add current image if present
     if request.image_base64:
         try:
-            image_data = base64.b64decode(request.image_base64.split(",")[-1])
-            img = Image.open(io.BytesIO(image_data))
-            parts.append(img)
+            b64_str = request.image_base64.split(",")[-1]
+            mime_type = "image/jpeg"
+            if "," in request.image_base64:
+                header = request.image_base64.split(",")[0]
+                if "data:" in header and ";" in header:
+                    mime_type = header.split(";")[0].replace("data:", "")
+            
+            image_data = base64.b64decode(b64_str)
+            parts.append(types.Part.from_bytes(data=image_data, mime_type=mime_type))
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Invalid image data: {str(e)}")
 
-    contents.append({"role": "user", "parts": parts})
+    contents.append(types.Content(role="user", parts=parts))
 
     try:
         # Dynamically select model
         target_model_name = request.model or "gemini-3.1-flash-lite-preview"
-        active_model = genai.GenerativeModel(
-            model_name=target_model_name,
-            system_instruction=SYSTEM_PROMPT,
-            generation_config={"response_mime_type": "application/json"}
-        )
-        response = active_model.generate_content(contents)
-        text = response.text.strip()
         
-
-        import json
-        result = json.loads(text)
+        if not client:
+            raise HTTPException(status_code=500, detail="Gemini client not initialized")
+            
+        response = client.models.generate_content(
+            model=target_model_name,
+            contents=contents,
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                response_mime_type="application/json",
+                response_schema=AgentResponse,
+                tools=[{"google_search": {}}],
+            )
+        )
+        
+        if response.parsed:
+            result = response.parsed.model_dump(exclude_none=True)
+        else:
+            text = response.text.strip()
+            # Clean markdown codeblocks
+            if text.startswith("```"):
+                text = re.sub(r"^```(?:json)?", "", text)
+                text = re.sub(r"```$", "", text).strip()
+            result = json.loads(text)
 
         
         # Include usage metadata for spend tracking
-        if hasattr(response, 'usage_metadata'):
+        if hasattr(response, 'usage_metadata') and response.usage_metadata:
             result['usage'] = {
                 'prompt_tokens': response.usage_metadata.prompt_token_count,
                 'candidates_tokens': response.usage_metadata.candidates_token_count,
@@ -169,5 +214,4 @@ async def upload_file(file: UploadFile = File(...)):
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

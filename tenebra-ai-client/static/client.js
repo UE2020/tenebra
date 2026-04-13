@@ -461,6 +461,10 @@ async function startAutonomousLoop(goal) {
             });
 
             const result = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(result.detail || result.error || JSON.stringify(result) || `HTTP ${response.status}`);
+            }
 
             // Track API Spend
             if (result.usage) {
@@ -476,16 +480,17 @@ async function startAutonomousLoop(goal) {
                 // PERFECT MEMORY: Include Reasoning, Plan, and EXACT Actions in history
                 history.push({
                     role: 'assistant',
-                    content: `Reasoning: ${result.reasoning}\nPlan: ${result.plan}\nActions performed: ${JSON.stringify(result.actions)}`
+                    content: `Reasoning: ${result.reasoning}\nPlan: ${result.plan}\nActions performed: ${JSON.stringify(result.actions || [])}`
                 });
             }
 
             aiThought.innerText = result.plan || "Executing...";
-
-            for (let i = 0; i < result.actions.length; i++) {
+            
+            const actions = result.actions || [];
+            for (let i = 0; i < actions.length; i++) {
                 if (stopRequested) break;
-                await handleAction(result.actions[i]);
-                if (i < result.actions.length - 1) {
+                await handleAction(actions[i]);
+                if (i < actions.length - 1) {
                     await new Promise(r => setTimeout(r, 500));
                 }
             }
