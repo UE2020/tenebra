@@ -303,7 +303,7 @@ async function handleAction(action) {
             await executeDragAndDrop(action.x1, action.y1, action.x2, action.y2);
             break;
         case 'scroll':
-            await executeScroll(action.direction, action.amount || 1);
+            await executeScroll(action.x, action.y, action.direction, action.amount || 1);
             break;
         case 'type_text':
             await executeTypeText(action.text);
@@ -401,7 +401,13 @@ async function executeDragAndDrop(nx1, ny1, nx2, ny2) {
     sendPacket({ type: 'mouseup', button: 0 });
 }
 
-async function executeScroll(direction, amount) {
+async function executeScroll(nx, ny, direction, amount) {
+    if (nx !== undefined && ny !== undefined) {
+        const coords = translateCoordinates(nx, ny);
+        sendPacket({ type: 'mousemoveabs', x: coords.x, y: coords.y });
+        await new Promise(r => setTimeout(r, 100)); // Natural move delay before scrolling
+    }
+    
     // Standard convention: Negative for Down (toward user), Positive for Up (away)
     const deltaY = direction === 'down' ? 120 * amount : -120 * amount;
     currentZoom = null; // Scroll resets zoom

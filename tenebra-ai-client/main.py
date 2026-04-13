@@ -65,7 +65,7 @@ Analyze the screenshot and provide a JSON response containing 'reasoning', 'stat
 Toolbox (Actions):
 - {"type": "click_at", "x": x, "y": y, "button": 0|1|2, "clicks": 1|2|3}: Click at normalized coordinates (integers 0 to 1000, where 0,0 is top-left and 1000,1000 is bottom-right). Use clicks: 2 for double-click, 3 for triple-click.
 - {"type": "drag_and_drop", "x1": x1, "y1": y1, "x2": x2, "y2": y2}: Drag from 1 to 2 using normalized coordinates (0 to 1000).
-- {"type": "scroll", "direction": "up"|"down", "amount": n}: Scroll the mouse wheel. n is the number of 'notches'. Note: 1 notch (amount: 1) is ~3 lines of text. Use amount: 5-10 for full page scrolls.
+- {"type": "scroll", "x": x, "y": y, "direction": "up"|"down", "amount": n}: Scroll the mouse wheel at normalized coordinates (0 to 1000). n is the number of 'notches'. Use amount: 5-10 for full page scrolls.
 - {"type": "type_text", "text": "string"}: Type the specified string into the currently focused element.
 - {"type": "press_shortcut", "keys": ["Key1", "Key2", ...]}: Press a shortcut. Use explicit W3C key codes like ["ControlLeft", "KeyB"] for bold.
 - {"type": "wait", "ms": milliseconds}: Pause tool execution.
