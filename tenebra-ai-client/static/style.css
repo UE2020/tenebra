@@ -832,26 +832,3 @@ button:hover {
         justify-content: center;
     }
 }
-
-/* Firefox WebRender Bug Fallback */
-/* Firefox often fails to render backdrop-filter blurs over 3D-transformed pseudo-elements. 
-   We increase the opacity of these components specifically for Firefox to guarantee readability. */
-@-moz-document url-prefix() {
-    .message.user {
-        background: linear-gradient(135deg, rgba(0, 242, 255, 0.8), rgba(61, 90, 254, 0.95));
-    }
-
-    .message.assistant,
-    .action-chip,
-    .thought-entry,
-    .context-badge {
-        background: rgba(15, 15, 20, 0.95);
-    }
-
-    .chat-input-pill,
-    input,
-    select,
-    #menuToggle {
-        background: rgba(10, 10, 15, 0.95);
-    }
-}
