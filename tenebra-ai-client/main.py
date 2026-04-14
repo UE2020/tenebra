@@ -63,9 +63,9 @@ You will receive a screenshot and a user goal.
 Analyze the screenshot and provide a JSON response containing 'reasoning', 'status', 'plan', and 'actions'.
 
 Toolbox (Actions):
-- {"type": "click_at", "x": x, "y": y, "button": 0|1|2, "clicks": 1|2|3}: Click at normalized coordinates (integers 0 to 1000, where 0,0 is top-left and 1000,1000 is bottom-right). Use clicks: 2 for double-click, 3 for triple-click.
+- {"type": "click_at", "x": x, "y": y, "button": 0|1|2, "clicks": 1|2|3}: Click at normalized coordinates (0 to 1000). button uses standard JS codes (0: Left, 1: Middle, 2: Right). ALWAYS use 0 for standard clicks! Use clicks: 2 for double-click.
 - {"type": "drag_and_drop", "x1": x1, "y1": y1, "x2": x2, "y2": y2}: Drag from 1 to 2 using normalized coordinates (0 to 1000).
-- {"type": "scroll", "x": x, "y": y, "direction": "up"|"down", "amount": n}: Scroll the mouse wheel at normalized coordinates (0 to 1000). n is the number of 'notches'. Use amount: 5-10 for full page scrolls.
+- {"type": "scroll", "x": x, "y": y, "direction": "up"|"down", "amount": n}: Scroll the mouse wheel at normalized coordinates (0 to 1000). n is the number of 'notches'. 1 notch is about 3 lines.
 - {"type": "type_text", "text": "string"}: Type the specified string into the currently focused element.
 - {"type": "press_shortcut", "keys": ["Key1", "Key2", ...]}: Press a shortcut. Use explicit W3C key codes like ["ControlLeft", "KeyB"] for bold.
 - {"type": "wait", "ms": milliseconds}: Pause tool execution.
@@ -112,24 +112,55 @@ async def chat_endpoint(request: ChatRequest):
 
     contents = []
     
+    # 1. Build an intermediate merged list to enforce alternating roles
+    merged = []
+    
     # Add context if provided
     if request.context:
-        contents.append(types.Content(role="user", parts=[types.Part.from_text(text=f"Additional Agent Context/Document Data:\n{request.context}")]))
-        contents.append(types.Content(role="model", parts=[types.Part.from_text(text="Context recorded. I will use this information to accomplish tasks.")]))
+        merged.append({"role": "user", "parts": [types.Part.from_text(text=f"Additional Agent Context/Document Data:\n{request.context}")]})
+        merged.append({"role": "model", "parts": [types.Part.from_text(text="Context recorded. I will use this information to accomplish tasks.")]})
 
     # Add history
     for msg in request.history:
-        role = "user" if msg['role'] == "user" else "model"
-        contents.append(types.Content(role=role, parts=[types.Part.from_text(text=msg['content'])]))
+        role = "user" if msg.get('role') == "user" else "model"
+        
+        parts = [types.Part.from_text(text=msg.get('content', ''))]
+        if msg.get('image_base64'):
+            try:
+                b64_str = msg['image_base64'].split(",")[-1]
+                mime_type = "image/jpeg"
+                if "," in msg['image_base64']:
+                    header = msg['image_base64'].split(",")[0]
+                    if "data:" in header and ";" in header:
+                        mime_type = header.split(";")[0].replace("data:", "")
+                image_data = base64.b64decode(b64_str)
+                parts.append(types.Part.from_bytes(data=image_data, mime_type=mime_type))
+            except Exception as e:
+                pass # Ignore invalid images in history
+
+        if not merged:
+            merged.append({"role": role, "parts": parts})
+        else:
+            if role == merged[-1]["role"]:
+                if role == "model":
+                    # Two models in a row (loop occurred). Inject synthetic user observation.
+                    merged.append({"role": "user", "parts": [types.Part.from_text(text="[System Observation]: Action sequence executed. Outputting new state.")]})
+                    merged.append({"role": "model", "parts": parts})
+                else:
+                    # Two users in a row. Merge content.
+                    merged[-1]["parts"].append(types.Part.from_text(text="\n\n"))
+                    merged[-1]["parts"].extend(parts)
+            else:
+                merged.append({"role": role, "parts": parts})
 
     # Add current message
-    current_message = f"User Request/Goal: {request.message}"
+    current_message = f"Current Active Goal: {request.message}"
     if request.width and request.height:
         current_message += f"\n(Current Screen Resolution: {request.width}x{request.height})"
     if getattr(request, 'is_zoomed', False):
         current_message += "\n\n⚠️ SYSTEM NOTICE: You are currently looking at a ZOOMED patch of the screen. Any coordinates you output will explicitly map relative to this patch, not the absolute screen!"
         
-    parts = [types.Part.from_text(text=current_message)]
+    current_parts = [types.Part.from_text(text=current_message)]
 
     # Add current image if present
     if request.image_base64:
@@ -142,11 +173,17 @@ async def chat_endpoint(request: ChatRequest):
                     mime_type = header.split(";")[0].replace("data:", "")
             
             image_data = base64.b64decode(b64_str)
-            parts.append(types.Part.from_bytes(data=image_data, mime_type=mime_type))
+            current_parts.append(types.Part.from_bytes(data=image_data, mime_type=mime_type))
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Invalid image data: {str(e)}")
 
-    contents.append(types.Content(role="user", parts=parts))
+    # Safely append current turn
+    if merged and merged[-1]["role"] == "user":
+        merged[-1]["parts"].extend(current_parts)
+    else:
+        merged.append({"role": "user", "parts": current_parts})
+
+    contents = [types.Content(role=m["role"], parts=m["parts"]) for m in merged]
 
     try:
         # Dynamically select model

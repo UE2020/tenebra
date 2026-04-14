@@ -10,6 +10,7 @@ let modelSelect = document.getElementById('modelSelect');
 let totalSpend = 0;
 
 const PRICING = {
+    "gemini-3.1-pro-preview": { input: 1.25, output: 5.00 },
     "gemini-3.1-flash-lite-preview": { input: 0.25, output: 1.50 },
     "gemini-3-flash-preview": { input: 0.50, output: 3.00 },
     "gemma-4-31b-it": { input: 0.05, output: 0.15 }
@@ -407,7 +408,7 @@ async function executeScroll(nx, ny, direction, amount) {
         sendPacket({ type: 'mousemoveabs', x: coords.x, y: coords.y });
         await new Promise(r => setTimeout(r, 100)); // Natural move delay before scrolling
     }
-    
+
     // Standard convention: Negative for Down (toward user), Positive for Up (away)
     const deltaY = direction === 'down' ? 120 * amount : -120 * amount;
     currentZoom = null; // Scroll resets zoom
@@ -458,6 +459,7 @@ async function startAutonomousLoop(goal) {
         const screenshot = await captureFrame();
 
         try {
+            const currentModel = modelSelect.value;
             const response = await fetch('/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -468,20 +470,20 @@ async function startAutonomousLoop(goal) {
                     history: history.slice(-20),
                     width: video.videoWidth,
                     height: video.videoHeight,
-                    model: modelSelect.value,
+                    model: currentModel,
                     context: currentPDFContext
                 })
             });
 
             const result = await response.json();
-            
+
             if (!response.ok) {
                 throw new Error(result.detail || result.error || JSON.stringify(result) || `HTTP ${response.status}`);
             }
 
             // Track API Spend
             if (result.usage) {
-                const rates = PRICING[modelSelect.value] || PRICING["gemini-3.1-flash-lite-preview"];
+                const rates = PRICING[currentModel] || PRICING["gemini-3.1-flash-lite-preview"];
                 const inputCost = (result.usage.prompt_tokens / 1000000) * rates.input;
                 const outputCost = (result.usage.candidates_tokens / 1000000) * rates.output;
                 totalSpend += (inputCost + outputCost);
@@ -490,7 +492,15 @@ async function startAutonomousLoop(goal) {
 
             if (result.reasoning) {
                 logThought(result.reasoning);
-                // PERFECT MEMORY: Include Reasoning, Plan, and EXACT Actions in history
+
+                // PERFECT MEMORY: First push the precise frame and observation the model saw
+                history.push({
+                    role: 'user',
+                    content: `[System Observation]: Active Goal: "${goal}"\n(Frame captured)`,
+                    image_base64: screenshot
+                });
+
+                // Then push the explicit actions it decided to take on that frame
                 history.push({
                     role: 'assistant',
                     content: `Reasoning: ${result.reasoning}\nPlan: ${result.plan}\nActions performed: ${JSON.stringify(result.actions || [])}`
@@ -498,7 +508,7 @@ async function startAutonomousLoop(goal) {
             }
 
             aiThought.innerText = result.plan || "Executing...";
-            
+
             const actions = result.actions || [];
             for (let i = 0; i < actions.length; i++) {
                 if (stopRequested) break;
