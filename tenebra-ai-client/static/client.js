@@ -451,15 +451,59 @@ async function startAutonomousLoop(goal) {
     stopBtn.style.display = 'flex';
 
     while (aiLoopActive && !stopRequested) {
-        aiThought.innerText = "Settling UI...";
+        aiThought.innerText = "Waiting for screen to settle...";
         // Observation Settling Delay (Wait for animations/transfers to finish)
         await new Promise(r => setTimeout(r, 1200));
 
-        aiThought.innerText = "Observing screen...";
+        aiThought.innerText = "Reading page structure...";
+        let a11yTree = null;
+        let a11yError = null;
+        try {
+            const address = addressInput.value;
+            const password = passwordInput.value;
+            const response = await fetch(`https://${address}/a11y`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ password })
+            });
+
+            if (response.ok) {
+                a11yTree = await response.json();
+            } else {
+                const errorData = await response.json().catch(() => ({}));
+                a11yError = errorData.Error || response.statusText;
+            }
+        } catch(e) {
+            a11yError = e.toString();
+            console.warn("Could not fetch A11y tree:", e);
+        }
+
+        // Show the A11y result in chat
+        if (a11yTree && a11yTree.nodes) {
+            console.log("Raw A11y tree:", a11yTree);
+            const nodeCount = a11yTree.nodes.length;
+            const preview = a11yTree.nodes
+                .slice(0, 80)
+                .map(n => {
+                    const role = n.role?.value || n.role || '?';
+                    const name = n.name?.value || n.name || '';
+                    const ignored = n.ignored ? ' [IGNORED]' : '';
+                    return name
+                        ? `[${role}] "${name}"${ignored}`
+                        : `[${role}]${ignored}`;
+                })
+                .join('\n');
+            logAction('a11y', `${nodeCount} nodes extracted (see browser console for full tree)\n\n${preview}${nodeCount > 80 ? '\n... (' + (nodeCount - 80) + ' more)' : ''}`);
+        } else {
+            logAction('a11y', `Error: ${a11yError || 'Unknown error'}`);
+        }
+
+        aiThought.innerText = "Capturing screenshot...";
         const screenshot = await captureFrame();
 
         try {
             const currentModel = modelSelect.value;
+            aiThought.innerText = "Thinking...";
             const response = await fetch('/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -471,7 +515,8 @@ async function startAutonomousLoop(goal) {
                     width: video.videoWidth,
                     height: video.videoHeight,
                     model: currentModel,
-                    context: currentPDFContext
+                    context: currentPDFContext,
+                    a11y_tree: a11yTree
                 })
             });
 

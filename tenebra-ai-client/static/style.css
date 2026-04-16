@@ -26,6 +26,11 @@ body {
     overflow: hidden;
     position: relative;
     z-index: 1;
+    max-width: 100vw;
+}
+
+html {
+    overflow: hidden;
 }
 
 body::before {
@@ -88,6 +93,8 @@ body::after {
     /* Dashboard padding */
     height: 100dvh;
     box-sizing: border-box;
+    max-width: 100vw;
+    overflow: hidden;
 }
 
 /* ... existing styles ... */
@@ -274,6 +281,10 @@ hr {
 .action-chip.scroll { border-left-color: #ff4081; }
 .action-chip.scroll .action-chip-header { color: #ff4081; }
 .action-chip.scroll:hover { box-shadow: 0 4px 15px rgba(255, 64, 129, 0.1); border-color: rgba(255, 64, 129, 0.3); }
+
+.action-chip.a11y { border-left-color: #7c4dff; }
+.action-chip.a11y .action-chip-header { color: #7c4dff; }
+.action-chip.a11y:hover { box-shadow: 0 4px 15px rgba(124, 77, 255, 0.1); border-color: rgba(124, 77, 255, 0.3); }
 
 
 
@@ -841,11 +852,14 @@ button:hover {
 @media (max-width: 800px) {
     .glass-container {
         grid-template-columns: 1fr;
-        grid-template-rows: 60dvh 1fr;
+        grid-template-rows: 1fr 1fr;
+        gap: 10px;
+        padding: 10px;
     }
 
     .chat-container {
-        height: 40dvh;
+        min-height: 0;
+        overflow: hidden;
     }
 }
 

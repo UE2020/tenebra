@@ -56,6 +56,59 @@ class ChatRequest(BaseModel):
     height: Optional[int] = None
     model: Optional[str] = "gemini-3.1-flash-lite-preview"
     context: Optional[str] = None
+    a11y_tree: Optional[dict] = None
+
+def format_a11y_tree(tree_dict):
+    """Convert raw CDP Accessibility tree JSON into a minimal text-only representation.
+    
+    The tree comes in as {"nodes": [...]} where each node has fields like:
+      role: {"type": "role", "value": "button"}
+      name: {"type": "computedString", "value": "Submit"}
+    """
+    if not tree_dict:
+        return ""
+    
+    # Handle both {"nodes": [...]} and {"result": {"nodes": [...]}}
+    nodes = tree_dict.get("nodes") or tree_dict.get("result", {}).get("nodes", [])
+    if not nodes:
+        return ""
+    
+    def get_prop(node, key):
+        """Extract value from a CDP property, handling both dict and plain string forms."""
+        prop = node.get(key)
+        if prop is None:
+            return ""
+        if isinstance(prop, dict):
+            return prop.get("value", "")
+        return str(prop)
+    
+    SKIP_ROLES = {"RootWebArea", "WebArea", "generic", "none", "Iframe", 
+                  "IframePresentational", "LineBreak", "InlineTextBox", "ignored"}
+    
+    lines = []
+    for node in nodes:
+        if node.get("ignored", False):
+            continue
+        role = get_prop(node, "role")
+        name = get_prop(node, "name")
+        val = get_prop(node, "value")
+        
+        text = name or val
+        if not text:
+            continue
+            
+        if role == "StaticText":
+            lines.append(text)
+        elif role and role not in SKIP_ROLES:
+            lines.append(f"- {role}: \"{text}\"")
+            
+    if not lines:
+        return ""
+    # Cap at 1000 lines to prevent context window explosion
+    return ("PAGE ACCESSIBILITY TREE (Use ONLY to read long text content, "
+            "off-screen text, etc. IMPORTANT: Target elements by outputting "
+            "physical X/Y coordinates based on your visual interpretation of "
+            "the screenshot, NOT the tree):\n" + "\n".join(lines[:1000]))
 
 SYSTEM_PROMPT = """
 You are controlling a remote desktop server named 'Tenebra'.
@@ -81,26 +134,41 @@ Response Schema:
 }
 
 Rules:
+0. ACCESSIBILITY TREE (READ-ONLY):
+   You may receive a "PAGE ACCESSIBILITY TREE" text block alongside the screenshot. This is a structured text dump of the active browser page, extracted via assistive technology APIs.
+   
+   USE IT FOR:
+   - Instantly reading long documents, emails, articles, or chat threads WITHOUT needing to scroll and consume multiple screenshots. If the user asks "what does the email say?", read the answer directly from the tree.
+   - Discovering off-screen content: menus, options, or text that exists on the page but isn't visible in the current viewport.
+   - Understanding the semantic structure of the page: which elements are buttons, links, headings, checkboxes, and their current states (checked, expanded, etc.).
+   - Extracting exact text content (names, numbers, values) to avoid OCR-style misreads from the screenshot.
+   
+   NEVER USE IT FOR:
+   - Clicking, dragging, or any physical interaction. The tree may contain invisible "screen-reader-only" elements with no physical presence on screen. If you target those, your click will land on empty space.
+   - Determining where an element is located on screen. ALL interactions must use X/Y coordinates derived from your visual analysis of the screenshot.
+   
+   WORKFLOW: Read the tree to understand WHAT is on the page. Look at the screenshot to understand WHERE things are. Combine both to act precisely.
 1. PERSISTENT VISUAL MEMORY: If a task spans multiple scroll positions (e.g. Chart at top, Question at bottom), you MUST explicitly record key facts in your 'reasoning' before scrolling. Trust your own history as a source of truth for off-screen data.
 2. OBSERVE & REFLECT: Before planning, compare current vs previous frames. Assume success if a dialog disappeared after 'Save'.
 3. PERFECT MEMORY: Check 'Actions performed' in history. If you have repeated the same action (e.g. clicking a dropdown) 3 times without a visible state change towards your goal, you MUST change your strategy (e.g. scroll to see if the menu is off-screen, or try a different approach). Never repeat a failing action more than thrice.
 4. ATOMIC UI PRINCIPLE: Only interact with visible elements.
-5. PREFER SHORTCUTS: Use 'MetaLeft', 'AltLeft', 'ControlLeft' for navigation.
-6. TASK SUMMARY: When setting status to 'complete', you MUST include a final 'chat' action summarizing exactly what was accomplished and any relevant results for the user. Never end a task silently.
-7. TRANSITION HALT: If UI changes significantly, set 'status' to 'continue' to re-calculate.
-8. DRAG-AND-DROP ISOLATION: Dragging often causes UI layout shifts. If you perform a 'drag_and_drop', do NOT perform any other mouse-based actions in the same turn. Use 'status': 'continue' to re-observe the screen after the drag.
-9. VISUAL STABILITY & PATIENCE: Before interacting, check for loading spinners, progress bars, or 'ghost' content. If a page is loading, use the 'wait' tool (2000-5000ms) or set 'status' to 'continue' to wait for stability. Never click on a 'Loading...' indicator.
-10. IDEMPOTENT TYPING: If unsure about cursor placement, rewrite the whole block/word instead of trying to edit in-place. Prioritize indentation and formatting accuracy over speed.
-11. FORMATTING SHORTCUTS: Prefer standard OS shortcuts (Ctrl+B, Ctrl+I, etc.) for formatting text rather than clicking UI menus.
-12. EXPLORATORY SCROLLING: If a target element is not visible, you MUST use 'scroll' to explore the page. Do not assume a task is 'complete' until you have visually confirmed the target exists or you have exhausted the searchable area.
-13. FOCUS BEFORE ACTION: Always perform a standard `click_at` (clicks: 1) on the specific window or container to set focus before performing a `scroll`, `type_text`, or right-click.
-14. MULTI-CLICK SELECTION: Effectively select text using click counts:
+5. DEDICATED BROWSER: The system provides a dedicated Chrome instance for all web browsing. You MUST only use this browser. NEVER click on Firefox, Safari, Edge, or any other browser icon in the taskbar or desktop — even if they are visible. If you need to open a URL, type it into the address bar of the dedicated Chrome window that is already open (or use keyboard shortcuts to open a new tab in it). The accessibility tree data you receive ONLY reflects this dedicated Chrome instance, so using any other browser will cause the tree data to be out of sync with what you see.
+6. PREFER SHORTCUTS: Use 'MetaLeft', 'AltLeft', 'ControlLeft' for navigation.
+7. TASK SUMMARY: When setting status to 'complete', you MUST include a final 'chat' action summarizing exactly what was accomplished and any relevant results for the user. Never end a task silently.
+8. TRANSITION HALT: If UI changes significantly, set 'status' to 'continue' to re-calculate.
+9. DRAG-AND-DROP ISOLATION: Dragging often causes UI layout shifts. If you perform a 'drag_and_drop', do NOT perform any other mouse-based actions in the same turn. Use 'status': 'continue' to re-observe the screen after the drag.
+10. VISUAL STABILITY & PATIENCE: Before interacting, check for loading spinners, progress bars, or 'ghost' content. If a page is loading, use the 'wait' tool (2000-5000ms) or set 'status' to 'continue' to wait for stability. Never click on a 'Loading...' indicator.
+11. IDEMPOTENT TYPING: If unsure about cursor placement, rewrite the whole block/word instead of trying to edit in-place. Prioritize indentation and formatting accuracy over speed.
+12. FORMATTING SHORTCUTS: Prefer standard OS shortcuts (Ctrl+B, Ctrl+I, etc.) for formatting text rather than clicking UI menus.
+13. EXPLORATORY SCROLLING: If a target element is not visible, you MUST use 'scroll' to explore the page. Do not assume a task is 'complete' until you have visually confirmed the target exists or you have exhausted the searchable area.
+14. FOCUS BEFORE ACTION: Always perform a standard `click_at` (clicks: 1) on the specific window or container to set focus before performing a `scroll`, `type_text`, or right-click.
+15. MULTI-CLICK SELECTION: Effectively select text using click counts:
     - Use `clicks: 2` (double-click) to select a single word.
     - Use `clicks: 3` (triple-click) to select an entire line of code or a paragraph.
-15. SCROLLING PREFERENCE: Mouse-wheel `scroll` is often unreliable depending on cursor focus. For more robust navigation, use `press_shortcut` with `["PageDown"]` or `["PageUp"]` INSTEAD of using the `scroll` tool where possible.
-16. SCROLL VERIFICATION & BOUNDARY TESTING: If you MUST use `scroll` and your next frame shows the screen did not move, the scroll failed. You MUST then fallback to ensuring focus (Rule 13) and immediately try scrolling in BOTH directions (up AND down) to test if you are at a boundary. Never endlessly retry a failed scroll direction without explicitly testing the opposite.
-17. OFF-SCREEN MENU DETECTION: If you click a dropdown or menu and no options appear, assume the content is off-screen. Use 'scroll' (Rule 15) to locate the hidden UI elements instead of re-clicking the menu.
-18. PRECISION TARGETING: When dealing with non-traditional UI elements like graph points or precise drawing nodes, you MUST use the 'zoom' tool to get a magnified patch of the screen. Do not attempt to guess coordinates of sub-elements on a full-screen view. When zoomed, the coordinates (0-1000) you output map ONLY to the magnified bounds. The system translates them back to absolute space. Zooming automatically resets to full-screen upon any interaction.
+16. SCROLLING PREFERENCE: Mouse-wheel `scroll` is often unreliable depending on cursor focus. For more robust navigation, use `press_shortcut` with `["PageDown"]` or `["PageUp"]` INSTEAD of using the `scroll` tool where possible.
+17. SCROLL VERIFICATION & BOUNDARY TESTING: If you MUST use `scroll` and your next frame shows the screen did not move, the scroll failed. You MUST then fallback to ensuring focus (Rule 14) and immediately try scrolling in BOTH directions (up AND down) to test if you are at a boundary. Never endlessly retry a failed scroll direction without explicitly testing the opposite.
+18. OFF-SCREEN MENU DETECTION: If you click a dropdown or menu and no options appear, assume the content is off-screen. Use 'scroll' (Rule 16) to locate the hidden UI elements instead of re-clicking the menu.
+19. PRECISION TARGETING: When dealing with non-traditional UI elements like graph points or precise drawing nodes, you MUST use the 'zoom' tool to get a magnified patch of the screen. Do not attempt to guess coordinates of sub-elements on a full-screen view. When zoomed, the coordinates (0-1000) you output map ONLY to the magnified bounds. The system translates them back to absolute space. Zooming automatically resets to full-screen upon any interaction.
 
 IMPORTANT: Respond ONLY with the JSON object.
 """
@@ -160,6 +228,11 @@ async def chat_endpoint(request: ChatRequest):
     if getattr(request, 'is_zoomed', False):
         current_message += "\n\n⚠️ SYSTEM NOTICE: You are currently looking at a ZOOMED patch of the screen. Any coordinates you output will explicitly map relative to this patch, not the absolute screen!"
         
+    if getattr(request, 'a11y_tree', None):
+        a11y_text = format_a11y_tree(request.a11y_tree)
+        if a11y_text:
+            current_message += f"\n\n{a11y_text}"
+            
     current_parts = [types.Part.from_text(text=current_message)]
 
     # Add current image if present

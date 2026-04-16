@@ -79,6 +79,7 @@ use axum::{
 use axum_server::tls_rustls::RustlsConfig;
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use str0m::{
     bwe::Bitrate,
@@ -103,6 +104,7 @@ mod input;
 pub mod keys;
 mod rtc;
 mod stun;
+mod cdp;
 
 // This module contains all code related to Windows service functionality
 #[cfg(target_os = "windows")]
@@ -415,6 +417,23 @@ struct CreateKeyRequest {
     view_only: bool,
 }
 
+#[derive(Deserialize, Clone)]
+struct A11yRequest {
+    password: String,
+}
+
+async fn a11y(
+    State(state): State<AppState>,
+    Json(payload): Json<A11yRequest>,
+) -> Result<Json<Value>, AppError> {
+    if payload.password == state.config.password {
+        let tree = crate::cdp::fetch_tree().await?;
+        Ok(Json(tree))
+    } else {
+        Err(AppError(anyhow!("Password incorrect.")))
+    }
+}
+
 async fn create_key(
     State(state): State<AppState>,
     Json(payload): Json<CreateKeyRequest>,
@@ -618,6 +637,7 @@ async fn entrypoint() -> Result<()> {
         .route("/", get(home))
         .route("/create_key", post(create_key))
         .route("/offer", post(offer))
+        .route("/a11y", post(a11y))
         .layer(tower_http::cors::CorsLayer::very_permissive())
         .with_state(AppState {
             input_tx: tx,
