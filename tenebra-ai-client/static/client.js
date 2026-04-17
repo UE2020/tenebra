@@ -290,6 +290,29 @@ async function captureFrame() {
         canvas.height = video.videoHeight;
         canvas.getContext('2d').drawImage(video, 0, 0);
     }
+
+    // Downscale to save API tokens (capping at 1024 on the longest dimension)
+    const maxDim = 1024;
+    let targetW = canvas.width;
+    let targetH = canvas.height;
+    
+    if (targetW > maxDim || targetH > maxDim) {
+        if (targetW > targetH) {
+            targetH = Math.floor(targetH * (maxDim / targetW));
+            targetW = maxDim;
+        } else {
+            targetW = Math.floor(targetW * (maxDim / targetH));
+            targetH = maxDim;
+        }
+        const scaledCanvas = document.createElement('canvas');
+        scaledCanvas.width = targetW;
+        scaledCanvas.height = targetH;
+        // high quality scale
+        scaledCanvas.getContext('2d').imageSmoothingQuality = 'high';
+        scaledCanvas.getContext('2d').drawImage(canvas, 0, 0, targetW, targetH);
+        return scaledCanvas.toDataURL('image/jpeg', 0.8);
+    }
+
     return canvas.toDataURL('image/jpeg', 0.8);
 }
 

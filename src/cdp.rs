@@ -272,8 +272,13 @@ pub async fn fetch_tree() -> Result<Value> {
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
 
-            // Skip nameless nodes unless they are semantic landmarks
-            if name.is_empty() && !matches!(role,
+            let value = node.get("value")
+                .and_then(|v| v.get("value"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+
+            // Skip nodes with no name and no value unless they are semantic landmarks
+            if name.is_empty() && value.is_empty() && !matches!(role,
                 "heading" | "list" | "listitem" | "table" | "row" | "cell"
                 | "navigation" | "main" | "banner" | "contentinfo"
                 | "complementary" | "article" | "region" | "form" | "search"
@@ -286,6 +291,9 @@ pub async fn fetch_tree() -> Result<Value> {
             let mut slim = serde_json::json!({ "role": role });
             if !name.is_empty() {
                 slim["name"] = Value::String(name.to_string());
+            }
+            if !value.is_empty() {
+                slim["value"] = Value::String(value.to_string());
             }
             Some(slim)
         }).collect();

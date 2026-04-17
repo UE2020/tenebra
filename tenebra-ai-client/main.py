@@ -71,7 +71,7 @@ def format_a11y_tree(tree_dict):
     # Handle both {"nodes": [...]} and {"result": {"nodes": [...]}}
     nodes = tree_dict.get("nodes") or tree_dict.get("result", {}).get("nodes", [])
     if not nodes:
-        return ""
+        return "[PAGE ACCESSIBILITY TREE REQUESTED BUT RETURNED 0 SEMANTIC NODES - The page might be empty, or entirely composed of non-semantic structural containers.]"
     
     def get_prop(node, key):
         """Extract value from a CDP property, handling both dict and plain string forms."""
@@ -103,7 +103,8 @@ def format_a11y_tree(tree_dict):
             lines.append(f"- {role}: \"{text}\"")
             
     if not lines:
-        return ""
+        return "[PAGE ACCESSIBILITY TREE REQUESTED BUT RETURNED 0 SEMANTIC NODES - The page might be empty, or entirely composed of non-semantic structural containers.]"
+        
     # Cap at 1000 lines to prevent context window explosion
     return ("PAGE ACCESSIBILITY TREE (Use ONLY to read long text content, "
             "off-screen text, etc. IMPORTANT: Target elements by outputting "
