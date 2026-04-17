@@ -17,6 +17,7 @@ const PRICING = {
 };
 let history = [];
 let aiLoopActive = false;
+let wantsA11y = false;
 let stopRequested = false;
 let videoLoaded = false;
 let currentPDFContext = "";
@@ -316,6 +317,9 @@ async function handleAction(action) {
         case 'keyup':
             sendPacket(action);
             break;
+        case 'get_a11y':
+            wantsA11y = true;
+            break;
         case 'wait':
             const ms = action.ms || 500;
             aiThought.innerText = `Waiting for ${ms}ms...`;
@@ -455,47 +459,51 @@ async function startAutonomousLoop(goal) {
         // Observation Settling Delay (Wait for animations/transfers to finish)
         await new Promise(r => setTimeout(r, 1200));
 
-        aiThought.innerText = "Reading page structure...";
         let a11yTree = null;
         let a11yError = null;
-        try {
-            const address = addressInput.value;
-            const password = passwordInput.value;
-            const response = await fetch(`https://${address}/a11y`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ password })
-            });
+        
+        if (wantsA11y) {
+            wantsA11y = false; // Reset trigger
+            aiThought.innerText = "Reading page structure...";
+            try {
+                const address = addressInput.value;
+                const password = passwordInput.value;
+                const response = await fetch(`https://${address}/a11y`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ password })
+                });
 
-            if (response.ok) {
-                a11yTree = await response.json();
-            } else {
-                const errorData = await response.json().catch(() => ({}));
-                a11yError = errorData.Error || response.statusText;
+                if (response.ok) {
+                    a11yTree = await response.json();
+                } else {
+                    const errorData = await response.json().catch(() => ({}));
+                    a11yError = errorData.Error || response.statusText;
+                }
+            } catch(e) {
+                a11yError = e.toString();
+                console.warn("Could not fetch A11y tree:", e);
             }
-        } catch(e) {
-            a11yError = e.toString();
-            console.warn("Could not fetch A11y tree:", e);
-        }
 
-        // Show the A11y result in chat
-        if (a11yTree && a11yTree.nodes) {
-            console.log("Raw A11y tree:", a11yTree);
-            const nodeCount = a11yTree.nodes.length;
-            const preview = a11yTree.nodes
-                .slice(0, 80)
-                .map(n => {
-                    const role = n.role?.value || n.role || '?';
-                    const name = n.name?.value || n.name || '';
-                    const ignored = n.ignored ? ' [IGNORED]' : '';
-                    return name
-                        ? `[${role}] "${name}"${ignored}`
-                        : `[${role}]${ignored}`;
-                })
-                .join('\n');
-            logAction('a11y', `${nodeCount} nodes extracted (see browser console for full tree)\n\n${preview}${nodeCount > 80 ? '\n... (' + (nodeCount - 80) + ' more)' : ''}`);
-        } else {
-            logAction('a11y', `Error: ${a11yError || 'Unknown error'}`);
+            // Show the A11y result in chat
+            if (a11yTree && a11yTree.nodes) {
+                console.log("Raw A11y tree:", a11yTree);
+                const nodeCount = a11yTree.nodes.length;
+                const preview = a11yTree.nodes
+                    .slice(0, 80)
+                    .map(n => {
+                        const role = n.role?.value || n.role || '?';
+                        const name = n.name?.value || n.name || '';
+                        const ignored = n.ignored ? ' [IGNORED]' : '';
+                        return name
+                            ? `[${role}] "${name}"${ignored}`
+                            : `[${role}]${ignored}`;
+                    })
+                    .join('\n');
+                logAction('a11y', `${nodeCount} nodes extracted (see browser console for full tree)\n\n${preview}${nodeCount > 80 ? '\n... (' + (nodeCount - 80) + ' more)' : ''}`);
+            } else {
+                logAction('a11y', `Error: ${a11yError || 'Unknown error'}`);
+            }
         }
 
         aiThought.innerText = "Capturing screenshot...";

@@ -124,6 +124,7 @@ Toolbox (Actions):
 - {"type": "wait", "ms": milliseconds}: Pause tool execution.
 - {"type": "chat", "text": "message"}: Speak to user.
 - {"type": "zoom", "x": x, "y": y, "scale": 2|3|4|5}: Zooms the camera into a specific patch of the screen centered at (x, y). Use when you need sub-pixel targeting accuracy on tiny objects.
+- {"type": "get_a11y"}: Request the PAGE ACCESSIBILITY TREE to instantly read long documents, extract exact text, or discover off-screen content. The tree will be appended to your next observation.
 
 Response Schema:
 {
@@ -135,7 +136,7 @@ Response Schema:
 
 Rules:
 0. ACCESSIBILITY TREE (READ-ONLY):
-   You may receive a "PAGE ACCESSIBILITY TREE" text block alongside the screenshot. This is a structured text dump of the active browser page, extracted via assistive technology APIs.
+   You can request the "PAGE ACCESSIBILITY TREE" by using the 'get_a11y' action. This is a structured text dump of the active browser page, extracted via assistive technology APIs. It is highly efficient for bulk-reading dense pages or discovering off-screen elements in a single turn, avoiding the high cost and slowness of taking multiple screenshots across repeated scroll actions.
    
    USE IT FOR:
    - Instantly reading long documents, emails, articles, or chat threads WITHOUT needing to scroll and consume multiple screenshots. If the user asks "what does the email say?", read the answer directly from the tree.
