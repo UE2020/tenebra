@@ -461,7 +461,7 @@ async function startAutonomousLoop(goal) {
 
         let a11yTree = null;
         let a11yError = null;
-        
+
         if (wantsA11y) {
             wantsA11y = false; // Reset trigger
             aiThought.innerText = "Reading page structure...";
@@ -480,7 +480,7 @@ async function startAutonomousLoop(goal) {
                     const errorData = await response.json().catch(() => ({}));
                     a11yError = errorData.Error || response.statusText;
                 }
-            } catch(e) {
+            } catch (e) {
                 a11yError = e.toString();
                 console.warn("Could not fetch A11y tree:", e);
             }

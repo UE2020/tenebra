@@ -153,7 +153,7 @@ Rules:
 2. OBSERVE & REFLECT: Before planning, compare current vs previous frames. Assume success if a dialog disappeared after 'Save'.
 3. PERFECT MEMORY: Check 'Actions performed' in history. If you have repeated the same action (e.g. clicking a dropdown) 3 times without a visible state change towards your goal, you MUST change your strategy (e.g. scroll to see if the menu is off-screen, or try a different approach). Never repeat a failing action more than thrice.
 4. ATOMIC UI PRINCIPLE: Only interact with visible elements.
-5. DEDICATED BROWSER: The system provides a dedicated Chrome instance for all web browsing. You MUST only use this browser. NEVER click on Firefox, Safari, Edge, or any other browser icon in the taskbar or desktop — even if they are visible. If you need to open a URL, type it into the address bar of the dedicated Chrome window that is already open (or use keyboard shortcuts to open a new tab in it). The accessibility tree data you receive ONLY reflects this dedicated Chrome instance, so using any other browser will cause the tree data to be out of sync with what you see.
+5. DEDICATED BROWSER: The system provides a dedicated Chrome instance for all web browsing. You MUST only use this browser. NEVER click on Firefox, Safari, Edge, or any other browser icon in the taskbar or desktop — even if they are visible. If the dedicated browser is not currently open on the screen, issue a `get_a11y` action to instantly launch it. If you need to open a URL, type it into the address bar of the dedicated Chrome window that is already open (or use keyboard shortcuts to open a new tab in it). The accessibility tree data you receive ONLY reflects this dedicated Chrome instance, so using any other browser will cause the tree data to be out of sync with what you see.
 6. PREFER SHORTCUTS: Use 'MetaLeft', 'AltLeft', 'ControlLeft' for navigation.
 7. TASK SUMMARY: When setting status to 'complete', you MUST include a final 'chat' action summarizing exactly what was accomplished and any relevant results for the user. Never end a task silently.
 8. TRANSITION HALT: If UI changes significantly, set 'status' to 'continue' to re-calculate.
@@ -189,12 +189,26 @@ async def chat_endpoint(request: ChatRequest):
         merged.append({"role": "user", "parts": [types.Part.from_text(text=f"Additional Agent Context/Document Data:\n{request.context}")]})
         merged.append({"role": "model", "parts": [types.Part.from_text(text="Context recorded. I will use this information to accomplish tasks.")]})
 
+    # Find the most recent frame in history (to drop older frames and save tokens)
+    last_img_idx = -1
+    for i, msg in enumerate(request.history):
+        if msg.get('image_base64'):
+            last_img_idx = i
+
     # Add history
-    for msg in request.history:
+    for i, msg in enumerate(request.history):
         role = "user" if msg.get('role') == "user" else "model"
         
-        parts = [types.Part.from_text(text=msg.get('content', ''))]
-        if msg.get('image_base64'):
+        content_text = msg.get('content', '')
+        # Indicate if an image was dropped to preserve context structure
+        if msg.get('image_base64') and i != last_img_idx:
+            content_text += "\n[Image Omitted]"
+
+        parts = [types.Part.from_text(text=content_text)]
+        
+        # Only retain the actual image pixels for the immediately preceding frame 
+        # so the model can compare (current vs previous).
+        if msg.get('image_base64') and i == last_img_idx:
             try:
                 b64_str = msg['image_base64'].split(",")[-1]
                 mime_type = "image/jpeg"

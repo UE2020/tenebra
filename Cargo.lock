@@ -806,7 +806,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1658,7 +1658,7 @@ dependencies = [
 [[package]]
 name = "input-device"
 version = "0.1.0"
-source = "git+https://github.com/UE2020/input-device.git?branch=main#92ef2cf333ddcd42e4d23748248ac3c6d8975231"
+source = "git+https://github.com/UE2020/input-device.git?branch=main#c529b7aafc24c24047d77f6c81b8b3862ebb3921"
 dependencies = [
  "core-graphics",
  "evdev",
