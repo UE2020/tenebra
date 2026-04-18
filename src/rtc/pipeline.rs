@@ -140,6 +140,7 @@ impl AudioRecordingPipeline {
         let opusenc = ElementFactory::make("opusenc")
             // According to a comment in GStreamer's webrtcsink, this is required for Chrome
             .property("perfect-timestamp", true)
+            .property("bitrate", 96000i32)
             .build()?;
 
         let opus_caps = gstreamer::Caps::builder("audio/x-opus").build();
@@ -228,6 +229,7 @@ impl AudioRecordingPipeline {
         let opusenc = ElementFactory::make("opusenc")
             // According to a comment in GStreamer's webrtcsink, this is required for Chrome
             .property("perfect-timestamp", true)
+            .property("bitrate", 96000i32)
             .build()?;
 
         let opus_caps = gstreamer::Caps::builder("audio/x-opus").build();
@@ -381,7 +383,7 @@ impl ScreenRecordingPipeline {
                 .property("vbv-buf-capacity", config.vbv_buf_capacity)
                 .property_from_str("speed-preset", "superfast")
                 .property_from_str("tune", "zerolatency")
-                .property("bitrate", config.target_bitrate - 64)
+                .property("bitrate", config.target_bitrate - 96)
                 .property("key-int-max", 2560u32)
                 .build()?
         } else {
@@ -394,10 +396,10 @@ impl ScreenRecordingPipeline {
                 .property("ref-frames", 1u32)
                 .property("target-usage", 6u32)
                 .property_from_str("rate-control", "cbr")
-                .property("bitrate", config.target_bitrate - 64)
+                .property("bitrate", config.target_bitrate - 96)
                 .property(
                     "cpb-size",
-                    ((config.target_bitrate - 64) * config.vbv_buf_capacity) / 1000,
+                    ((config.target_bitrate - 96) * config.vbv_buf_capacity) / 1000,
                 )
                 .property_from_str("mbbrc", "enabled")
                 .build()?
@@ -534,13 +536,13 @@ impl ScreenRecordingPipeline {
                 .property("vbv-buf-capacity", config.vbv_buf_capacity)
                 .property_from_str("speed-preset", "superfast")
                 .property_from_str("tune", "zerolatency")
-                .property("bitrate", config.target_bitrate - 64)
+                .property("bitrate", config.target_bitrate - 96)
                 .property("key-int-max", 2560u32)
                 .build()?
         } else {
             ElementFactory::make("vtenc_h264")
                 .property("allow-frame-reordering", false)
-                .property("bitrate", config.target_bitrate - 64)
+                .property("bitrate", config.target_bitrate - 96)
                 .property("realtime", true)
                 .build()?
         };
@@ -701,7 +703,7 @@ impl ScreenRecordingPipeline {
                 .property("vbv-buf-capacity", config.vbv_buf_capacity)
                 .property_from_str("speed-preset", "superfast")
                 .property_from_str("tune", "zerolatency")
-                .property("bitrate", config.target_bitrate - 64)
+                .property("bitrate", config.target_bitrate - 96)
                 .property("key-int-max", 2560u32)
                 .build()?
         } else {
@@ -710,7 +712,7 @@ impl ScreenRecordingPipeline {
                 .property("bframes", 0u32)
                 .property("cabac", false)
                 .property_from_str("rc-mode", "cbr")
-                .property("bitrate", config.target_bitrate - 64)
+                .property("bitrate", config.target_bitrate - 96)
                 .property("vbv-buffer-size", config.vbv_buf_capacity)
                 .property("gop-size", 2560i32)
                 .property(
