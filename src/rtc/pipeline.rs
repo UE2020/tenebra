@@ -325,10 +325,10 @@ impl ScreenRecordingPipeline {
         elements.push(
             ElementFactory::make("ximagesrc")
                 .property("use-damage", false)
-                .property("startx", config.startx)
-                .property("starty", config.starty)
-                .property_if_some("endx", config.endx)
-                .property_if_some("endy", config.endy)
+                .property("startx", config.startx as u32)
+                .property("starty", config.starty as u32)
+                .property_if_some("endx", config.endx.map(|endx| endx as u32))
+                .property_if_some("endy", config.endy.map(|endy| endy as u32))
                 .property("show-pointer", show_mouse)
                 .property("blocksize", 16384u32)
                 .property("remote", true)
@@ -482,15 +482,15 @@ impl ScreenRecordingPipeline {
         let pipeline = Pipeline::default();
         elements.push(
             ElementFactory::make("avfvideosrc")
-                .property("screen-crop-x", config.startx)
-                .property("screen-crop-y", config.starty)
+                .property("screen-crop-x", config.startx as u32)
+                .property("screen-crop-y", config.starty as u32)
                 .property_if_some(
                     "screen-crop-width",
-                    config.endx.map(|endx| endx - config.startx),
+                    config.endx.map(|endx| endx as u32 - config.startx as u32),
                 )
                 .property_if_some(
                     "screen-crop-height",
-                    config.endy.map(|endy| endy - config.starty),
+                    config.endy.map(|endy| endy as u32 - config.starty as u32),
                 )
                 .property("capture-screen", true)
                 .property("capture-screen-cursor", show_mouse)
