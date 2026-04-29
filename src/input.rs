@@ -276,7 +276,7 @@ pub struct ClientCommand {
     pub size: Option<u64>,
 }
 
-pub fn do_input(mut rx: Receiver<InputCommand>, startx: u32, starty: u32) -> anyhow::Result<()> {
+pub fn do_input(mut rx: Receiver<InputCommand>, startx: i32, starty: i32) -> anyhow::Result<()> {
     #[cfg(target_os = "windows")]
     let _ = crate::windows_service::sync_thread_desktop();
 

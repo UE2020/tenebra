@@ -472,11 +472,11 @@ pub struct AppState {
 #[derive(Deserialize, Clone, Debug)]
 struct Config {
     target_bitrate: u32,
-    startx: u32,
+    startx: i32,
     #[serde(default)]
-    starty: u32,
-    endx: Option<u32>,
-    endy: Option<u32>,
+    starty: i32,
+    endx: Option<i32>,
+    endy: Option<i32>,
 
     // Windows-only
     windows_monitor_index: Option<i32>,
