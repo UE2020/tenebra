@@ -606,7 +606,8 @@ pub async fn run(
                     .unwrap()
                     .pt();
                 let now = Instant::now();
-                writer.write(pt, now, MediaTime::from_micros(pts), buf)?;
+                let map = buf.map_readable().context("Failed to map video buffer")?;
+                writer.write(pt, now, MediaTime::from_micros(pts), map.as_slice())?;
                 Input::Timeout(Instant::now())
             }
             Some((buf, pts)) = audio.0.recv_frame(), if audio.1.is_some() => {
@@ -620,7 +621,8 @@ pub async fn run(
                     .unwrap()
                     .pt();
                 let now = Instant::now();
-                writer.write(pt, now, MediaTime::from_micros(pts), buf)?;
+                let map = buf.map_readable().context("Failed to map audio buffer")?;
+                writer.write(pt, now, MediaTime::from_micros(pts), map.as_slice())?;
                 Input::Timeout(Instant::now())
             }
             Some((msg, addr)) = listener.read() => {

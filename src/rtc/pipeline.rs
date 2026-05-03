@@ -105,7 +105,7 @@ async fn get_pulseaudio_monitor_name() -> Result<String> {
 #[derive(Debug)]
 pub struct AudioRecordingPipeline {
     pipeline: Pipeline,
-    buffer_rx: UnboundedReceiver<(Vec<u8>, u64)>,
+    buffer_rx: UnboundedReceiver<(gstreamer::Buffer, u64)>,
 }
 
 impl AudioRecordingPipeline {
@@ -166,22 +166,10 @@ impl AudioRecordingPipeline {
                         gstreamer::FlowError::Error
                     })?;
 
-                    let map = buffer.map_readable().map_err(|_| {
-                        element_error!(
-                            appsink,
-                            gstreamer::ResourceError::Failed,
-                            ("Failed to map buffer readable")
-                        );
-
-                        gstreamer::FlowError::Error
-                    })?;
-
-                    let packet = map.as_slice();
-
                     let pts = buffer.pts().unwrap().useconds();
 
                     // we can .ok() this, because if it DOES fail, the thread will be terminated soon
-                    buffer_tx.send((packet.to_vec(), pts)).ok();
+                    buffer_tx.send((buffer.to_owned(), pts)).ok();
                     Ok(gstreamer::FlowSuccess::Ok)
                 })
                 .build(),
@@ -255,22 +243,10 @@ impl AudioRecordingPipeline {
                         gstreamer::FlowError::Error
                     })?;
 
-                    let map = buffer.map_readable().map_err(|_| {
-                        element_error!(
-                            appsink,
-                            gstreamer::ResourceError::Failed,
-                            ("Failed to map buffer readable")
-                        );
-
-                        gstreamer::FlowError::Error
-                    })?;
-
-                    let packet = map.as_slice();
-
                     let pts = buffer.pts().unwrap().useconds();
 
                     // we can .ok() this, because if it DOES fail, the thread will be terminated soon
-                    buffer_tx.send((packet.to_vec(), pts)).ok();
+                    buffer_tx.send((buffer.to_owned(), pts)).ok();
                     Ok(gstreamer::FlowSuccess::Ok)
                 })
                 .build(),
@@ -286,7 +262,7 @@ impl AudioRecordingPipeline {
         })
     }
 
-    pub async fn recv_frame(&mut self) -> Option<(Vec<u8>, u64)> {
+    pub async fn recv_frame(&mut self) -> Option<(gstreamer::Buffer, u64)> {
         self.buffer_rx.recv().await
     }
 
@@ -312,7 +288,7 @@ impl Drop for AudioRecordingPipeline {
 pub struct ScreenRecordingPipeline {
     enc: Element,
     pipeline: Pipeline,
-    buffer_rx: UnboundedReceiver<(Vec<u8>, u64)>,
+    buffer_rx: UnboundedReceiver<(gstreamer::Buffer, u64)>,
     config: Config,
 }
 
@@ -443,19 +419,9 @@ impl ScreenRecordingPipeline {
                         );
                         gstreamer::FlowError::Error
                     })?;
-                    let map = buffer.map_readable().map_err(|_| {
-                        element_error!(
-                            appsink,
-                            gstreamer::ResourceError::Failed,
-                            ("Failed to map buffer readable")
-                        );
-
-                        gstreamer::FlowError::Error
-                    })?;
-                    let packet = map.as_slice();
                     let pts = buffer.pts().unwrap().useconds();
                     // we can .ok() this, because if it DOES fail, the thread will be terminated soon
-                    buffer_tx.send((packet.to_vec(), pts)).ok();
+                    buffer_tx.send((buffer.to_owned(), pts)).ok();
                     Ok(gstreamer::FlowSuccess::Ok)
                 })
                 .build(),
@@ -606,19 +572,9 @@ impl ScreenRecordingPipeline {
                         );
                         gstreamer::FlowError::Error
                     })?;
-                    let map = buffer.map_readable().map_err(|_| {
-                        element_error!(
-                            appsink,
-                            gstreamer::ResourceError::Failed,
-                            ("Failed to map buffer readable")
-                        );
-
-                        gstreamer::FlowError::Error
-                    })?;
-                    let packet = map.as_slice();
                     let pts = buffer.pts().unwrap().useconds();
                     // we can .ok() this, because if it DOES fail, the thread will be terminated soon
-                    buffer_tx.send((packet.to_vec(), pts)).ok();
+                    buffer_tx.send((buffer.to_owned(), pts)).ok();
                     Ok(gstreamer::FlowSuccess::Ok)
                 })
                 .build(),
@@ -650,6 +606,7 @@ impl ScreenRecordingPipeline {
             .property_if_some("monitor-index", config.windows_monitor_index)
             .property_from_str_if_some("capture-api", config.windows_capture_api.as_deref())
             .property("show-cursor", show_mouse)
+            .property("do-timestamp", true)
             .build()?;
         elements.push(src);
 
@@ -706,17 +663,18 @@ impl ScreenRecordingPipeline {
                 .property("key-int-max", 2560u32)
                 .build()?
         } else {
+            let vbv_buffer_size = (config.target_bitrate * 1000 / 8) * config.vbv_buf_capacity / 1000;
             ElementFactory::make("mfh264enc")
                 .property("low-latency", true)
                 .property("bframes", 0u32)
                 .property("cabac", false)
                 .property_from_str("rc-mode", "cbr")
                 .property("bitrate", config.target_bitrate - 96)
-                .property("vbv-buffer-size", config.vbv_buf_capacity)
+                .property("vbv-buffer-size", vbv_buffer_size)
                 .property("gop-size", 2560i32)
                 .property(
                     "quality-vs-speed",
-                    config.windows_quality_vs_speed.unwrap_or(100u32),
+                    config.windows_quality_vs_speed.unwrap_or(0u32),
                 )
                 .build()?
         };
@@ -760,19 +718,9 @@ impl ScreenRecordingPipeline {
 
                         gstreamer::FlowError::Error
                     })?;
-                    let map = buffer.map_readable().map_err(|_| {
-                        element_error!(
-                            appsink,
-                            gstreamer::ResourceError::Failed,
-                            ("Failed to map buffer readable")
-                        );
-
-                        gstreamer::FlowError::Error
-                    })?;
-                    let packet = map.as_slice();
                     let pts = buffer.pts().unwrap().useconds();
                     // we can .ok() this, because if it DOES fail, the thread will be terminated soon
-                    buffer_tx.send((packet.to_vec(), pts)).ok();
+                    buffer_tx.send((buffer.to_owned(), pts)).ok();
                     Ok(gstreamer::FlowSuccess::Ok)
                 })
                 .build(),
@@ -805,6 +753,11 @@ impl ScreenRecordingPipeline {
                 "cpb-size",
                 (new_bitrate * self.config.vbv_buf_capacity) / 1000,
             );
+            #[cfg(target_os = "windows")]
+            self.enc.set_property(
+                "vbv-buffer-size",
+                (new_bitrate * 1000 / 8) * self.config.vbv_buf_capacity / 1000,
+            );
         } else {
             self.enc.set_property("bitrate", new_bitrate);
         }
@@ -823,7 +776,7 @@ impl ScreenRecordingPipeline {
         }
     }
 
-    pub async fn recv_frame(&mut self) -> Option<(Vec<u8>, u64)> {
+    pub async fn recv_frame(&mut self) -> Option<(gstreamer::Buffer, u64)> {
         self.buffer_rx.recv().await
     }
 
