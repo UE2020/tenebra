@@ -140,6 +140,7 @@ impl AudioRecordingPipeline {
         let opusenc = ElementFactory::make("opusenc")
             // According to a comment in GStreamer's webrtcsink, this is required for Chrome
             .property("perfect-timestamp", true)
+            .property("bitrate", 96000i32)
             .build()?;
 
         let opus_caps = gstreamer::Caps::builder("audio/x-opus").build();
@@ -228,6 +229,7 @@ impl AudioRecordingPipeline {
         let opusenc = ElementFactory::make("opusenc")
             // According to a comment in GStreamer's webrtcsink, this is required for Chrome
             .property("perfect-timestamp", true)
+            .property("bitrate", 96000i32)
             .build()?;
 
         let opus_caps = gstreamer::Caps::builder("audio/x-opus").build();
@@ -323,10 +325,10 @@ impl ScreenRecordingPipeline {
         elements.push(
             ElementFactory::make("ximagesrc")
                 .property("use-damage", false)
-                .property("startx", config.startx)
-                .property("starty", config.starty)
-                .property_if_some("endx", config.endx)
-                .property_if_some("endy", config.endy)
+                .property("startx", config.startx as u32)
+                .property("starty", config.starty as u32)
+                .property_if_some("endx", config.endx.map(|endx| endx as u32))
+                .property_if_some("endy", config.endy.map(|endy| endy as u32))
                 .property("show-pointer", show_mouse)
                 .property("blocksize", 16384u32)
                 .property("remote", true)
@@ -381,7 +383,7 @@ impl ScreenRecordingPipeline {
                 .property("vbv-buf-capacity", config.vbv_buf_capacity)
                 .property_from_str("speed-preset", "superfast")
                 .property_from_str("tune", "zerolatency")
-                .property("bitrate", config.target_bitrate - 64)
+                .property("bitrate", config.target_bitrate - 96)
                 .property("key-int-max", 2560u32)
                 .build()?
         } else {
@@ -394,10 +396,10 @@ impl ScreenRecordingPipeline {
                 .property("ref-frames", 1u32)
                 .property("target-usage", 6u32)
                 .property_from_str("rate-control", "cbr")
-                .property("bitrate", config.target_bitrate - 64)
+                .property("bitrate", config.target_bitrate - 96)
                 .property(
                     "cpb-size",
-                    ((config.target_bitrate - 64) * config.vbv_buf_capacity) / 1000,
+                    ((config.target_bitrate - 96) * config.vbv_buf_capacity) / 1000,
                 )
                 .property_from_str("mbbrc", "enabled")
                 .build()?
@@ -480,15 +482,15 @@ impl ScreenRecordingPipeline {
         let pipeline = Pipeline::default();
         elements.push(
             ElementFactory::make("avfvideosrc")
-                .property("screen-crop-x", config.startx)
-                .property("screen-crop-y", config.starty)
+                .property("screen-crop-x", config.startx as u32)
+                .property("screen-crop-y", config.starty as u32)
                 .property_if_some(
                     "screen-crop-width",
-                    config.endx.map(|endx| endx - config.startx),
+                    config.endx.map(|endx| endx as u32 - config.startx as u32),
                 )
                 .property_if_some(
                     "screen-crop-height",
-                    config.endy.map(|endy| endy - config.starty),
+                    config.endy.map(|endy| endy as u32 - config.starty as u32),
                 )
                 .property("capture-screen", true)
                 .property("capture-screen-cursor", show_mouse)
@@ -534,13 +536,13 @@ impl ScreenRecordingPipeline {
                 .property("vbv-buf-capacity", config.vbv_buf_capacity)
                 .property_from_str("speed-preset", "superfast")
                 .property_from_str("tune", "zerolatency")
-                .property("bitrate", config.target_bitrate - 64)
+                .property("bitrate", config.target_bitrate - 96)
                 .property("key-int-max", 2560u32)
                 .build()?
         } else {
             ElementFactory::make("vtenc_h264")
                 .property("allow-frame-reordering", false)
-                .property("bitrate", config.target_bitrate - 64)
+                .property("bitrate", config.target_bitrate - 96)
                 .property("realtime", true)
                 .build()?
         };
@@ -641,14 +643,13 @@ impl ScreenRecordingPipeline {
         let mut elements = vec![];
         let pipeline = Pipeline::default();
         let src = ElementFactory::make("d3d11screencapturesrc")
-            .property("crop-x", config.startx)
+            /*.property("crop-x", config.startx)
             .property("crop-y", config.starty)
             .property_if_some("crop-width", config.endx.map(|endx| endx - config.startx))
-            .property_if_some("crop-height", config.endy.map(|endy| endy - config.starty))
+            .property_if_some("crop-height", config.endy.map(|endy| endy - config.starty))*/
             .property_if_some("monitor-index", config.windows_monitor_index)
             .property_from_str_if_some("capture-api", config.windows_capture_api.as_deref())
             .property("show-cursor", show_mouse)
-            //.property_from_str("capture-api", "wgc")
             .build()?;
         elements.push(src);
 
@@ -701,7 +702,7 @@ impl ScreenRecordingPipeline {
                 .property("vbv-buf-capacity", config.vbv_buf_capacity)
                 .property_from_str("speed-preset", "superfast")
                 .property_from_str("tune", "zerolatency")
-                .property("bitrate", config.target_bitrate - 64)
+                .property("bitrate", config.target_bitrate - 96)
                 .property("key-int-max", 2560u32)
                 .build()?
         } else {
@@ -710,7 +711,7 @@ impl ScreenRecordingPipeline {
                 .property("bframes", 0u32)
                 .property("cabac", false)
                 .property_from_str("rc-mode", "cbr")
-                .property("bitrate", config.target_bitrate - 64)
+                .property("bitrate", config.target_bitrate - 96)
                 .property("vbv-buffer-size", config.vbv_buf_capacity)
                 .property("gop-size", 2560i32)
                 .property(

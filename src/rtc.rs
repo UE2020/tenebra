@@ -493,7 +493,7 @@ pub async fn run(
                             .clamp(500, state.config.target_bitrate as u64 + 3000)
                             as u32;
                         if audio.1.is_some() {
-                            bwe -= 64;
+                            bwe -= 96;
                         }
 
                         video.0.set_bitrate(bwe);
