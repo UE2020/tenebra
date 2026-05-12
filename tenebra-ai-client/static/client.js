@@ -430,15 +430,16 @@ async function executeDragAndDrop(nx1, ny1, nx2, ny2) {
 }
 
 async function executeScroll(nx, ny, direction, amount) {
-    if (nx !== undefined && ny !== undefined) {
+    currentZoom = null; // Scroll resets zoom
+    if (nx != null && ny != null) {
         const coords = translateCoordinates(nx, ny);
         sendPacket({ type: 'mousemoveabs', x: coords.x, y: coords.y });
-        await new Promise(r => setTimeout(r, 100)); // Natural move delay before scrolling
+        await new Promise(r => setTimeout(r, 200)); // Natural move delay before scrolling
     }
 
     // Standard convention: Negative for Down (toward user), Positive for Up (away)
-    const deltaY = direction === 'down' ? 120 * amount : -120 * amount;
-    currentZoom = null; // Scroll resets zoom
+    const dir = (direction || 'down').toLowerCase();
+    const deltaY = dir === 'down' ? 120 * amount : -120 * amount;
     sendPacket({ type: 'wheel', x: 0, y: deltaY });
 }
 
