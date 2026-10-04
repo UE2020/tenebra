@@ -42,17 +42,35 @@ Then, starting Tenebra is as easy as:
 sc start Tenebra
 ```
 
-However, Tenebra reads from a config file which must be populated before running Tenebra. If it is not populated, Tenebra will fail before copying the default config file to the config file directory.
+On first start, Tenebra writes its config file automatically with a randomly generated password and a free port, and keeps running; no manual editing is required. If the password is missing or still set to `"placeholder"`, Tenebra generates one and rewrites just that line.
 
 * On **Linux** the config file is at `$XDG_CONFIG_HOME`/tenebra/config.toml or `$HOME`/.config/tenebra/config.toml (e.g. /home/alice/.config/tenebra/config.toml)
-* On **Windows** the config file is at C:\tenebra\config.toml
+* On **Windows** the config file is at C:\tenebra\config.toml (the directory is created automatically)
 * On **macOS** the config file is at `$HOME`/Library/Application Support (e.g. /Users/Alice/Library/Application Support)
 
+Every key in the config file is optional and falls back to a default. Unknown keys, conflicting options (`full_chroma` together with `hwencode`, or `vapostproc` without `hwencode`), and a missing `cert`/`key` under `tls = "custom"` produce an explanatory error instead of an opaque parse failure.
+
+Tenebra also accepts a few command-line flags:
+
+* `tenebra --init` writes a fresh config file if none exists, and never overwrites an existing one.
+* `tenebra --version` prints the version.
+* `tenebra --console` (Windows only) runs Tenebra in the current terminal instead of as a service.
+
 [See the default config file.](src/default.toml)
+
+The server hosts the user-facing web client itself: the vendored [Lux](https://github.com/BlueCannonBall/lux) is embedded in the binary and served at `https://<host>:<port>/`, so no separate static site is needed to connect. The plain-text configuration summary is at `/info`.
 
 Alternatively, use [Tenebra GTK](https://github.com/BlueCannonBall/tenebra-gtk) to configure Tenebra in a user-friendly way:
 
 ![image](https://github.com/user-attachments/assets/be8aa60a-b19e-4b1a-82cb-d41e613cf82c)
+
+## TLS
+
+The `tls` key in the config file controls how Tenebra secures connections:
+
+* `tls = "auto"` (default): Tenebra generates a self-signed certificate (`cert.pem`/`key.pem` in the config directory), reuses it on later starts, and prints its SHA-256 fingerprint at startup. No domain or Let's Encrypt certificate is needed; accept the certificate once in the browser. The web client and the signalling endpoint share the same origin, so accepting it once is enough.
+* `tls = "off"`: plain HTTP, for native clients on a trusted LAN only. The bundled web client requires HTTPS.
+* `tls = "custom"`: use the certificate and key files at the `cert` and `key` paths, for a certificate obtained elsewhere (e.g. behind a reverse proxy).
 
 ## Using Hardware Accelerated Encoding (All Platforms)
 
