@@ -55,11 +55,9 @@
  */
 
 use std::{
-    fmt::Display,
     net::SocketAddr,
-    path::PathBuf,
     sync::{Arc, Mutex},
-    time::{Instant, Duration},
+    time::{Duration, Instant},
 };
 
 use log::*;
@@ -67,7 +65,7 @@ use log::*;
 use network_interface::{NetworkInterface, NetworkInterfaceConfig};
 use tokio::net::{TcpListener, UdpSocket};
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, Context, Result};
 
 use axum::{
     extract::{ConnectInfo, State},
@@ -76,8 +74,6 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use axum_server::tls_rustls::RustlsConfig;
-
 use serde::{Deserialize, Serialize};
 
 use str0m::{
@@ -89,20 +85,21 @@ use str0m::{
 
 use base64::prelude::*;
 
-use tokio::{
-    spawn,
-    sync::mpsc::*,
-};
+use tokio::{spawn, sync::mpsc::*};
 
+use config::Config;
 use dialogs::*;
 use input::{do_input, ClientCommand, InputCommand};
 use keys::{Keys, Permissions};
 
+mod config;
 mod dialogs;
 mod input;
 pub mod keys;
 mod rtc;
 mod stun;
+mod tls;
+mod web;
 
 // This module contains all code related to Windows service functionality
 #[cfg(target_os = "windows")]
@@ -449,67 +446,20 @@ pub struct AppState {
     config: Config,
 }
 
-#[allow(unused)]
-#[derive(Deserialize, Clone, Debug)]
-struct Config {
-    target_bitrate: u32,
-    startx: i32,
-    #[serde(default)]
-    starty: i32,
-    endx: Option<i32>,
-    endy: Option<i32>,
-
-    // Windows-only
-    windows_monitor_index: Option<i32>,
-    windows_capture_api: Option<String>,
-    windows_quality_vs_speed: Option<u32>,
-
-    port: u16,
-    password: String,
-    sound_forwarding: bool,
-    #[serde(alias = "hwencode")]
-    vaapi: bool,
-    vapostproc: bool,
-    no_bwe: bool,
-    full_chroma: bool,
-    tcp_upnp: bool,
-    #[serde(default = "default_vbv_buf_capacity")]
-    vbv_buf_capacity: u32,
-    cert: PathBuf,
-    key: PathBuf,
-}
-
-impl Display for Config {
-    #[rustfmt::skip]
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        writeln!(f, "Server configuration")?;
-        writeln!(f, "\tTarget bitrate:                    {} Kbit/s", self.target_bitrate)?;
-        writeln!(f, "\tStart x-coordinate:                {}", self.startx)?;
-        writeln!(f, "\tStart y-coordinate:                {}", self.starty)?;
-        writeln!(f, "\tEnd x-coordinate:                  {:?}", self.endx)?;
-        writeln!(f, "\tEnd y-coordinate:                  {:?}", self.endy)?;
-        writeln!(f, "\tPort:                              {}", self.port)?;
-        writeln!(f, "\tSound forwarding:                  {}", bool_to_str(self.sound_forwarding))?;
-        writeln!(f, "\tHardware accelerated encoding:     {}", bool_to_str(self.vaapi))?;
-        writeln!(f, "\tVA-API format conversion:          {}", bool_to_str(self.vapostproc))?;
-        writeln!(f, "\tBandwidth estimation:              {}", bool_to_str(!self.no_bwe))?;
-        writeln!(f, "\tFull color encoding:               {}", bool_to_str(self.full_chroma))?;
-        writeln!(f, "\tAutomatic ICE-TCP UPnP forwarding: {}", bool_to_str(self.tcp_upnp))?;
-        writeln!(f, "\tVBV Buffer capacity:               {} ms", self.vbv_buf_capacity)?;
-
-        Ok(())
+fn init_config() -> Result<()> {
+    let path = config::config_path()?;
+    if path.exists() {
+        println!(
+            "Config file already exists at {}. Not overwriting.",
+            path.display()
+        );
+        return Ok(());
     }
-}
 
-fn bool_to_str(b: bool) -> &'static str {
-    match b {
-        true => "on",
-        false => "off",
-    }
-}
-
-fn default_vbv_buf_capacity() -> u32 {
-    120
+    let password = config::write_new_config(&path)?;
+    println!("Wrote config file to {}", path.display());
+    println!("Password: {}", password);
+    Ok(())
 }
 
 #[cfg(target_os = "windows")]
@@ -527,6 +477,9 @@ fn main() -> Result<()> {
         Some("--version") => {
             println!("v{}", env!("CARGO_PKG_VERSION"));
         }
+        Some("--init") => {
+            init_config()?;
+        }
         _ => {
             windows_service::run()?;
         }
@@ -542,6 +495,10 @@ async fn main() -> Result<()> {
     match option {
         Some("--version") => {
             println!("v{}", env!("CARGO_PKG_VERSION"));
+            Ok(())
+        }
+        Some("--init") => {
+            init_config()?;
             Ok(())
         }
         _ => entrypoint().await,
@@ -582,42 +539,25 @@ async fn entrypoint() -> Result<()> {
     // Initialize GStreamer
     gstreamer::init().unwrap();
 
-    // get the config path
-    #[cfg(not(target_os = "windows"))]
-    let mut config_path = dirs::config_dir()
-        .context("Failed to find config directory")?
-        .join("tenebra");
-    #[cfg(not(target_os = "windows"))]
-    std::fs::create_dir_all(&config_path).context("Failed to create config directory")?;
-
-    #[cfg(not(target_os = "windows"))]
-    config_path.push("config.toml");
-
-    #[cfg(target_os = "windows")]
-    let config_path = std::path::Path::new("C:\\tenebra\\config.toml");
-
-    if !config_path.exists() {
-        std::fs::write(&config_path, include_bytes!("default.toml"))
-            .context("Failed to write default config")?;
-        bail!("No config file found. The default configuration file has been copied to {}. Before running Tenebra again, populate the config file.", config_path.display());
-    }
-
-    // read the config
-    let config: Config = toml::from_str(
-        &std::fs::read_to_string(config_path).context("Failed to read config file")?,
-    )
-    .context("Failed to parse config file")?;
+    // load the configuration, creating it on first run
+    let config_path = config::config_path().context("Failed to locate the config file")?;
+    let config = config::load_or_init(&config_path)?;
 
     println!("{}", config);
+    println!("Tenebra v{}", env!("CARGO_PKG_VERSION"));
+    println!("Config file: {}", config_path.display());
+    println!("Password: {}", config.password);
+    println!("TLS: {}", config.tls.as_str());
 
     let (tx, rx) = channel::<InputCommand>(100);
     let (dialog_tx, dialog_rx) = channel::<Dialog>(1);
 
     let ports = Arc::new(Mutex::new(Vec::new()));
     let app = Router::new()
-        .route("/", get(home))
+        .route("/info", get(home))
         .route("/create_key", post(create_key))
         .route("/offer", post(offer))
+        .fallback(web::serve)
         .layer(tower_http::cors::CorsLayer::very_permissive())
         .with_state(AppState {
             input_tx: tx,
@@ -627,24 +567,32 @@ async fn entrypoint() -> Result<()> {
             dialog_tx: dialog_tx.clone(),
         });
 
-    let tls_config = RustlsConfig::from_pem(
-        tokio::fs::read(&config.cert)
-            .await
-            .context("Failed to read certificate file")?,
-        tokio::fs::read(&config.key)
-            .await
-            .context("Failed to read private key file")?,
-    )
-    .await?;
-
+    let state_dir = config::config_dir()?;
+    let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
+    let tls_mode = config.tls;
+    let cert = config.cert.clone();
+    let key = config.key.clone();
     spawn(async move {
-        axum_server::bind_rustls(SocketAddr::from(([0, 0, 0, 0], config.port)), tls_config)
-            .serve(app.into_make_service_with_connect_info::<SocketAddr>())
-            .await
-            .unwrap();
+        tls::serve(
+            app,
+            addr,
+            tls_mode,
+            cert.as_deref(),
+            key.as_deref(),
+            &state_dir,
+        )
+        .await
     });
 
-    println!("Tenebra is listening on port {}.", config.port);
+    let scheme = if matches!(tls_mode, tls::TlsMode::Off) {
+        "http"
+    } else {
+        "https"
+    };
+    println!(
+        "Tenebra is listening on {scheme}://localhost:{}/ for the web client.",
+        config.port
+    );
 
     if config.tcp_upnp {
         match igd_next::aio::tokio::search_gateway(Default::default()).await {
