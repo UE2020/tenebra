@@ -487,9 +487,9 @@ pub async fn run(
                         video.0.force_keyframe();
                     }
                     Event::EgressBitrateEstimate(
-                        BweKind::Twcc(bitrate) | BweKind::Remb(_, bitrate),
+                        BweKind::Twcc { estimate, .. } | BweKind::Remb { estimate, .. },
                     ) => {
-                        let mut bwe = (bitrate.as_u64() / 1000)
+                        let mut bwe = (estimate.as_u64() / 1000)
                             .clamp(500, state.config.target_bitrate as u64 + 3000)
                             as u32;
                         if audio.1.is_some() {

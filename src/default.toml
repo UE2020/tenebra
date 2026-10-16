@@ -10,8 +10,12 @@ no_bwe = false
 full_chroma = false      # full_chroma cannot be used in combination with hwencode
 tcp_upnp = true
 vbv_buf_capacity = 120   # Not required, default is 120
-cert = "/path/to/cert"
-key = "/path/to/key"
+
+# TLS mode: "auto" generates and reuses a self-signed certificate in the config directory,
+# "off" serves plain HTTP (native clients only), "custom" uses the cert/key paths below.
+tls = "auto"
+# cert = "/path/to/cert"   # required when tls = "custom"
+# key = "/path/to/key"     # required when tls = "custom"
 
 # windows_monitor_index = -1 # Windows-only. -1 uses the primary monitor and is the default
 # windows_capture-api = "dxgi" # Windows-only: "dxgi" will use the desktop duplication capture API, "wgc" will use the Windows Graphics Capture API, "dxgi" is the default
